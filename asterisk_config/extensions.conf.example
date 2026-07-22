@@ -1,0 +1,20 @@
+; ===================================================================
+; extensions.conf.example — Dialplan สำหรับให้ AMI Originate เรียกเข้ามาแล้วเล่นไฟล์เสียง
+; คัดลอกไปเป็น /etc/asterisk/extensions.conf บนเครื่อง Asterisk จริง
+; ===================================================================
+
+[from-gateway]
+; context นี้ถูกเรียกตอน Originate จาก Python (voip_backend.py)
+; Priority 1 ของ extension "s" จะเล่นไฟล์เสียงที่ระบุผ่าน channel variable AUDIOFILE
+exten => s,1,NoOp(Gateway originated call เริ่มต้น)
+ same => n,Answer()
+ same => n,Wait(1)
+ same => n,Playback(${AUDIOFILE})
+ same => n,Hangup()
+
+[from-zadarma]
+; context สำหรับสายที่ "โทรเข้า" ผ่าน Zadarma trunk (ถ้าต้องทดสอบ inbound ด้วย)
+exten => _X.,1,NoOp(Inbound call from Zadarma)
+ same => n,Answer()
+ same => n,Playback(demo-congrats)
+ same => n,Hangup()

@@ -1,0 +1,49 @@
+; ===================================================================
+; pjsip.conf.example — Template สำหรับต่อ Asterisk เข้ากับ Zadarma SIP Trunk
+;
+; วิธีใช้:
+;   1. คัดลอกไฟล์นี้ไปเป็น /etc/asterisk/pjsip.conf บนเครื่อง Asterisk จริง
+;   2. แทนที่ค่าทั้งหมดที่มี <...> ด้วยค่าจริงจากบัญชี Zadarma ของคุณ
+;   3. ห้าม commit ไฟล์ pjsip.conf ตัวจริง (มี username/secret) เข้า git repo เด็ดขาด
+;      — ไฟล์นี้เป็นแค่ template ที่ปลอดภัยสำหรับ public repo เท่านั้น
+; ===================================================================
+
+[transport-udp]
+type=transport
+protocol=udp
+bind=0.0.0.0
+
+; ----- Zadarma Trunk: ขาออก (โทรออกจาก Asterisk ไปหา Zadarma) -----
+[zadarma-trunk]
+type=endpoint
+transport=transport-udp
+context=from-zadarma
+disallow=all
+allow=ulaw,alaw
+outbound_auth=zadarma-auth
+aors=zadarma-aor
+from_domain=sip.zadarma.com
+
+[zadarma-auth]
+type=auth
+auth_type=userpass
+username=<ZADARMA_SIP_USERNAME>
+password=<ZADARMA_SIP_PASSWORD>
+
+[zadarma-aor]
+type=aor
+contact=sip:sip.zadarma.com:5060
+
+[zadarma-identify]
+type=identify
+endpoint=zadarma-trunk
+match=sip.zadarma.com
+
+; ----- (ถ้า Zadarma ต้องการ registration แทน static IP ให้เปิดส่วนนี้แทน) -----
+; [zadarma-reg]
+; type=registration
+; transport=transport-udp
+; outbound_auth=zadarma-auth
+; server_uri=sip:sip.zadarma.com
+; client_uri=sip:<ZADARMA_SIP_USERNAME>@sip.zadarma.com
+; retry_interval=60

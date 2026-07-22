@@ -1,0 +1,8 @@
+title = "gitleaks config สำหรับโปรเจค 4G Voice Notification Gateway"
+
+[allowlist]
+description = "อนุญาตไฟล์ template/.example ที่มีแต่ placeholder ไม่ใช่ความลับจริง"
+paths = [
+  '''\.env\.example$''',
+  '''asterisk_config/.*\.example$''',
+]
