@@ -1,6 +1,6 @@
 # ===================================================================
-# Multi-stage build — build บน GitHub Actions runner (cloud) เท่านั้น
-# Pi 3 แค่ pull image สำเร็จรูปมารัน ไม่ต้อง build อะไรเองเลย
+# Multi-stage build — build บน Raspberry Pi 3 เอง (native build ผ่าน self-hosted runner)
+# ไม่มี cross-compile/QEMU แล้ว เพราะ build ตรงบนสถาปัตยกรรมเดียวกับที่จะรัน
 # ===================================================================
 
 # ---------- Stage 1: Build frontend (Vite + React + Tailwind) ----------
@@ -20,22 +20,26 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# ติดตั้ง dependency ของระบบที่ pyserial/cryptography ต้องใช้ตอน build (แล้วลบ cache ทิ้ง)
+# gcc เผื่อ pip ต้อง compile package ที่ไม่มี wheel สำเร็จรูปให้ (ปกติไม่ต้องใช้ถ้า piwheels มีให้)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# ใช้ piwheels.org (wheel mirror ที่ compile ไว้ให้แล้วสำหรับ ARM/Raspberry Pi โดยเฉพาะ)
+# ลดเวลา build cryptography/bcrypt จากหลักสิบนาที (compile จาก source) เหลือไม่กี่วินาที (ดาวน์โหลด wheel)
+# ถ้า build บนเครื่องที่ไม่ใช่ ARM (เช่น dev บน x86) pip จะ fallback ไป PyPI ปกติเองถ้า piwheels ไม่มี wheel ให้
+RUN pip install --no-cache-dir \
+    --index-url https://www.piwheels.org/simple \
+    --extra-index-url https://pypi.org/simple \
+    -r requirements.txt
 
 COPY app/ ./app/
 COPY scripts/ ./scripts/
 
 # เอา frontend ที่ build เสร็จจาก stage 1 มาไว้ที่ /app/static
-# main.py จะเช็คโฟลเดอร์นี้แล้วเสิร์ฟเป็น static file ให้เอง (ดู app/main.py ท้ายไฟล์)
 COPY --from=frontend-builder /frontend/dist ./static
 
-# audio_cache และ logs ต้อง persist ข้าม container restart — mount เป็น volume ใน docker-compose.yml
 RUN mkdir -p audio_cache logs
 
 EXPOSE 8000

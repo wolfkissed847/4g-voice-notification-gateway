@@ -1,19 +1,22 @@
 # ===================================================================
-# docker-compose.yml — รันบน Raspberry Pi 3
-# ไม่มี build ที่นี่เลย — ดึง image สำเร็จรูปจาก GHCR ที่ GitHub Actions build ไว้ให้แล้ว
+# docker-compose.yml — รันบน Raspberry Pi 3 (build บนเครื่องนี้เอง)
 #
 # วิธีใช้ครั้งแรก:
 #   1. cp .env.example .env แล้วแก้ค่าจริง
-#   2. แก้ GHCR_IMAGE ด้านล่างให้ตรงกับ repo ของคุณ (เช่น ghcr.io/yourname/4g-voice-notification-gateway)
-#   3. docker compose up -d
+#   2. mkdir -p data/audio_cache data/logs && touch data/gateway.db
+#   3. docker compose up -d --build
 #
-# หลังจากนั้น: แค่ push โค้ดขึ้น GitHub → Actions build image ใหม่ → Watchtower
-# ตรวจเจอแล้ว pull + restart container ให้เองภายในไม่กี่นาที ไม่ต้องทำอะไรเพิ่มบน Pi
+# หลังจากนั้น: แค่ push โค้ดขึ้น GitHub → self-hosted runner บน Pi นี้จะ
+# checkout โค้ดใหม่ + build image + restart container ให้เองอัตโนมัติ
+# (ดู .github/workflows/deploy.yml และ RUNNER_SETUP.md)
 # ===================================================================
 
 services:
   gateway:
-    image: ghcr.io/<your-username>/4g-voice-notification-gateway:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gateway-local:latest
     container_name: gateway
     restart: unless-stopped
     ports:
@@ -21,7 +24,7 @@ services:
     env_file:
       - .env
     volumes:
-      # ข้อมูลที่ต้อง persist ข้าม container restart/update
+      # ข้อมูลที่ต้อง persist ข้าม container restart/rebuild
       - ./data/gateway.db:/app/gateway.db
       - ./data/audio_cache:/app/audio_cache
       - ./data/logs:/app/logs
@@ -29,20 +32,3 @@ services:
       # ให้ container มองเห็นโมดูล GSM ที่เสียบผ่าน USB บน Pi
       # เช็ค path จริงด้วย `ls /dev/ttyUSB*` บน Pi ก่อน แล้วแก้ให้ตรง
       - "/dev/ttyUSB2:/dev/ttyUSB2"
-    labels:
-      # บอก Watchtower ว่า container นี้ให้ auto-update ได้
-      - "com.centurylinklabs.watchtower.enable=true"
-
-  watchtower:
-    image: containrrr/watchtower:latest
-    container_name: watchtower
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      # เช็ค image ใหม่ทุก 5 นาที (300 วิ) — ปรับได้ตามต้องการ
-      - WATCHTOWER_POLL_INTERVAL=300
-      # อัปเดตเฉพาะ container ที่ติด label ไว้ด้านบนเท่านั้น (ไม่ยุ่งกับ container อื่นบนเครื่อง)
-      - WATCHTOWER_LABEL_ENABLE=true
-      # ลบ image เก่าทิ้งหลัง update สำเร็จ กัน SD card เต็ม
-      - WATCHTOWER_CLEANUP=true

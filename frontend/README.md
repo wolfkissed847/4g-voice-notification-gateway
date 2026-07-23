@@ -27,8 +27,8 @@ npm run build
 ไม่ต้องทำอะไรเพิ่มด้วยมือ — flow ทั้งหมดเป็นแบบนี้:
 
 ```
-git push → GitHub Actions build Docker image (รวม frontend build) → push ขึ้น GHCR
-         → Watchtower บน Pi เจอ image ใหม่ → pull + restart ให้เอง
+git push → self-hosted runner บน Pi รับงาน → build Docker image เอง (native, ไม่ cross-compile)
+         → restart container ด้วย image ใหม่
 ```
 
 ดูรายละเอียดที่ [`../README.md`](../README.md) หัวข้อ "Deploy ด้วย Docker + CI/CD"

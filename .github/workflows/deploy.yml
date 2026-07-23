@@ -1,0 +1,32 @@
+name: Build and Deploy on Pi
+
+# รันบน self-hosted runner ที่ติดตั้งไว้บน Raspberry Pi เอง (ดู RUNNER_SETUP.md)
+# ทุกครั้งที่ push เข้า main: Pi checkout โค้ดล่าสุด, build Docker image เอง (native build),
+# แล้ว restart container ด้วย image ใหม่ทันที — ไม่มี cloud registry เกี่ยวข้องเลย
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}  # กดรันเองได้จากหน้า Actions ถ้าต้องการ
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, raspberry-pi]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build image (native build บน Pi)
+        run: docker compose build
+
+      - name: Restart container ด้วย image ใหม่
+        run: docker compose up -d --force-recreate
+
+      - name: ลบ image เก่าทิ้ง กัน SD card เต็ม
+        run: docker image prune -f
+
+      - name: เช็คว่า container รันขึ้นจริง
+        run: |
+          sleep 5
+          docker compose ps
+          curl -sf http://localhost:8000/health || (echo "Health check ล้มเหลว — ดู logs" && docker compose logs --tail=50 gateway && exit 1)

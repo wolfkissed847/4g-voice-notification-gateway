@@ -44,10 +44,17 @@
 │   └── secrets_crypto.py  # Encrypt helper (เผื่ออนาคตเพิ่ม secret ที่ต้อง encrypt)
 ├── network_setup/         # Script + เอกสาร LAN+4G auto-failover
 ├── scripts/                # hash_password.py, generate_encryption_key.py
+├── frontend/               # Dashboard (Vite + React + Tailwind) — build เป็น static bundle
+├── .github/workflows/      # deploy.yml — self-hosted runner build+deploy บน push
 ├── audio_cache/            # ไฟล์เสียงที่ gTTS สร้าง (gitignored)
 ├── logs/                   # log การโทร/สถานะ (gitignored)
+├── data/                   # Docker volume: gateway.db, audio_cache, logs (gitignored)
+├── Dockerfile              # Multi-stage: build frontend + Python runtime
+├── docker-compose.yml
+├── RUNNER_SETUP.md         # ขั้นตอนติดตั้ง self-hosted GitHub Actions runner บน Pi
 ├── .env.example
 ├── .gitignore
+├── .dockerignore
 ├── .pre-commit-config.yaml
 ├── .gitleaks.toml
 ├── requirements.txt
@@ -116,37 +123,42 @@ curl http://localhost:8000/config -H "Authorization: Bearer <token>"
   2. Escalation Chain → โทรหาเบอร์ลำดับถัดไปในกลุ่มเดียวกัน (เบอร์อยู่ใน `.env`)
   3. ถ้ายังไม่สำเร็จ → ส่ง SMS สรุปเหตุการณ์ (≤70 ตัวอักษร, EN+TH ปนกัน)
 
-## 🐳 Deploy ด้วย Docker + CI/CD (แนะนำสำหรับใช้งานจริงบน Pi)
+## 🐳 Deploy ด้วย Docker + CI/CD (Pi build เอง ผ่าน self-hosted runner)
 
-Pi 3 มีแรมจำกัด (1GB) จึง **ไม่ build อะไรบน Pi เลย** — ให้ GitHub Actions build ให้แทน:
+Pi รัน **GitHub Actions self-hosted runner** ของตัวเอง — push โค้ดขึ้น `main` แล้ว Pi จะ
+checkout โค้ดล่าสุด, build Docker image, restart container ให้เองทั้งหมด ไม่ต้อง SSH เข้าเครื่องอีกเลย
 
 ```
-git push (branch main) → GitHub Actions build multi-arch image (รวม frontend)
-                        → push ขึ้น ghcr.io
-Pi 3: Watchtower เช็คทุก 5 นาที → เจอ image ใหม่ → pull + restart container ให้เอง
+git push (branch main) → Pi (self-hosted runner) รับงานจาก GitHub
+                        → docker compose build  (native build บนเครื่องเดียวกับที่รัน)
+                        → docker compose up -d --force-recreate
 ```
 
-**Setup ครั้งแรกบน Pi:**
+**Setup ครั้งแรกบน Pi (ทำ 2 อย่าง):**
 
-```bash
-git clone https://github.com/<your-username>/4g-voice-notification-gateway.git
-cd 4g-voice-notification-gateway
-cp .env.example .env   # แก้ค่าจริง (ดูหัวข้อ Setup ด้านบน)
-mkdir -p data/audio_cache data/logs
-touch data/gateway.db
+1. **ติดตั้ง self-hosted runner** — ดูขั้นตอนละเอียดใน [`RUNNER_SETUP.md`](./RUNNER_SETUP.md)
+   (ทำครั้งเดียว ใช้เวลาไม่กี่นาที)
 
-# แก้ docker-compose.yml: เปลี่ยน <your-username> ในบรรทัด image: ให้ตรงกับ repo จริง
+2. **เตรียมโปรเจค:**
+   ```bash
+   git clone https://github.com/<your-username>/4g-voice-notification-gateway.git
+   cd 4g-voice-notification-gateway
+   cp .env.example .env   # แก้ค่าจริง (ดูหัวข้อ Setup ด้านบน)
+   mkdir -p data/audio_cache data/logs
+   touch data/gateway.db
+   docker compose up -d --build   # รันครั้งแรกด้วยมือ ครั้งต่อไปให้ push แล้วปล่อยให้ CI จัดการ
+   ```
 
-docker compose up -d
-```
-
-หลังจากนี้ **แค่ push โค้ดขึ้น GitHub** — ไม่ต้อง SSH เข้า Pi อีกเลย ระบบ build+deploy ให้เองภายในไม่กี่นาที
+หลังจากนี้ **แค่ push โค้ดขึ้น GitHub** — self-hosted runner จะ build + restart container ให้เอง
+ดูความคืบหน้าได้ที่แท็บ **Actions** บน GitHub repo
 
 **หมายเหตุสำคัญ:**
-- Multi-arch build (arm/v7 + arm64 + amd64) ผ่าน QEMU emulation บน GitHub Actions ใช้เวลานานกว่าปกติ
-  (~15-30 นาทีต่อครั้ง เพราะ compile `cryptography`/`bcrypt` บน ARM แบบ emulate) — เป็นเรื่องปกติ ไม่ใช่ error
-- ถ้า Pi รัน 32-bit OS ให้เช็คว่า Watchtower ดึง image tag `arm/v7` มาใช้ถูกต้อง (Docker เลือกให้อัตโนมัติตาม arch ของเครื่อง)
-- ไฟล์ `data/gateway.db`, `data/audio_cache/`, `data/logs/` mount เป็น volume ไว้แล้ว ข้อมูลจะไม่หายตอน container update
+- Build ครั้งแรกช้าสุด (~10-20 นาที) ครั้งต่อไปเร็วขึ้นมากถ้า Docker layer cache ยังอยู่
+  (ไม่ได้แก้ `requirements.txt`/`frontend/package.json`)
+- `Dockerfile` ใช้ [piwheels.org](https://www.piwheels.org) แทน PyPI ปกติ — ลดเวลา compile
+  `cryptography`/`bcrypt` บน ARM จากหลักสิบนาทีเหลือไม่กี่วินาที (ดาวน์โหลด wheel สำเร็จรูปแทน)
+- ถ้า Pi มีแค่ 1GB RAM แนะนำเปิด swap ไว้ก่อน build ครั้งแรก กัน OOM ตอน `npm install`/`vite build`
+- ไฟล์ `data/gateway.db`, `data/audio_cache/`, `data/logs/` mount เป็น volume ไว้แล้ว ข้อมูลไม่หายตอน rebuild
 
 
 
