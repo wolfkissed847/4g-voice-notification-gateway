@@ -1,0 +1,16 @@
+.env
+*.db
+audio_cache/*
+!audio_cache/.gitkeep
+logs/*
+!logs/.gitkeep
+__pycache__/
+*.pyc
+.git/
+.github/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+data/
+venv/
+.venv/

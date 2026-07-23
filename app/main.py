@@ -1,13 +1,20 @@
 """
 FastAPI Entrypoint — รับ Request แจ้งเตือนจากระบบภายนอก แล้วเข้าคิวให้ call_worker ประมวลผล
-รวม auth สำหรับ dashboard (single-user JWT) และ device management (multi-SIM)
+รวม auth สำหรับ dashboard (single-user JWT) และ config ที่แก้ได้ผ่านเว็บ (retry/timeout/SMS fallback)
+
+เวอร์ชันนี้เป็น SIM ตัวเดียว, GSM only (ดู branch feature/voip-multi-sim
+ถ้าต้องการ multi-SIM หรือ VoIP/Asterisk)
+
 รัน: uvicorn app.main:app --host 0.0.0.0 --port 8000
 """
 import logging
+import os
 import threading
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from app.auth import create_access_token, get_current_user, verify_password
@@ -15,11 +22,9 @@ from app.call_worker import run_worker_loop
 from app.config import settings
 from app.config_service import get_masked_config, update_app_settings
 from app.database import get_db, init_db
-from app.device_manager import add_device, list_devices, remove_device
 from app.queue_manager import enqueue_job, get_pending_jobs
 from app.schemas import (
     AppConfigResponse, AppConfigUpdateRequest,
-    DeviceCreateRequest, DeviceResponse,
     LoginRequest, LoginResponse,
     NotifyRequest, NotifyResponse,
     QueueStatusItem, QueueStatusResponse,
@@ -30,8 +35,8 @@ logger = logging.getLogger("main")
 
 app = FastAPI(
     title="4G Automated Voice Notification Gateway",
-    description="Self-hosted Robo-calling Gateway สำหรับแจ้งเตือนเหตุฉุกเฉินผ่านสาย 4G/VoIP",
-    version="0.2.0",
+    description="Self-hosted Robo-calling Gateway สำหรับแจ้งเตือนเหตุฉุกเฉินผ่านสาย 4G (GSM, SIM ตัวเดียว)",
+    version="0.3.0",
 )
 
 app.add_middleware(
@@ -44,7 +49,7 @@ app.add_middleware(
 
 
 def verify_api_key(x_api_key: str = Header(...)):
-    """ใช้กับ endpoint ที่ระบบ monitoring ภายนอกยิงเข้ามา (ไม่ใช่ dashboard)"""
+    """ใช้กับ endpoint ที่ระบบภายนอก (บอร์ด/monitoring) ยิงเข้ามา (ไม่ใช่ dashboard)"""
     if x_api_key != settings.api_secret_key:
         raise HTTPException(status_code=401, detail="API key ไม่ถูกต้อง")
 
@@ -58,11 +63,11 @@ def on_startup():
     logger.info("Call worker thread เริ่มทำงานแล้ว")
 
 
-# ---------- Public: ระบบภายนอกยิงแจ้งเตือน (API key) ----------
+# ---------- Public: ระบบ/บอร์ดภายนอกยิงแจ้งเตือนเข้ามา (API key) ----------
 
 @app.post("/notify", response_model=NotifyResponse, dependencies=[Depends(verify_api_key)])
 def notify(request: NotifyRequest, db: Session = Depends(get_db)):
-    """รับแจ้งเตือนเหตุฉุกเฉิน แล้วเข้าคิว FIFO เพื่อรอโทร"""
+    """รับแจ้งเตือนเหตุฉุกเฉินจากระบบ/บอร์ดภายนอก แล้วเข้าคิว FIFO เพื่อรอโทร"""
     job = enqueue_job(db, message=request.message, priority_group=request.priority_group)
     return NotifyResponse(job_id=job.id, status=job.status.value)
 
@@ -77,7 +82,7 @@ def login(request: LoginRequest):
     return LoginResponse(access_token=token)
 
 
-# ---------- Dashboard: ต้อง login (JWT) ----------
+# ---------- Dashboard: ต้อง login (JWT) — ดูสถานะ + config เท่านั้น ไม่ใช่ช่องสั่งโทร ----------
 
 @app.get("/queue/status", response_model=QueueStatusResponse)
 def queue_status(db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
@@ -98,10 +103,7 @@ def queue_status(db: Session = Depends(get_db), _user: str = Depends(get_current
 
 @app.get("/config", response_model=AppConfigResponse)
 def get_config(db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
-    """
-    ดึง config ปัจจุบัน (เลือก backend, Zadarma/AMI ฯลฯ) — secret ถูก mask ไว้
-    นี่คือหน้าที่ user ทั่วไป config VoIP ได้ง่ายๆ ผ่าน dashboard โดยไม่ต้องแก้ .env
-    """
+    """ดึง config ปัจจุบัน (retry/timeout/SMS fallback) — แก้ได้ผ่าน dashboard ไม่ต้องแตะ .env"""
     return AppConfigResponse(**get_masked_config(db))
 
 
@@ -117,42 +119,21 @@ def update_config(
     return AppConfigResponse(**get_masked_config(db))
 
 
-@app.get("/devices", response_model=list[DeviceResponse])
-def get_devices(db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
-    """รายชื่อ SIM device ทั้งหมดที่ลงทะเบียนไว้ (multi-SIM pool)"""
-    devices = list_devices(db)
-    return [
-        DeviceResponse(
-            id=d.id, label=d.label, serial_port=d.serial_port,
-            baudrate=d.baudrate, status=d.status.value,
-        )
-        for d in devices
-    ]
-
-
-@app.post("/devices", response_model=DeviceResponse)
-def create_device(
-    request: DeviceCreateRequest, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
-):
-    """
-    เพิ่ม SIM device ใหม่เข้า pool
-    หมายเหตุ: ต้อง restart worker (หรือ endpoint reload ในอนาคต) เพื่อให้ worker pool เห็น device ใหม่
-    """
-    device = add_device(db, label=request.label, serial_port=request.serial_port, baudrate=request.baudrate)
-    return DeviceResponse(
-        id=device.id, label=device.label, serial_port=device.serial_port,
-        baudrate=device.baudrate, status=device.status.value,
-    )
-
-
-@app.delete("/devices/{device_id}")
-def delete_device(device_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
-    success = remove_device(db, device_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="ไม่พบ device นี้")
-    return {"deleted": True}
-
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ---------- เสิร์ฟ frontend ที่ build แล้ว (Vite static bundle) ----------
+# ไฟล์เหล่านี้ถูก build ด้วย GitHub Actions แล้ว copy เข้า container ตอน build image
+# ไม่มี Node.js รันบน Pi เลย — ดู frontend/README.md และ Dockerfile
+_FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "static")
+
+if os.path.isdir(_FRONTEND_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_FRONTEND_DIST, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str):
+        """SPA fallback — route ไหนที่ไม่ตรงกับ API ข้างบน ให้ส่ง index.html แล้วให้ React Router จัดการเอง"""
+        index_path = os.path.join(_FRONTEND_DIST, "index.html")
+        return FileResponse(index_path)

@@ -3,87 +3,56 @@
 **ภาษาไทย:** การออกแบบและพัฒนาระบบเกตเวย์โทรแจ้งเตือนด้วยข้อความเสียงอัตโนมัติผ่านเครือข่าย 4G
 **English:** Design and Development of an Automated Voice Notification Gateway Server over 4G Network
 
+> **หมายเหตุเรื่อง branch:** โปรเจคนี้มี branch `feature/voip-multi-sim` แยกไว้ต่างหาก
+> ซึ่งมีระบบ VoIP (Asterisk + Zadarma) และ multi-SIM pool เพิ่มเติม — branch `main` นี้ตัดสองส่วนนั้นออก
+> เพื่อให้ระบบเรียบง่ายและโฟกัสที่ SIM ตัวเดียวผ่าน GSM เท่านั้น
+
 ## 📌 Project Goal
 
-ระบบ Robo-calling Gateway ขนาดเล็ก ทำงานแบบ Self-hosted (On-Premise) ภายในองค์กร ใช้สำหรับโทรแจ้งเตือนเจ้าหน้าที่ไอที/ทีมช่างโดยอัตโนมัติเมื่อเกิดเหตุฉุกเฉิน (เช่น เซิร์ฟเวอร์ล่ม, ไฟดับ)
+ระบบ Robo-calling Gateway ขนาดเล็ก ทำงานแบบ Self-hosted (On-Premise) ภายในองค์กร ใช้สำหรับโทรแจ้งเตือน
+เจ้าหน้าที่ไอที/ทีมช่างโดยอัตโนมัติเมื่อเกิดเหตุฉุกเฉิน (เช่น เซิร์ฟเวอร์ล่ม, ไฟดับ)
 
-โปรเจคนี้ทดลองเปรียบเทียบ **2 แนวทาง** สำหรับโทรออก (สลับได้ผ่าน `.env` ด้วยตัวแปร `CALL_BACKEND`):
-
-| Backend | วิธีการ | Use case |
-|---|---|---|
-| `gsm` (ธรรมดา) | SIMCOM A7670C หมุนเบอร์ผ่านซิมจริง ด้วย AT command | ไม่ต้องพึ่งเน็ตออฟฟิศ, ทำงานได้แม้ไฟดับ/เน็ตล่ม (มีแบตสำรอง) |
-| `voip` | Raspberry Pi ต่อ LAN ออฟฟิศ → Asterisk (PBX) → Zadarma SIP trunk | เปรียบเทียบต้นทุน/คุณภาพเสียง/ความหน่วงสำหรับบทวิเคราะห์ในรูปเล่ม |
+- **โทรออก**: ผ่านซิมจริง (SIMCOM A7670C, AT command) — ไม่พึ่ง Cloud VoIP
+- **รับคำสั่ง**: ระบบ/บอร์ดภายนอกยิง `POST /notify` เข้ามา (มี API key ป้องกัน)
+- **Dashboard**: ดูสถานะคิว + ปรับ config (retry/timeout/SMS fallback) ผ่านเว็บ — **ไม่ใช่ช่องสั่งโทร**
+- **เครือข่าย**: Pi ใช้ LAN ออฟฟิศเป็นหลัก สลับไปใช้ 4G อัตโนมัติเมื่อ LAN หลุด (เช่นตอนไฟดับ)
 
 ## 🏗️ Hardware Architecture
 
 | Component | Detail |
 |---|---|
-| Controller | Raspberry Pi (API Server + Queue Manager + Asterisk PBX) |
-| GSM/4G Module | SIMCOM A7670E/A7670C (4G LTE Cat1, VoLTE, USB, AT Command) — ใช้ backend `gsm` |
+| Controller | Raspberry Pi |
+| GSM/4G Module | SIMCOM A7670C (4G LTE Cat1, VoLTE, USB, AT Command) — **1 ตัว** |
 | SIM Card | GOMO (AIS network), Data 10GB + Voice pay-per-minute + SMS top-up pack |
-| VoIP Trunk | Zadarma SIP trunk ผ่าน Asterisk บน Pi — ใช้ backend `voip` ผ่าน LAN ออฟฟิศ |
-
-## 🧩 System Architecture
-
-```
-┌─────────────┐      HTTP POST /notify      ┌──────────────────┐
-│ Monitoring  │ ──────────────────────────▶ │  FastAPI Server  │
-│ System      │                             │  (Raspberry Pi)  │
-└─────────────┘                             └────────┬─────────┘
-                                                       │ enqueue
-                                                       ▼
-                                             ┌──────────────────┐
-                                             │  SQLite Queue    │
-                                             │  (FIFO)          │
-                                             └────────┬─────────┘
-                                                       │ dequeue (1-by-1)
-                                                       ▼
-                                             ┌──────────────────┐
-                                             │  Call Worker     │
-                                             │  (background)    │
-                                             └────────┬─────────┘
-                                                       │ AT Commands
-                                                       ▼
-                                             ┌──────────────────┐
-                                             │ SIMCOM A7670E     │
-                                             │ (USB Serial)      │
-                                             └──────────────────┘
-                                                       │
-                                      Connected ───────┼─────── No Answer / Busy
-                                          │                            │
-                                          ▼                            ▼
-                                 Stream gTTS audio            Retry → Escalate → SMS Fallback
-```
+| เครือข่าย | LAN สายแลนออฟฟิศ (หลัก) + 4G จากโมดูลตัวเดียวกัน (สำรอง, auto-failover) |
 
 ## 📂 Project Structure
 
 ```
 4g-voice-notification-gateway/
 ├── app/
-│   ├── main.py            # FastAPI entrypoint + API routes
-│   ├── config.py          # โหลดค่าคอนฟิกจาก .env (รวม backend selector)
-│   ├── database.py        # SQLite models (SQLAlchemy) - queue, contacts, call logs
+│   ├── main.py            # FastAPI entrypoint: /notify, /auth/login, /queue/status, /config
+│   ├── config.py          # ค่า bootstrap จาก .env
+│   ├── config_service.py  # Config ที่แก้ผ่าน dashboard ได้ (retry/timeout/SMS fallback)
+│   ├── database.py        # SQLite models — queue, call logs, app settings
 │   ├── schemas.py         # Pydantic request/response models
-│   ├── queue_manager.py   # FIFO queue logic (enqueue/dequeue)
-│   ├── gsm_module.py      # AT Command wrapper สำหรับ SIMCOM A7670E/A7670C
-│   ├── tts_service.py     # gTTS wrapper: text → mp3 (ภาษาไทย)
-│   ├── call_worker.py     # Background worker: call state machine + retry/escalation/SMS fallback
-│   └── call_backends/     # Interface กลาง + adapter สำหรับ GSM และ VoIP
-│       ├── base.py            # CallBackend abstract interface
-│       ├── gsm_backend.py      # adapter ครอบ gsm_module.py (แบบธรรมดา)
-│       ├── voip_backend.py     # Asterisk AMI + Zadarma trunk (แบบ VoIP)
-│       └── __init__.py         # get_call_backend() factory ตาม .env
-├── asterisk_config/       # Template config Asterisk (.example เท่านั้น - ตัวจริง gitignored)
-├── audio_cache/           # ไฟล์เสียงที่ gTTS สร้าง (gitignored)
-├── logs/                  # log การโทร/สถานะ (gitignored)
-├── tests/                 # unit tests
+│   ├── queue_manager.py   # FIFO queue logic (atomic claim)
+│   ├── gsm_module.py      # AT Command wrapper สำหรับ SIMCOM A7670C
+│   ├── tts_service.py     # gTTS wrapper: text → mp3 (ภาษาไทย, cache ตาม hash)
+│   ├── call_worker.py     # Background worker: state machine + retry/escalation/SMS fallback
+│   ├── auth.py            # Single-user JWT login (dashboard)
+│   └── secrets_crypto.py  # Encrypt helper (เผื่ออนาคตเพิ่ม secret ที่ต้อง encrypt)
+├── network_setup/         # Script + เอกสาร LAN+4G auto-failover
+├── scripts/                # hash_password.py, generate_encryption_key.py
+├── audio_cache/            # ไฟล์เสียงที่ gTTS สร้าง (gitignored)
+├── logs/                   # log การโทร/สถานะ (gitignored)
 ├── .env.example
 ├── .gitignore
 ├── .pre-commit-config.yaml
 ├── .gitleaks.toml
 ├── requirements.txt
 ├── requirements-dev.txt
-├── LICENSE                # MIT
+├── LICENSE                 # MIT
 └── README.md
 ```
 
@@ -95,14 +64,19 @@ cd 4g-voice-notification-gateway
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # แล้วแก้ค่าจริงใน .env (ห้าม commit ไฟล์นี้)
+cp .env.example .env
+python scripts/hash_password.py           # ตั้งรหัสผ่าน admin
+python scripts/generate_encryption_key.py # สร้าง encryption key (เผื่ออนาคต)
+# แก้ .env ใส่ค่าที่ได้จาก 2 คำสั่งด้านบน + เบอร์โทร escalation
 ```
 
 ### เชื่อมต่อฮาร์ดแวร์
-1. เสียบซิม GOMO (AIS) เข้าโมดูล A7670E
-2. ต่อโมดูลเข้า Raspberry Pi ผ่านสาย USB
+1. เสียบซิม GOMO (AIS) เข้าโมดูล A7670C
+2. ต่อโมดูลเข้า Raspberry Pi ผ่านสาย USB (**ใช้ไฟเลี้ยงแยกสำหรับโมดูล ไม่ใช้ขา 5V ของ Pi โดยตรง**
+   เพราะโมดูลกินกระแสพุ่งสูงตอนส่งสัญญาณ)
 3. เช็ค serial port: `ls /dev/ttyUSB*` แล้วใส่ path ที่ถูกต้องใน `.env` (`GSM_SERIAL_PORT`)
 4. ทดสอบโมดูลด้วย `AT` command ผ่าน `minicom` หรือ `screen` ก่อนรันระบบจริง
+5. ตั้งค่า network failover (LAN+4G): ดู [`network_setup/README.md`](./network_setup/README.md)
 
 ### รันเซิร์ฟเวอร์
 ```bash
@@ -111,59 +85,84 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## 📡 API Usage
 
-### แจ้งเตือนฉุกเฉิน (เข้าคิวโทร)
+### แจ้งเตือนฉุกเฉิน (ระบบ/บอร์ดภายนอกเรียก)
 ```bash
 curl -X POST http://localhost:8000/notify \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: <API_SECRET_KEY จาก .env>" \
   -d '{
     "message": "เซิร์ฟเวอร์หลักล่ม กรุณาตรวจสอบด่วน",
     "priority_group": "network_team"
   }'
 ```
 
-### เช็คสถานะคิว
+### Dashboard: login แล้วดู/แก้ config
 ```bash
-curl http://localhost:8000/queue/status
+# login
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"<รหัสผ่านที่ตั้งไว้>"}'
+
+# ใช้ access_token ที่ได้ เรียกดู queue/config
+curl http://localhost:8000/queue/status -H "Authorization: Bearer <token>"
+curl http://localhost:8000/config -H "Authorization: Bearer <token>"
 ```
 
 ## 🔁 Call Logic Summary
 
-- **Connected** → สตรีมไฟล์เสียง gTTS (ภาษาไทย) เข้าสาย
+- **Connected** → เล่นไฟล์เสียง gTTS (ภาษาไทย) เข้าสาย
 - **No Answer / Busy** →
-  1. Retry ตามจำนวนรอบ + ระยะเวลาที่ตั้งไว้ (`.env`)
-  2. Escalation Chain → โทรหาเบอร์ลำดับถัดไปในกลุ่มเดียวกัน
+  1. Retry ตามจำนวนรอบ + ระยะเวลาที่ตั้งไว้ (ปรับผ่าน dashboard `/config`)
+  2. Escalation Chain → โทรหาเบอร์ลำดับถัดไปในกลุ่มเดียวกัน (เบอร์อยู่ใน `.env`)
   3. ถ้ายังไม่สำเร็จ → ส่ง SMS สรุปเหตุการณ์ (≤70 ตัวอักษร, EN+TH ปนกัน)
 
-## 🎙️ VoIP Setup (Asterisk + Zadarma)
+## 🐳 Deploy ด้วย Docker + CI/CD (แนะนำสำหรับใช้งานจริงบน Pi)
 
-1. ติดตั้ง Asterisk บน Raspberry Pi (หรือเครื่องแยกในวง LAN เดียวกัน):
-   ```bash
-   sudo apt install asterisk
-   ```
-2. คัดลอก template จาก `asterisk_config/*.example` ไปเป็นไฟล์จริงใน `/etc/asterisk/`:
-   ```bash
-   sudo cp asterisk_config/pjsip.conf.example /etc/asterisk/pjsip.conf
-   sudo cp asterisk_config/extensions.conf.example /etc/asterisk/extensions.conf
-   sudo cp asterisk_config/manager.conf.example /etc/asterisk/manager.conf
-   ```
-3. แก้ค่า `<ZADARMA_SIP_USERNAME>`, `<ZADARMA_SIP_PASSWORD>`, `<AMI_USERNAME>`, `<AMI_SECRET>` ในไฟล์จริงที่คัดลอกไป — **ห้าม commit ไฟล์เหล่านี้** (อยู่ใน `.gitignore` แล้ว)
-4. Restart Asterisk: `sudo systemctl restart asterisk`
-5. ตั้ง `.env`: `CALL_BACKEND=voip` พร้อมค่า AMI/Zadarma ให้ตรงกับที่ตั้งไว้
-6. แปลงไฟล์เสียง gTTS (mp3) เป็น format ที่ Asterisk เล่นได้ก่อนใช้งานจริง (เช่นผ่าน `sox`/`ffmpeg` เป็น `.wav` หรือ `.gsm`) — ดู TODO ใน `app/call_backends/voip_backend.py`
+Pi 3 มีแรมจำกัด (1GB) จึง **ไม่ build อะไรบน Pi เลย** — ให้ GitHub Actions build ให้แทน:
 
-## 🔒 Security Notes
+```
+git push (branch main) → GitHub Actions build multi-arch image (รวม frontend)
+                        → push ขึ้น ghcr.io
+Pi 3: Watchtower เช็คทุก 5 นาที → เจอ image ใหม่ → pull + restart container ให้เอง
+```
 
-- ห้าม hardcode พาสเวิร์ด/เบอร์โทร/token/SIP credential ลงโค้ด — ใช้ `.env` และ `asterisk_config/*.conf` (ตัวจริง) เท่านั้น ซึ่งทั้งคู่ถูก block ใน `.gitignore`
-- ใช้ `.env.example` และ `asterisk_config/*.example` เป็นแม่แบบให้ผู้อื่น setup
-- ติดตั้ง pre-commit hook เพื่อสแกนหาความลับก่อน commit ทุกครั้ง (กันมือลั่น commit ค่าจริงหลุดขึ้น GitHub):
+**Setup ครั้งแรกบน Pi:**
+
+```bash
+git clone https://github.com/<your-username>/4g-voice-notification-gateway.git
+cd 4g-voice-notification-gateway
+cp .env.example .env   # แก้ค่าจริง (ดูหัวข้อ Setup ด้านบน)
+mkdir -p data/audio_cache data/logs
+touch data/gateway.db
+
+# แก้ docker-compose.yml: เปลี่ยน <your-username> ในบรรทัด image: ให้ตรงกับ repo จริง
+
+docker compose up -d
+```
+
+หลังจากนี้ **แค่ push โค้ดขึ้น GitHub** — ไม่ต้อง SSH เข้า Pi อีกเลย ระบบ build+deploy ให้เองภายในไม่กี่นาที
+
+**หมายเหตุสำคัญ:**
+- Multi-arch build (arm/v7 + arm64 + amd64) ผ่าน QEMU emulation บน GitHub Actions ใช้เวลานานกว่าปกติ
+  (~15-30 นาทีต่อครั้ง เพราะ compile `cryptography`/`bcrypt` บน ARM แบบ emulate) — เป็นเรื่องปกติ ไม่ใช่ error
+- ถ้า Pi รัน 32-bit OS ให้เช็คว่า Watchtower ดึง image tag `arm/v7` มาใช้ถูกต้อง (Docker เลือกให้อัตโนมัติตาม arch ของเครื่อง)
+- ไฟล์ `data/gateway.db`, `data/audio_cache/`, `data/logs/` mount เป็น volume ไว้แล้ว ข้อมูลจะไม่หายตอน container update
+
+
+
+- ห้าม hardcode พาสเวิร์ด/เบอร์โทร/token ลงโค้ด — ใช้ `.env` เท่านั้น (ถูก block ใน `.gitignore`)
+- ติดตั้ง pre-commit hook เพื่อสแกนหาความลับก่อน commit ทุกครั้ง:
   ```bash
   pip install -r requirements-dev.txt --break-system-packages
   pre-commit install
   ```
-  หลังจากนี้ทุกครั้งที่ `git commit` จะรัน [gitleaks](https://github.com/gitleaks/gitleaks) สแกนอัตโนมัติ ถ้าเจอ pattern ที่คล้าย secret จะ block การ commit ทันที
-- แนะนำรัน `pre-commit run --all-files` อย่างน้อย 1 ครั้งหลัง clone repo ก่อนเริ่ม commit ใดๆ
 
+## 🌿 Branches
 
+| Branch | สโคป |
+|---|---|
+| `main` | SIM ตัวเดียว, GSM only, เรียบง่ายที่สุด (branch นี้) |
+| `feature/voip-multi-sim` | เพิ่ม VoIP (Asterisk+Zadarma) + multi-SIM pool — เก็บไว้พัฒนาต่อในอนาคต |
 
 ## 📄 License
 

@@ -1,5 +1,9 @@
-# Environment / Secrets
-.env
+# Node / Frontend build
+frontend/node_modules/
+frontend/dist/
+
+# Docker persistent data (mount โดย docker-compose.yml)
+data/
 
 # Asterisk config ตัวจริง (มีความลับ) — commit ได้เฉพาะไฟล์ .example เท่านั้น
 asterisk_config/pjsip.conf
