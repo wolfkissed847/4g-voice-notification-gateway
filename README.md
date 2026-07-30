@@ -87,7 +87,7 @@ python scripts/generate_encryption_key.py # สร้าง encryption key (เ�
 
 ### รันเซิร์ฟเวอร์
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+.\venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## 📡 API Usage

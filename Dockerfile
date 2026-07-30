@@ -36,6 +36,11 @@ RUN pip install --no-cache-dir \
 
 COPY app/ ./app/
 COPY scripts/ ./scripts/
+# migrations/ จำเป็นตอน runtime ไม่ใช่แค่ตอน dev — init_db() เรียก `alembic upgrade head`
+# ตอน startup ถ้าไม่มีโฟลเดอร์นี้ใน image container จะขึ้นไม่ได้เลย
+# alembic.ini ติดมาด้วยเพื่อให้รัน alembic CLI ใน container ได้ (เช่น docker compose exec gateway alembic history)
+COPY migrations/ ./migrations/
+COPY alembic.ini .
 
 # เอา frontend ที่ build เสร็จจาก stage 1 มาไว้ที่ /app/static
 COPY --from=frontend-builder /frontend/dist ./static

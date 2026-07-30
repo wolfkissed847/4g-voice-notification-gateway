@@ -2,8 +2,10 @@
 # docker-compose.yml — รันบน Raspberry Pi 3 (build บนเครื่องนี้เอง)
 #
 # วิธีใช้ครั้งแรก:
-#   1. cp .env.example .env แล้วแก้ค่าจริง
-#   2. mkdir -p data/audio_cache data/logs && touch data/gateway.db
+#   1. cp .env.example .env แล้วแก้ค่าจริง (DATABASE_URL ต้องเป็น sqlite:////app/data/gateway.db)
+#   2. mkdir -p data/audio_cache data/logs
+#      (ไม่ต้อง touch data/gateway.db แล้ว — ตัวแอปจะสร้างไฟล์ + ตารางเองตอน start
+#       ผ่าน init_db() ที่เรียก `alembic upgrade head` ดู app/database.py)
 #   3. docker compose up -d --build
 #
 # หลังจากนั้น: แค่ push โค้ดขึ้น GitHub → self-hosted runner บน Pi นี้จะ
@@ -25,7 +27,13 @@ services:
       - .env
     volumes:
       # ข้อมูลที่ต้อง persist ข้าม container restart/rebuild
-      - ./data/gateway.db:/app/gateway.db
+      #
+      # DB เมานต์เป็น "โฟลเดอร์" ไม่ใช่ไฟล์เดียว (ตั้ง DATABASE_URL=sqlite:////app/data/gateway.db ใน .env)
+      # เพราะ SQLite โหมด WAL สร้างไฟล์พ่วงอีก 2 ตัวคือ gateway.db-wal และ gateway.db-shm
+      # ถ้าเมานต์เฉพาะไฟล์ gateway.db ไฟล์พ่วงจะไปเกิดในชั้น filesystem ของ container
+      # แล้วหายทุกครั้งที่ recreate = transaction ที่ commit แล้วแต่ยังไม่ checkpoint หายไปด้วย
+      # เมานต์เป็นโฟลเดอร์ทำให้ทั้ง 3 ไฟล์อยู่บน host ด้วยกัน และรองรับการสร้างไฟล์ใหม่ (VACUUM INTO/restore)
+      - ./data:/app/data
       - ./data/audio_cache:/app/audio_cache
       - ./data/logs:/app/logs
     devices:
