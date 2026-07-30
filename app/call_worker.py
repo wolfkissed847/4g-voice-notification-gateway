@@ -7,20 +7,25 @@ Call Worker — background loop ที่ดึงงานจากคิว FI
 
 Config (retry/timeout/SMS fallback) โหลดจาก dashboard (DB) ผ่าน config_service
 ไม่ใช่จาก .env ตรงๆ — เพื่อให้ user เปลี่ยนได้จากหน้าเว็บโดยไม่ต้องแก้ไฟล์
-หมายเหตุ: worker โหลด config ครั้งเดียวตอน start เท่านั้น — เปลี่ยนค่าผ่าน dashboard แล้ว
-ต้อง restart worker process จึงจะมีผล (hot-reload เป็นแผนพัฒนาต่อในอนาคต)
+worker เช็ค AppSettings.updated_at เป็นระยะ (ทุก config_check_interval วิ) ถ้าเปลี่ยนจะโหลด config
+ใหม่อัตโนมัติ ไม่ต้อง restart process (ดู run_worker_loop)
+
+เบอร์ escalation มาจากตาราง groups/contacts ผ่าน contacts_service — ถ้า job เก่า (ก่อน migration)
+ไม่มี event_type_id จะ fallback ไปอ่านจาก .env ตามกลไกเดิมเพื่อไม่ให้ job ค้างคาพัง
 """
 import logging
 import time
 
 from sqlalchemy.orm import Session
 
-from app.config import settings as env_settings  # ใช้แค่ escalation contacts ที่ยังอยู่ใน .env
-from app.config_service import EffectiveConfig, get_effective_config
+from app.config import settings as env_settings  # ใช้แค่ fallback ของ job เก่าก่อน migration
+from app.config_service import EffectiveConfig, get_effective_config, get_or_create_app_settings
+from app.contacts_service import get_ordered_phone_numbers
 from app.database import CallJob, CallLog, CallStatus, SessionLocal
 from app.gsm_module import GSMModule
 from app.queue_manager import claim_next_job, update_job_status
 from app.tts_service import text_to_speech
+from app import worker_state
 
 logger = logging.getLogger("call_worker")
 
@@ -49,7 +54,15 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
         CONNECTED -> stream audio -> DONE
         NO_ANSWER/BUSY -> retry (ถ้ายังไม่ครบรอบ) -> escalate (เบอร์ถัดไป) -> sms fallback
     """
-    contacts = env_settings.get_contacts(job.priority_group)
+    if job.event_type_id is not None and job.event_type is not None:
+        contacts = get_ordered_phone_numbers(db, job.event_type.group_id)
+    else:
+        logger.warning(
+            "Job %s: ไม่มี event_type_id (job เก่าก่อน migration) ใช้ .env fallback สำหรับ '%s'",
+            job.id, job.priority_group,
+        )
+        contacts = env_settings.get_contacts(job.priority_group)
+
     if not contacts:
         logger.error("ไม่มีเบอร์ติดต่อสำหรับกลุ่ม %s", job.priority_group)
         update_job_status(db, job, CallStatus.FAILED)
@@ -119,33 +132,67 @@ def _try_sms_fallback(db: Session, job: CallJob, phone_number: str, gsm: GSMModu
         logger.error("Job %s: ส่ง SMS fallback ไม่สำเร็จ - ต้องแจ้งเตือนแอดมิน", job.id)
 
 
-def run_worker_loop(poll_interval: float = 3.0):
+def _poll_gsm_status(gsm: GSMModule):
+    """เช็คสัญญาณ/operator/network mode ของ GSM module — เรียกเฉพาะตอน idle เท่านั้น
+    เพื่อไม่ให้ AT command ของการเช็คสถานะไปแทรกกลางขั้นตอนโทร/ส่ง SMS ที่ใช้ serial port เดียวกัน"""
+    try:
+        signal = gsm.get_signal_quality()
+        operator, mode = gsm.get_operator_info()
+        worker_state.set_gsm_status(signal, operator, mode)
+    except Exception:
+        logger.warning("ดึงสถานะสัญญาณ GSM ไม่สำเร็จ", exc_info=True)
+
+
+def run_worker_loop(poll_interval: float = 3.0, config_check_interval: float = 10.0, gsm_status_interval: float = 30.0):
     """
     Main loop — รันแบบ background thread แยกจาก API server (SIM ตัวเดียว, ไม่มี pool)
-    Config (retry/timeout) โหลดจาก dashboard (DB) ตอน start
+    Config (retry/timeout) โหลดจาก dashboard (DB) ตอน start แล้วเช็คซ้ำทุก config_check_interval วิ
+    เพื่อ hot-reload อัตโนมัติเมื่อมีคนแก้ผ่าน dashboard (PUT /config) โดยไม่ต้อง restart
+
+    เช็คสัญญาณ/operator ของ GSM ทุก gsm_status_interval วิ (เฉพาะตอนคิวว่าง) ไว้โชว์ในหน้า Overview
     """
     db = SessionLocal()
     try:
         cfg = get_effective_config(db)
+        cfg_updated_at = get_or_create_app_settings(db).updated_at
     finally:
         db.close()
 
+    last_cfg_check = time.monotonic()
+    last_gsm_status_check = 0.0  # บังคับให้เช็คทันทีตอน start
+
+    worker_state.mark_started()
     gsm = GSMModule()
     gsm.connect()
+    worker_state.set_gsm_connected(True, gsm.port)
     logger.info("Call worker เริ่มทำงาน โดยเชื่อมต่อโมดูลที่ %s", gsm.port)
 
     try:
         while True:
             db = SessionLocal()
             try:
+                now = time.monotonic()
+                if now - last_cfg_check >= config_check_interval:
+                    last_cfg_check = now
+                    row = get_or_create_app_settings(db)
+                    if row.updated_at != cfg_updated_at:
+                        cfg = get_effective_config(db)
+                        cfg_updated_at = row.updated_at
+                        logger.info("Config reloaded จาก dashboard (updated_at=%s)", cfg_updated_at)
+
                 job = claim_next_job(db)
                 if job:
                     process_job(db, job, gsm, cfg)
                 else:
+                    now = time.monotonic()
+                    if now - last_gsm_status_check >= gsm_status_interval:
+                        last_gsm_status_check = now
+                        _poll_gsm_status(gsm)
                     time.sleep(poll_interval)
             finally:
                 db.close()
     finally:
+        worker_state.set_gsm_connected(False)
         gsm.disconnect()
 
 

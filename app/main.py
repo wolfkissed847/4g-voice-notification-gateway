@@ -7,28 +7,41 @@ FastAPI Entrypoint — รับ Request แจ้งเตือนจากร
 
 รัน: uvicorn app.main:app --host 0.0.0.0 --port 8000
 """
+import datetime
 import logging
 import os
 import threading
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
+import app.api_key_service as api_key_service
+import app.contacts_service as contacts_service
+import app.event_types_service as event_types_service
+import app.worker_state as worker_state
 from app.auth import create_access_token, get_current_user, verify_password
 from app.call_worker import run_worker_loop
 from app.config import settings
 from app.config_service import get_masked_config, update_app_settings
-from app.database import get_db, init_db
+from app.database import CallJob, CallLog, detect_schema_drift, get_db, init_db
 from app.queue_manager import enqueue_job, get_pending_jobs
 from app.schemas import (
+    ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyEventTypeRef, ApiKeyResponse, ApiKeyUpdateRequest,
     AppConfigResponse, AppConfigUpdateRequest,
+    ContactCreateRequest, ContactReorderRequest, ContactResponse, ContactUpdateRequest,
+    EventTypeCreateRequest, EventTypeResponse, EventTypeUpdateRequest,
+    GroupCreateRequest, GroupResponse, GroupUpdateRequest,
+    HistoryItem, HistoryResponse,
     LoginRequest, LoginResponse,
     NotifyRequest, NotifyResponse,
+    GsmDetailResponse, PiDetailResponse,
     QueueStatusItem, QueueStatusResponse,
+    SystemInfoResponse,
 )
+from app.system_metrics import get_pi_metrics
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
@@ -48,15 +61,31 @@ app.add_middleware(
 )
 
 
-def verify_api_key(x_api_key: str = Header(...)):
-    """ใช้กับ endpoint ที่ระบบภายนอก (บอร์ด/monitoring) ยิงเข้ามา (ไม่ใช่ dashboard)"""
-    if x_api_key != settings.api_secret_key:
-        raise HTTPException(status_code=401, detail="API key ไม่ถูกต้อง")
+def verify_api_key(x_api_key: str = Header(...), db: Session = Depends(get_db)):
+    """
+    ใช้กับ endpoint ที่ระบบภายนอก (บอร์ด/monitoring) ยิงเข้ามา (ไม่ใช่ dashboard)
+    คืนตัว ApiKey เพราะ /notify ต้องรู้ว่าอุปกรณ์ไหนยิงเข้ามา และยิงอะไรได้บ้าง
+    """
+    api_key = api_key_service.verify_and_touch(db, x_api_key)
+    if api_key is None:
+        raise HTTPException(status_code=401, detail="API key ไม่ถูกต้องหรือถูก revoke แล้ว")
+    return api_key
 
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    init_db()  # alembic upgrade head — สร้าง schema ให้ครบ/อัปเกรดให้ตรงกับโค้ดก่อนรับ request แรก
+
+    drift = detect_schema_drift()
+    if drift:
+        # ไม่ raise เพื่อไม่ให้ dashboard ล่มทั้งตัว แต่ log ระดับ ERROR ให้เห็นชัด
+        # เพราะ drift แบบนี้จะไปโผล่เป็น OperationalError: no such column ตอน user ยิง request
+        logger.error(
+            "Schema ใน DB ไม่ตรงกับ model ในโค้ด (%s จุด) — น่าจะแก้ model แล้วลืมสร้าง revision: %s\n"
+            "แก้ด้วย: alembic revision --autogenerate -m \"<อธิบายสิ่งที่เปลี่ยน>\" แล้ว restart",
+            len(drift), drift,
+        )
+
     # รัน call worker แบบ background thread แยกจาก API request/response cycle
     worker_thread = threading.Thread(target=run_worker_loop, daemon=True)
     worker_thread.start()
@@ -65,10 +94,61 @@ def on_startup():
 
 # ---------- Public: ระบบ/บอร์ดภายนอกยิงแจ้งเตือนเข้ามา (API key) ----------
 
-@app.post("/notify", response_model=NotifyResponse, dependencies=[Depends(verify_api_key)])
-def notify(request: NotifyRequest, db: Session = Depends(get_db)):
-    """รับแจ้งเตือนเหตุฉุกเฉินจากระบบ/บอร์ดภายนอก แล้วเข้าคิว FIFO เพื่อรอโทร"""
-    job = enqueue_job(db, message=request.message, priority_group=request.priority_group)
+def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> CallJob:
+    """
+    ใช้ร่วมกันโดย /notify (API key = อุปกรณ์จริง) และ /test/notify (JWT = กดทดสอบจาก dashboard)
+    api_key=None หมายถึงมาจาก dashboard ซึ่งข้ามการตรวจสิทธิ์เพราะคนกดคือผู้ดูแลระบบเอง
+    """
+    event_type = event_types_service.get_event_type_by_code(db, request.event_type_code)
+    if event_type is None:
+        raise HTTPException(status_code=404, detail=f"ไม่พบ event type '{request.event_type_code}'")
+    if event_type.is_active != "true":
+        raise HTTPException(status_code=400, detail=f"event type '{request.event_type_code}' ถูกปิดใช้งานอยู่")
+
+    # อุปกรณ์ยิงได้เฉพาะการแจ้งเตือนที่ผูกไว้กับ key ของตัวเองเท่านั้น
+    # ตอบ 403 (ไม่ใช่ 404) เพราะ key ถูกต้องจริง แค่ไม่มีสิทธิ์ — และไม่ปิดบังว่ามี event type นี้อยู่
+    # เนื่องจากผู้ที่ถือ key เป็นอุปกรณ์ของเราเองที่ config ไว้ ไม่ใช่บุคคลภายนอกที่ไม่รู้จัก
+    device_name = None
+    if api_key is not None:
+        allowed_ids = {e.id for e in api_key.allowed_event_types}
+        if event_type.id not in allowed_ids:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"อุปกรณ์ '{api_key.name}' ไม่ได้รับอนุญาตให้ยิง event type "
+                    f"'{request.event_type_code}' — เพิ่มสิทธิ์ได้ที่หน้า API Keys ใน dashboard"
+                ),
+            )
+        device_name = api_key.name
+
+    if request.message:
+        message = request.message
+    else:
+        try:
+            message = event_types_service.render_message(
+                event_type.message_template, request.variables, device_name=device_name
+            )
+        except event_types_service.MissingTemplateVariableError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return enqueue_job(
+        db,
+        message=message,
+        event_type_id=event_type.id,
+        priority_group=event_type.group.name,
+        api_key_id=api_key.id if api_key is not None else None,
+        source_device=device_name,
+    )
+
+
+@app.post("/notify", response_model=NotifyResponse)
+def notify(
+    request: NotifyRequest,
+    db: Session = Depends(get_db),
+    api_key=Depends(verify_api_key),
+):
+    """รับแจ้งเตือนเหตุฉุกเฉินจากอุปกรณ์ภายนอก แล้วเข้าคิว FIFO เพื่อรอโทร"""
+    job = _resolve_and_enqueue(db, request, api_key=api_key)
     return NotifyResponse(job_id=job.id, status=job.status.value)
 
 
@@ -113,7 +193,7 @@ def update_config(
 ):
     """
     แก้ config ผ่าน dashboard — ส่งเฉพาะ field ที่ต้องการเปลี่ยน
-    หมายเหตุ: worker ต้อง restart ถึงจะเห็นค่าใหม่ (hot-reload เป็นแผนพัฒนาต่อ)
+    worker จะเห็นค่าใหม่เองภายในไม่กี่วินาที ไม่ต้อง restart (ดู call_worker.run_worker_loop)
     """
     update_app_settings(db, **request.model_dump(exclude_unset=True))
     return AppConfigResponse(**get_masked_config(db))
@@ -122,6 +202,324 @@ def update_config(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/system/info", response_model=SystemInfoResponse)
+def system_info(_user: str = Depends(get_current_user)):
+    """สถานะรันไทม์ของระบบ (Overview → System Info) — worker uptime, GSM, ขนาด DB"""
+    state = worker_state.get_state()
+
+    db_size_bytes = None
+    db_path = settings.database_url.removeprefix("sqlite:///")
+    if db_path and os.path.isfile(db_path):
+        db_size_bytes = os.path.getsize(db_path)
+
+    return SystemInfoResponse(
+        app_version=app.version,
+        worker_started_at=state.started_at.isoformat() if state.started_at else None,
+        gsm_connected=state.gsm_connected,
+        gsm_port=state.gsm_port,
+        db_size_bytes=db_size_bytes,
+    )
+
+
+@app.get("/system/gsm", response_model=GsmDetailResponse)
+def system_gsm(_user: str = Depends(get_current_user)):
+    """รายละเอียด GSM module (mode/operator/signal) — ค่าจาก cache ที่ worker เช็คล่าสุดตอน idle"""
+    state = worker_state.get_state()
+    return GsmDetailResponse(
+        connected=state.gsm_connected,
+        signal_quality=state.gsm_signal_quality,
+        operator=state.gsm_operator,
+        network_mode=state.gsm_network_mode,
+        port=state.gsm_port,
+        updated_at=state.gsm_status_updated_at.isoformat() if state.gsm_status_updated_at else None,
+    )
+
+
+@app.get("/system/pi", response_model=PiDetailResponse)
+def system_pi(_user: str = Depends(get_current_user)):
+    """สถานะทรัพยากรเครื่อง Raspberry Pi (CPU/RAM/อุณหภูมิ) — อ่านสดทุกครั้งที่เรียก"""
+    return PiDetailResponse(**get_pi_metrics())
+
+
+# ---------- Dashboard: Groups / Contacts (escalation chain) ----------
+
+def _group_to_response(group) -> GroupResponse:
+    return GroupResponse(
+        id=group.id, name=group.name, description=group.description, contact_count=len(group.contacts)
+    )
+
+
+def _contact_to_response(contact) -> ContactResponse:
+    return ContactResponse(
+        id=contact.id, group_id=contact.group_id, name=contact.name,
+        phone_number=contact.phone_number, order_index=contact.order_index,
+    )
+
+
+@app.get("/groups", response_model=list[GroupResponse])
+def list_groups(db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    return [_group_to_response(g) for g in contacts_service.list_groups(db)]
+
+
+@app.post("/groups", response_model=GroupResponse)
+def create_group(
+    request: GroupCreateRequest, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
+):
+    group = contacts_service.create_group(db, name=request.name, description=request.description)
+    return _group_to_response(group)
+
+
+@app.put("/groups/{group_id}", response_model=GroupResponse)
+def update_group(
+    group_id: int, request: GroupUpdateRequest,
+    db: Session = Depends(get_db), _user: str = Depends(get_current_user),
+):
+    group = contacts_service.update_group(db, group_id, name=request.name, description=request.description)
+    if group is None:
+        raise HTTPException(status_code=404, detail="ไม่พบกลุ่มนี้")
+    return _group_to_response(group)
+
+
+@app.delete("/groups/{group_id}", status_code=204)
+def delete_group(group_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    try:
+        deleted = contacts_service.delete_group(db, group_id)
+    except contacts_service.GroupInUseError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="ไม่พบกลุ่มนี้")
+
+
+@app.get("/groups/{group_id}/contacts", response_model=list[ContactResponse])
+def list_contacts(group_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    return [_contact_to_response(c) for c in contacts_service.list_contacts(db, group_id)]
+
+
+@app.post("/groups/{group_id}/contacts", response_model=ContactResponse)
+def create_contact(
+    group_id: int, request: ContactCreateRequest,
+    db: Session = Depends(get_db), _user: str = Depends(get_current_user),
+):
+    contact = contacts_service.create_contact(
+        db, group_id=group_id, phone_number=request.phone_number, name=request.name
+    )
+    return _contact_to_response(contact)
+
+
+@app.put("/contacts/{contact_id}", response_model=ContactResponse)
+def update_contact(
+    contact_id: int, request: ContactUpdateRequest,
+    db: Session = Depends(get_db), _user: str = Depends(get_current_user),
+):
+    contact = contacts_service.update_contact(
+        db, contact_id, phone_number=request.phone_number, name=request.name
+    )
+    if contact is None:
+        raise HTTPException(status_code=404, detail="ไม่พบเบอร์ติดต่อนี้")
+    return _contact_to_response(contact)
+
+
+@app.delete("/contacts/{contact_id}", status_code=204)
+def delete_contact(contact_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    if not contacts_service.delete_contact(db, contact_id):
+        raise HTTPException(status_code=404, detail="ไม่พบเบอร์ติดต่อนี้")
+
+
+@app.put("/groups/{group_id}/contacts/reorder", response_model=list[ContactResponse])
+def reorder_contacts(
+    group_id: int, request: ContactReorderRequest,
+    db: Session = Depends(get_db), _user: str = Depends(get_current_user),
+):
+    contacts = contacts_service.reorder_contacts(db, group_id, request.ordered_ids)
+    return [_contact_to_response(c) for c in contacts]
+
+
+# ---------- Dashboard: Event Types ----------
+
+def _event_type_to_response(event_type) -> EventTypeResponse:
+    return EventTypeResponse(
+        id=event_type.id, code=event_type.code, display_name=event_type.display_name,
+        message_template=event_type.message_template, group_id=event_type.group_id,
+        group_name=event_type.group.name, is_active=event_type.is_active == "true",
+    )
+
+
+@app.get("/event-types", response_model=list[EventTypeResponse])
+def list_event_types(db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    return [_event_type_to_response(e) for e in event_types_service.list_event_types(db)]
+
+
+@app.post("/event-types", response_model=EventTypeResponse)
+def create_event_type(
+    request: EventTypeCreateRequest, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
+):
+    try:
+        event_type = event_types_service.create_event_type(
+            db, code=request.code, display_name=request.display_name,
+            message_template=request.message_template, group_id=request.group_id,
+        )
+    except event_types_service.DuplicateEventTypeCodeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _event_type_to_response(event_type)
+
+
+@app.put("/event-types/{event_type_id}", response_model=EventTypeResponse)
+def update_event_type(
+    event_type_id: int, request: EventTypeUpdateRequest,
+    db: Session = Depends(get_db), _user: str = Depends(get_current_user),
+):
+    event_type = event_types_service.update_event_type(db, event_type_id, **request.model_dump(exclude_unset=True))
+    if event_type is None:
+        raise HTTPException(status_code=404, detail="ไม่พบ event type นี้")
+    return _event_type_to_response(event_type)
+
+
+@app.delete("/event-types/{event_type_id}", status_code=204)
+def delete_event_type(
+    event_type_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
+):
+    if not event_types_service.delete_event_type(db, event_type_id):
+        raise HTTPException(status_code=404, detail="ไม่พบ event type นี้")
+
+
+# ---------- Dashboard: API Keys (สำหรับระบบภายนอกยิง /notify) ----------
+
+def _api_key_to_response(api_key) -> ApiKeyResponse:
+    return ApiKeyResponse(
+        id=api_key.id, name=api_key.name, key_prefix=api_key.key_prefix,
+        is_active=api_key.is_active == "true",
+        last_used_at=api_key.last_used_at.isoformat() if api_key.last_used_at else None,
+        created_at=api_key.created_at.isoformat(),
+        revoked_at=api_key.revoked_at.isoformat() if api_key.revoked_at else None,
+        allowed_event_types=[
+            ApiKeyEventTypeRef(id=e.id, code=e.code, display_name=e.display_name)
+            for e in api_key.allowed_event_types
+        ],
+    )
+
+
+@app.get("/api-keys", response_model=list[ApiKeyResponse])
+def list_api_keys(db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    return [_api_key_to_response(k) for k in api_key_service.list_api_keys(db)]
+
+
+@app.post("/api-keys", response_model=ApiKeyCreateResponse)
+def create_api_key(
+    request: ApiKeyCreateRequest, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
+):
+    """สร้าง key ประจำอุปกรณ์ 1 ตัว — plaintext แสดงครั้งเดียวตรงนี้ เอาไปฝังใน firmware"""
+    try:
+        api_key, plaintext = api_key_service.create_api_key(
+            db, name=request.name, event_type_ids=request.event_type_ids
+        )
+    except api_key_service.UnknownEventTypeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    base = _api_key_to_response(api_key)
+    return ApiKeyCreateResponse(**base.model_dump(), plaintext_key=plaintext)
+
+
+@app.put("/api-keys/{key_id}", response_model=ApiKeyResponse)
+def update_api_key(
+    key_id: int, request: ApiKeyUpdateRequest,
+    db: Session = Depends(get_db), _user: str = Depends(get_current_user),
+):
+    """
+    เปลี่ยนชื่ออุปกรณ์ / สิทธิ์การแจ้งเตือน โดย key เดิมยังใช้งานได้ต่อ
+    (ย้ายบอร์ดไปติดตั้งที่อื่นแล้วเปลี่ยนชื่อที่นี่ ไม่ต้องเอาบอร์ดกลับมาแฟลชใหม่)
+    """
+    try:
+        api_key = api_key_service.update_api_key(
+            db, key_id, name=request.name, event_type_ids=request.event_type_ids
+        )
+    except api_key_service.UnknownEventTypeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if api_key is None:
+        raise HTTPException(status_code=404, detail="ไม่พบ API key นี้")
+    return _api_key_to_response(api_key)
+
+
+@app.delete("/api-keys/{key_id}", status_code=204)
+def revoke_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    if not api_key_service.revoke_api_key(db, key_id):
+        raise HTTPException(status_code=404, detail="ไม่พบ API key นี้")
+
+
+# ---------- Dashboard: ทดสอบยิงแจ้งเตือนจากหน้าเว็บ (JWT ไม่ใช่ API key) ----------
+
+@app.post("/test/notify", response_model=NotifyResponse)
+def test_notify(
+    request: NotifyRequest, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
+):
+    """เข้าคิวจริงเหมือน /notify ทุกประการ ใช้สำหรับกดทดสอบจากหน้า Event Types โดยไม่ต้องยิง API ภายนอก"""
+    job = _resolve_and_enqueue(db, request)
+    return NotifyResponse(job_id=job.id, status=job.status.value)
+
+
+# ---------- Dashboard: ประวัติการโทร (real data, พร้อม filter + pagination) ----------
+
+@app.get("/history", response_model=HistoryResponse)
+def get_history(
+    db: Session = Depends(get_db),
+    _user: str = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: str | None = None,
+    group_id: int | None = None,
+    event_type_id: int | None = None,
+    date_from: datetime.datetime | None = None,
+    date_to: datetime.datetime | None = None,
+    q: str | None = None,
+):
+    query = db.query(CallJob)
+
+    if status:
+        query = query.filter(CallJob.status == status)
+    if event_type_id:
+        query = query.filter(CallJob.event_type_id == event_type_id)
+    if group_id:
+        query = query.filter(CallJob.event_type.has(group_id=group_id))
+    if date_from:
+        query = query.filter(CallJob.created_at >= date_from)
+    if date_to:
+        query = query.filter(CallJob.created_at <= date_to)
+    if q:
+        query = query.filter(CallJob.message.ilike(f"%{q}%"))
+
+    total_count = query.count()
+    jobs = (
+        query.order_by(CallJob.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = []
+    for job in jobs:
+        last_log = (
+            db.query(CallLog)
+            .filter(CallLog.job_id == job.id)
+            .order_by(CallLog.timestamp.desc())
+            .first()
+        )
+        items.append(HistoryItem(
+            job_id=job.id,
+            event_type_code=job.event_type.code if job.event_type else None,
+            event_type_display_name=job.event_type.display_name if job.event_type else None,
+            group_name=job.priority_group,
+            source_device=job.source_device,
+            message=job.message,
+            status=job.status.value,
+            retry_count=job.retry_count,
+            contact_index=job.contact_index,
+            created_at=job.created_at.isoformat(),
+            updated_at=job.updated_at.isoformat(),
+            last_result=last_log.result if last_log else None,
+            last_phone_masked=last_log.phone_number_masked if last_log else None,
+        ))
+
+    return HistoryResponse(total_count=total_count, page=page, page_size=page_size, items=items)
 
 
 # ---------- เสิร์ฟ frontend ที่ build แล้ว (Vite static bundle) ----------

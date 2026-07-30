@@ -12,10 +12,24 @@ from app.database import CallJob, CallStatus
 _claim_lock = threading.Lock()
 
 
-def enqueue_job(db: Session, message: str, priority_group: str) -> CallJob:
+def enqueue_job(
+    db: Session,
+    message: str,
+    event_type_id: int,
+    priority_group: str,
+    api_key_id: int | None = None,
+    source_device: str | None = None,
+) -> CallJob:
+    """
+    priority_group และ source_device เป็น snapshot ณ ตอนสั่งโทร ใช้แสดงผลใน history เท่านั้น
+    (api_key_id เป็น FK จริงไว้ filter/นับการใช้งานรายอุปกรณ์)
+    """
     job = CallJob(
         message=message,
+        event_type_id=event_type_id,
         priority_group=priority_group,
+        api_key_id=api_key_id,
+        source_device=source_device,
         contact_index=0,
         retry_count=0,
         status=CallStatus.QUEUED,

@@ -22,6 +22,16 @@ BUSY = "BUSY"
 NO_ANSWER = "NO ANSWER"
 CONNECT = "CONNECT"
 
+CSQ_PATTERN = re.compile(r"\+CSQ:\s*(\d+),(\d+)")
+COPS_PATTERN = re.compile(r'\+COPS:\s*\d+,\d+,"([^"]*)"(?:,(\d+))?')
+
+# AT+COPS? Access Technology code -> ป้ายชื่อ network mode ที่อ่านง่าย
+ACT_MODE_MAP = {
+    0: "2G (GSM)", 1: "2G (GSM Compact)", 3: "2G (EGPRS)", 8: "2G (NB-IoT/EC-GSM)",
+    2: "3G (UMTS)", 4: "3G (HSDPA)", 5: "3G (HSUPA)", 6: "3G (HSPA)",
+    7: "4G (LTE)", 9: "4G (NB-IoT)",
+}
+
 
 class GSMModule:
     def __init__(self, port: str | None = None, baudrate: int | None = None):
@@ -92,6 +102,28 @@ class GSMModule:
         # self._send_at("AT+CPCMREG=1")
         # ... เปิด local audio pipe แล้วส่งข้อมูล PCM ของไฟล์เสียงเข้าไป
         raise NotImplementedError("ต้อง implement ตาม AT command set ของ firmware จริง")
+
+    # ---------- Status Query (สำหรับ dashboard, ไม่เกี่ยวกับ call state machine) ----------
+
+    def get_signal_quality(self) -> int | None:
+        """คืนค่า RSSI ดิบ 0-31 ตาม AT+CSQ (0=แย่มาก, 31=ดีมาก) — None ถ้าไม่ทราบ (99) หรือ parse ไม่ได้"""
+        response = self._send_at("AT+CSQ")
+        match = CSQ_PATTERN.search(response)
+        if not match:
+            return None
+        rssi = int(match.group(1))
+        return rssi if rssi != 99 else None
+
+    def get_operator_info(self) -> tuple[str | None, str | None]:
+        """คืน (ชื่อ operator เช่น AIS/dtac/TrueMove, network mode เช่น '4G (LTE)') ตาม AT+COPS?"""
+        response = self._send_at("AT+COPS?")
+        match = COPS_PATTERN.search(response)
+        if not match:
+            return None, None
+        operator = match.group(1) or None
+        act_code = match.group(2)
+        mode = ACT_MODE_MAP.get(int(act_code)) if act_code is not None else None
+        return operator, mode
 
     # ---------- SMS Fallback ----------
 
