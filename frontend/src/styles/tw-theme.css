@@ -1,0 +1,187 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ชั้นแปลง token → Tailwind v4 utility
+ *
+ * theme.css เก็บ "ค่า" ของดีไซน์ (คัดลอกจาก handoff ตรงตัว ห้ามแก้)
+ * ไฟล์นี้เก็บ "การผูกค่าเข้ากับชื่อ utility" ของ Tailwind v4
+ * แยกกันเพื่อให้ทับ theme.css ด้วยเวอร์ชันใหม่จากดีไซเนอร์ได้โดยไม่กระทบส่วนนี้
+ *
+ * ชุด handoff เดิมประกาศส่วนนี้ใน tailwind.config.ts (Tailwind v3)
+ * โปรเจคนี้เป็น v4 แบบ CSS-first จึงย้ายมาเป็น @theme ทั้งหมด
+ * ไม่มี tailwind.config.ts ในโปรเจค — อย่าสร้างขึ้นมาใหม่
+ *
+ * ── กติกาสำคัญ 1 ข้อ: accent → brand ────────────────────────────────────
+ * ดีไซน์เรียกสีน้ำเงินอิ่มของตัวเองว่า `accent` แต่ shadcn/ui ใช้ชื่อ `accent`
+ * สำหรับพื้นหลังจางตอน hover (dropdown item, ghost button)
+ * ถ้าเอาน้ำเงินอิ่มไปใส่ช่อง accent ของ shadcn ทุก hover ใน 46 components
+ * จะกลายเป็นน้ำเงินทึบ จึงแยกชื่อ utility กันดังนี้:
+ *
+ *     bg-brand / text-brand / border-brand   = น้ำเงินอิ่มของดีไซน์ (--accent)
+ *     bg-accent / text-accent-foreground     = พื้นจางของ shadcn (--accent-bg)
+ *
+ * เวลาพอร์ต component จาก figma/handoff/components/ ต้องแปลง accent → brand
+ * (ชื่อ CSS variable ใน theme.css ยังเป็น --accent ตามต้นฉบับ ไม่ต้องแก้)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* รองรับทั้ง .dark และ [data-theme="dark"] ให้ตรงกับที่ theme.css รองรับ */
+@custom-variant dark (&:is(.dark *, [data-theme='dark'] *));
+
+/* ── keyframes — v4 ประกาศเป็น @keyframes ปกติ แล้วผูกชื่อผ่าน --animate-* ── */
+
+/* Signal Flow Monitor */
+@keyframes packet {
+  0%   { left: -6%;  opacity: 0; }
+  12%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+@keyframes dash { to { stroke-dashoffset: -12; } }
+@keyframes waveOut {
+  0%   { transform: scale(1);   opacity: 0.5; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@keyframes vibrate {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-1.5px); }
+  75%      { transform: translateX(1.5px); }
+}
+@keyframes offsetMove {
+  from { offset-distance: 0%; }
+  to   { offset-distance: 100%; }
+}
+@keyframes fadeTrip {
+  0%   { opacity: 0; }
+  16%  { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes spinSweep { to { transform: rotate(360deg); } }
+
+/* ทั่วไป */
+@keyframes softPulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.82); }
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.86); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(34px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+@theme inline {
+  /* ── ฟอนต์ (self-host ผ่าน @fontsource ดู fonts.css) ──
+   * ต้องเขียนค่าเต็มซ้ำกับ theme.css ตรงนี้ ห้ามเขียน `--font-sans: var(--font-sans)`
+   * เพราะชื่อตัวแปรชนกันเองแล้ว CSS ถือว่าเป็น circular reference = invalid
+   * ผลคือ font-family ไม่ติดและตกไปใช้ฟอนต์ที่สืบทอดมาแทน
+   * (ถ้าดีไซเนอร์เปลี่ยนฟอนต์ใน theme.css ต้องมาแก้ 2 บรรทัดนี้ด้วย) */
+  --font-sans: 'Mali', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── สเกลตัวอักษร — ไทยต้องการ leading สูงกว่า EN เพราะวรรณยุกต์บน+ล่าง ──
+   * text-page เป็น clamp() — ห้ามใส่ font-size คงที่กับหัวข้อหน้า */
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.6;
+  --text-caption: 0.844rem;
+  --text-caption--line-height: 1.7;
+  --text-body: 0.938rem;
+  --text-body--line-height: 1.8;
+  --text-lead: 1.063rem;
+  --text-lead--line-height: 1.75;
+  --text-card-title: 1.094rem;
+  --text-card-title--line-height: 1.5;
+  --text-h2: 1.188rem;
+  --text-h2--line-height: 1.5;
+  --text-page: clamp(1.5rem, 3.6vw, 2rem);
+  --text-page--line-height: 1.45;
+
+  /* ── สี semantic ของดีไซน์ ──
+   * ค่าใน theme.css เป็น rgb triplet ต้องห่อ rgb() ตรงนี้
+   * v4 รองรับ opacity modifier (bg-surface/50) ผ่าน color-mix ให้เองอยู่แล้ว */
+  --color-bg: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-surface-2: rgb(var(--surface-2));
+  --color-ink: rgb(var(--ink));
+  --color-ink-2: rgb(var(--ink-2));
+  --color-line: rgb(var(--line));
+  --color-line-2: rgb(var(--line-2));
+
+  /* brand = สีน้ำเงินอิ่มที่ handoff เรียกว่า accent (ดูหมายเหตุหัวไฟล์) */
+  --color-brand: var(--accent);
+  --color-brand-soft: var(--accent-soft);
+  --color-brand-ink: var(--accent-ink);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+
+  /* ── ช่องของ shadcn/ui — accent ตรงนี้คือพื้นจาง ไม่ใช่ brand ── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent-bg);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* shadcn เดิมอ้าง 2 ตัวนี้ในบาง component (input, switch) แต่ theme.css
+     ของดีไซน์ไม่ได้ประกาศไว้ — ผูกกับ token ที่ใกล้ที่สุดเพื่อไม่ให้กลายเป็น transparent */
+  --color-input-background: rgb(var(--surface-2));
+  --color-switch-background: var(--border);
+
+  /* chart ใช้สี status ของดีไซน์ ไม่ใช่พาเลตต์ default ของ shadcn */
+  --color-chart-1: var(--accent);
+  --color-chart-2: var(--ok);
+  --color-chart-3: var(--warn);
+  --color-chart-4: var(--bad);
+  --color-chart-5: var(--muted-foreground);
+
+  /* ── รูปทรง ── */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-card: var(--radius);
+  --radius-control: var(--radius-control);
+
+  --shadow-card: var(--shadow-card);
+
+  /* ── animation ── */
+  --animate-packet: packet 0.8s linear infinite;
+  --animate-dash: dash 0.6s linear infinite;
+  --animate-wave-out: waveOut 1.6s ease-out infinite;
+  --animate-vibrate: vibrate 0.4s linear infinite;
+  --animate-offset-move: offsetMove 1.25s linear infinite, fadeTrip 1.25s linear infinite;
+  --animate-sweep: spinSweep 3.2s linear infinite;
+  --animate-soft-pulse: softPulse 2s ease-in-out infinite;
+  --animate-pop: pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  --animate-fade-up: fadeUp 0.25s ease both;
+  --animate-slide-in: slideIn 0.4s ease both;
+}
+
+@layer base {
+  /* shadcn ตั้งขอบ default ให้ทุก element ผ่าน token นี้ */
+  * {
+    @apply border-border outline-ring/50;
+  }
+}

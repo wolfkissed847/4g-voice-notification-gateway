@@ -1,0 +1,12 @@
+/* ลำดับสำคัญ:
+ *   fonts     — @font-face จาก @fontsource (self-host กันพังตอนออฟไลน์)
+ *   tailwind  — @import 'tailwindcss' ต้องมาก่อนไฟล์ที่ใช้ @apply / @theme
+ *   theme     — ค่า token ของดีไซน์ (คัดจาก figma/handoff/theme.css ตรงตัว ห้ามแก้)
+ *   tw-theme  — ผูก token เข้าชื่อ utility ของ Tailwind v4 + keyframes/animation
+ */
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+/* ปรับโทนทับ theme.css — ลบบรรทัดนี้เพื่อกลับไปใช้สีของดีไซเนอร์ตรงๆ */
+@import './theme-tuning.css';
+@import './tw-theme.css';

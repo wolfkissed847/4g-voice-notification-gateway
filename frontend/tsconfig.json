@@ -9,8 +9,18 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    // main.tsx เขียน import './app/App.tsx' พร้อมนามสกุล — vite รับได้ แต่ tsc ต้องเปิด flag นี้
+    // (ใช้ได้เพราะ noEmit: true อยู่แล้ว เราไม่ได้ให้ tsc สร้างไฟล์ออกมา)
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
-    "strict": true
+    "strict": true,
+
+    // ต้องตรงกับ resolve.alias ใน vite.config.ts ไม่งั้น tsc กับ IDE จะหา import '@/...' ไม่เจอ
+    // (vite รู้จัก alias เองจาก config แต่ tsc ไม่อ่านไฟล์นั้น)
+    // TypeScript 7 ถอด baseUrl ออกแล้ว — path ใน paths อ้างจากที่ตั้งของ tsconfig.json นี้เลย
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": ["src"]
 }

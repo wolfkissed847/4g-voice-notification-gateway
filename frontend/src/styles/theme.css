@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════════════
+   IoT Voice Alert — theme.css
+   ไฟล์ token เดี่ยว ไม่มี @tailwind directive ไม่มีสไตล์ component
+
+   ── ที่มา ──────────────────────────────────────────────────
+   คัดลอกจาก figma/handoff/theme.css แบบตรงตัว ยกเว้นบรรทัด @import ฟอนต์
+   ที่ตัดออก (เหตุผลด้านล่าง) — ตั้งใจให้ไฟล์นี้เหมือนต้นฉบับ เพื่อเวลาดีไซเนอร์
+   ส่งเวอร์ชันใหม่มาจะทับไฟล์นี้ทีเดียวได้เลย
+   ส่วนที่แปลง token ให้เป็น Tailwind v4 utility อยู่แยกที่ tw-theme.css
+   *** อย่าเพิ่ม @theme หรือ utility class ในไฟล์นี้ ***
+
+   dark mode รองรับ 2 กลไก: .dark (แบบ shadcn) และ [data-theme="dark"]
+   โปรเจคนี้ใช้ .dark ผ่าน AppContext (document.documentElement.classList)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ต้นฉบับ import Mali + Space Mono จาก fonts.googleapis.com — ตัดออกโดยเจตนา
+   dashboard รันบน Raspberry Pi ที่อาจไม่มีเน็ต (LAN ล่มตอนไฟดับ = เหตุผลที่ระบบนี้มีอยู่)
+   ฟอนต์ทั้งสองตัวย้ายไป self-host ผ่าน @fontsource ที่ fonts.css แล้ว */
+
+:root {
+  color-scheme: light;
+
+  /* ── surfaces ─────────────────────────────────────────────
+     rgb triplet (ไม่ใส่ rgb()) เพื่อให้ Tailwind ใช้ /<alpha-value> ได้ */
+  --bg:         244 242 236;   /* #f4f2ec  พื้นหลังหน้า */
+  --surface:    255 254 252;   /* #fffefc  พื้นการ์ด, modal, popover */
+  --surface-2:  246 242 233;   /* #f6f2e9  ช่องกรอก, header ตาราง, แถวที่กางอยู่ */
+
+  /* ── text ─────────────────────────────────────────────── */
+  --ink:        20 18 9;       /* #141209  ตัวอักษรหลัก */
+  --ink-2:      87 82 63;      /* #57523f  ตัวอักษรรอง, หน่วย, timestamp */
+
+  /* ── strokes ──────────────────────────────────────────── */
+  --line:       20 18 9 / 0.16;  /* ขอบการ์ด ขอบ input */
+  --line-2:     20 18 9 / 0.08;  /* เส้นคั่นภายในตาราง/รายการ */
+
+  /* ── accent (น้ำเงินอิ่ม) ─────────────────────────────── */
+  --accent:      oklch(0.53 0.2 258);
+  --accent-soft: oklch(0.945 0.045 258);   /* พื้นอ่อนสำหรับ chip/แถว active */
+  --accent-ink:  oklch(1 0 0);             /* ตัวอักษรบนพื้น accent */
+
+  /* ── status (คู่ทึบ + พื้นอ่อน) ───────────────────────── */
+  --ok:        oklch(0.55 0.16 155);   /* โทรสำเร็จ, ขั้นตอนที่ผ่านแล้ว */
+  --ok-soft:   oklch(0.945 0.055 155);
+  --warn:      oklch(0.62 0.19 52);    /* ไม่รับสาย, กำลัง retry, ringing */
+  --warn-soft: oklch(0.945 0.062 52);
+  --bad:       oklch(0.54 0.22 25);    /* โทรไม่ออก, ยืนยันลบ, error */
+  --bad-soft:  oklch(0.945 0.055 25);
+
+  /* ── elevation ────────────────────────────────────────── */
+  --shadow-card: 0 1px 2px rgb(20 18 9 / 0.06), 0 8px 24px -12px rgb(20 18 9 / 0.18);
+
+  /* ── radius ───────────────────────────────────────────── */
+  --radius: 0.875rem;          /* การ์ด, modal */
+  --radius-control: 0.563rem;  /* input, ปุ่ม, chip สี่เหลี่ยม */
+
+  /* ── type ─────────────────────────────────────────────── */
+  --font-sans: 'Mali', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── shadcn/ui slots ──────────────────────────────────────
+     แม็ปสีเดียวกันลงชื่อที่ shadcn ใช้ → component เดิมทั้ง 46 ตัว
+     เปลี่ยนธีมตามเองโดยไม่ต้องแก้ทีละไฟล์ */
+  --background: oklch(0.955 0.008 85);
+  --foreground: oklch(0.19 0.014 75);
+  --card: oklch(0.995 0.004 85);
+  --card-foreground: oklch(0.19 0.014 75);
+  --popover: oklch(0.995 0.004 85);
+  --popover-foreground: oklch(0.19 0.014 75);
+  --primary: oklch(0.53 0.2 258);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.945 0.012 85);
+  --secondary-foreground: oklch(0.19 0.014 75);
+  --muted: oklch(0.945 0.012 85);
+  --muted-foreground: oklch(0.44 0.02 80);
+  --accent-bg: oklch(0.945 0.045 258);
+  --accent-foreground: oklch(0.19 0.014 75);
+  --destructive: oklch(0.54 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.19 0.014 75 / 0.16);
+  --input: oklch(0.19 0.014 75 / 0.16);
+  --ring: oklch(0.53 0.2 258);
+}
+
+.dark,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg:         18 17 14;      /* #12110e */
+  --surface:    28 26 22;      /* #1c1a16 */
+  --surface-2:  37 35 30;      /* #25231e */
+
+  --ink:        244 240 230;   /* #f4f0e6 */
+  --ink-2:      170 164 154;   /* #aaa49a */
+
+  --line:       244 240 230 / 0.18;
+  --line-2:     244 240 230 / 0.08;
+
+  /* dark ใช้ chroma สูงขึ้นและ lightness สูงขึ้น — ไม่ได้ลดแสงจาก light ด้วย opacity */
+  --accent:      oklch(0.79 0.17 258);
+  --accent-soft: oklch(0.35 0.1 258);
+  --accent-ink:  oklch(0.16 0.008 80);
+
+  --ok:        oklch(0.79 0.16 155);
+  --ok-soft:   oklch(0.34 0.09 155);
+  --warn:      oklch(0.81 0.17 62);
+  --warn-soft: oklch(0.37 0.1 55);
+  --bad:       oklch(0.73 0.19 25);
+  --bad-soft:  oklch(0.35 0.11 25);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+
+  --background: oklch(0.16 0.008 80);
+  --foreground: oklch(0.95 0.012 85);
+  --card: oklch(0.22 0.008 80);
+  --card-foreground: oklch(0.95 0.012 85);
+  --popover: oklch(0.22 0.008 80);
+  --popover-foreground: oklch(0.95 0.012 85);
+  --primary: oklch(0.79 0.17 258);
+  --primary-foreground: oklch(0.16 0.008 80);
+  --secondary: oklch(0.26 0.008 80);
+  --secondary-foreground: oklch(0.95 0.012 85);
+  --muted: oklch(0.26 0.008 80);
+  --muted-foreground: oklch(0.7 0.012 82);
+  --accent-bg: oklch(0.35 0.1 258);
+  --accent-foreground: oklch(0.95 0.012 85);
+  --destructive: oklch(0.73 0.19 25);
+  --destructive-foreground: oklch(0.16 0.008 80);
+  --border: oklch(0.95 0.012 85 / 0.18);
+  --input: oklch(0.95 0.012 85 / 0.18);
+  --ring: oklch(0.79 0.17 258);
+}
+
+/* ตั้งธีมตามเครื่องเมื่อผู้ใช้ยังไม่เคยเลือก (ไม่มี .dark / data-theme บน <html>)
+   หมายเหตุ: AppContext ของโปรเจคนี้ใส่ทั้ง .dark และ .light เสมอ เพื่อให้ :not(.light)
+   ด้านล่างทำงานถูก — ถ้าใส่แค่ .dark แล้วเครื่องผู้ใช้ตั้ง OS เป็น dark ไว้
+   การเลือก light ในเว็บจะถูก media query นี้ทับกลับเป็น dark */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg: 18 17 14;
+    --surface: 28 26 22;
+    --surface-2: 37 35 30;
+    --ink: 244 240 230;
+    --ink-2: 170 164 154;
+    --line: 244 240 230 / 0.18;
+    --line-2: 244 240 230 / 0.08;
+
+    --accent: oklch(0.79 0.17 258);
+    --accent-soft: oklch(0.35 0.1 258);
+    --accent-ink: oklch(0.16 0.008 80);
+    --ok: oklch(0.79 0.16 155);
+    --ok-soft: oklch(0.34 0.09 155);
+    --warn: oklch(0.81 0.17 62);
+    --warn-soft: oklch(0.37 0.1 55);
+    --bad: oklch(0.73 0.19 25);
+    --bad-soft: oklch(0.35 0.11 25);
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+
+    --background: oklch(0.16 0.008 80);
+    --foreground: oklch(0.95 0.012 85);
+    --card: oklch(0.22 0.008 80);
+    --card-foreground: oklch(0.95 0.012 85);
+    --popover: oklch(0.22 0.008 80);
+    --popover-foreground: oklch(0.95 0.012 85);
+    --primary: oklch(0.79 0.17 258);
+    --primary-foreground: oklch(0.16 0.008 80);
+    --secondary: oklch(0.26 0.008 80);
+    --secondary-foreground: oklch(0.95 0.012 85);
+    --muted: oklch(0.26 0.008 80);
+    --muted-foreground: oklch(0.7 0.012 82);
+    --accent-bg: oklch(0.35 0.1 258);
+    --destructive: oklch(0.73 0.19 25);
+    --destructive-foreground: oklch(0.16 0.008 80);
+    --border: oklch(0.95 0.012 85 / 0.18);
+    --input: oklch(0.95 0.012 85 / 0.18);
+    --ring: oklch(0.79 0.17 258);
+  }
+}
+
+/* ── base ที่จำเป็นจริง ๆ เท่านั้น ──────────────────────────
+   ไม่มีสไตล์ component ในไฟล์นี้ — component ใช้ Tailwind utility ทั้งหมด
+
+   *** สำคัญ: ทั้งบล็อกนี้ต้องอยู่ใน @layer base ***
+   ต้นฉบับจาก handoff ประกาศไว้นอก layer ซึ่งใช้กับ Tailwind v3 ได้ (v3 ฉีด utilities
+   แบบไม่มี layer เรียงตาม source order → utilities ชนะ) แต่โปรเจคนี้เป็น v4 ที่ใส่
+   utilities ไว้ใน @layer utilities และ **กฎนอก layer ชนะทุกกฎใน layer เสมอ**
+   ผลคือ a { color } ทับ text-* ของทุกลิงก์ และ button { color: inherit } ทับสีปุ่มทั้งแอป
+   (แท็บเมนูกลายเป็นน้ำเงิน ปุ่ม primary ตัวอักษรไม่เป็นสีขาว)
+
+   ถ้าดีไซเนอร์ส่ง theme.css เวอร์ชันใหม่มาแล้วทับไฟล์นี้ ต้องครอบ @layer base ให้ใหม่ทุกครั้ง */
+
+@layer base {
+  html {
+    /* ป้องกัน layout กระโดดเมื่อสลับหน้าที่มี/ไม่มี scrollbar */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    margin: 0;
+    background: rgb(var(--bg));
+    color: rgb(var(--ink));
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* ไทยชอบเหลือคำโดดบรรทัดสุดท้าย — pretty ช่วยเกลี่ยให้ */
+    text-wrap: pretty;
+  }
+
+  /* ไทยมีวรรณยุกต์ทั้งบนและล่าง — 1.2 ทำให้ทับกัน 1.45 คือขั้นต่ำที่ปลอดภัย */
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.45;
+  }
+
+  /* ผู้ใช้เพิ่มลิงก์เองภายหลังต้องไม่กลายเป็นน้ำเงิน default ของเบราว์เซอร์
+     แต่ต้องยอมให้ text-* utility ทับได้ — จึงต้องอยู่ใน layer นี้ */
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  a:hover {
+    opacity: 0.8;
+  }
+
+  /* ให้ฟอนต์และสีตกทอดถึง form control ทุกตัว */
+  input, textarea, select, button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* โฟกัสมองเห็นได้ในทั้งสองธีม (คีย์บอร์ดเท่านั้น ไม่ขึ้นตอนคลิกเมาส์) */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: rgb(var(--ink));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
