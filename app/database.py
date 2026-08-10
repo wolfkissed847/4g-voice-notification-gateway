@@ -75,7 +75,6 @@ class AppSettings(Base):
     call_retry_count = Column(Integer, default=2)
     call_retry_delay_seconds = Column(Integer, default=30)
     call_ring_timeout_seconds = Column(Integer, default=25)
-    sms_fallback_enabled = Column(String, default="true")  # เก็บเป็น string กัน bool เพี้ยนข้าม DB
 
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
@@ -179,8 +178,7 @@ class CallStatus(str, enum.Enum):
     BUSY = "busy"
     RETRYING = "retrying"
     ESCALATED = "escalated"          # ครบ retry ของเบอร์นี้แล้ว รอ worker หยิบไปโทรเบอร์ถัดไป
-    SMS_FALLBACK_SENT = "sms_fallback_sent"
-    FAILED = "failed"                # หมดทางแล้ว ทำอะไรต่อไม่ได้
+    FAILED = "failed"                # หมดทางแล้ว ทำอะไรต่อไม่ได้ (ครบทุกเบอร์ในกลุ่มแล้วไม่มีใครรับ — เอาแค่โทร ไม่มี SMS fallback แล้ว)
     CANCELLED = "cancelled"          # user สั่งยกเลิกจาก dashboard ก่อนที่ worker จะหยิบไปโทร
 
 

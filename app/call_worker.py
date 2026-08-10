@@ -1,11 +1,13 @@
 """
 Call Worker — background loop ที่ดึงงานจากคิว FIFO มาโทรทีละสาย (SIM ตัวเดียว)
-รวม logic: Call State Monitoring, Retry, Escalation Chain, SMS Fallback
+รวม logic: Call State Monitoring, Retry, Escalation Chain
 
 เวอร์ชันนี้ตัด multi-SIM pool/VoIP backend ออก (ดู branch feature/voip-multi-sim
-ถ้าต้องการกลับไปใช้ระบบหลาย SIM หรือ Asterisk/Zadarma)
+ถ้าต้องการกลับไปใช้ระบบหลาย SIM หรือ Asterisk/Zadarma) และตัด SMS fallback ออกแล้ว
+(6 ส.ค. 2569 — ตัดสินใจเอาแค่โทร ไม่ส่ง SMS สำรอง ดู LIMITATIONS.md) ครบ escalation chain
+แล้วยังไม่มีใครรับสาย = FAILED ตรงๆ
 
-Config (retry/timeout/SMS fallback) โหลดจาก dashboard (DB) ผ่าน config_service
+Config (retry/timeout) โหลดจาก dashboard (DB) ผ่าน config_service
 ไม่ใช่จาก .env ตรงๆ — เพื่อให้ user เปลี่ยนได้จากหน้าเว็บโดยไม่ต้องแก้ไฟล์
 worker เช็ค AppSettings.updated_at เป็นระยะ (ทุก config_check_interval วิ) ถ้าเปลี่ยนจะโหลด config
 ใหม่อัตโนมัติ ไม่ต้อง restart process (ดู run_worker_loop)
@@ -13,6 +15,7 @@ worker เช็ค AppSettings.updated_at เป็นระยะ (ทุก c
 เบอร์ escalation มาจากตาราง groups/contacts ผ่าน contacts_service — ถ้า job เก่า (ก่อน migration)
 ไม่มี event_type_id จะ fallback ไปอ่านจาก .env ตามกลไกเดิมเพื่อไม่ให้ job ค้างคาพัง
 """
+import datetime
 import logging
 import time
 
@@ -23,7 +26,7 @@ from app.config_service import EffectiveConfig, get_effective_config, get_or_cre
 from app.contacts_service import get_ordered_phone_numbers
 from app.database import CallJob, CallLog, CallStatus, SessionLocal
 from app.gsm_module import GSMModule
-from app.queue_manager import claim_next_job, update_job_status
+from app.queue_manager import claim_next_job, recover_orphaned_jobs, update_job_status
 from app.tts_service import text_to_speech
 from app import worker_state
 
@@ -52,7 +55,7 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
     ประมวลผลงานโทร 1 รายการตาม state machine:
     QUEUED/RETRYING -> dial -> CONNECTED / NO_ANSWER / BUSY
         CONNECTED -> stream audio -> DONE
-        NO_ANSWER/BUSY -> retry (ถ้ายังไม่ครบรอบ) -> escalate (เบอร์ถัดไป) -> sms fallback
+        NO_ANSWER/BUSY -> retry (ถ้ายังไม่ครบรอบ) -> escalate (เบอร์ถัดไป) -> ครบทุกเบอร์แล้ว -> FAILED
     """
     if job.event_type_id is not None and job.event_type is not None:
         contacts = get_ordered_phone_numbers(db, job.event_type.group_id)
@@ -69,41 +72,91 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
         return
 
     if job.contact_index >= len(contacts):
-        # escalation chain หมดแล้ว ยังไม่สำเร็จ -> SMS fallback ไปเบอร์แรก
-        _try_sms_fallback(db, job, contacts[0], gsm, cfg)
+        # escalation chain หมดแล้ว ไม่มีใครรับสายสักคน — ไม่มี SMS fallback แล้ว จบที่ FAILED ตรงๆ
+        logger.error("Job %s: ครบทุกเบอร์ในกลุ่มแล้วไม่มีใครรับสาย", job.id)
+        update_job_status(db, job, CallStatus.FAILED)
         return
 
     current_number = contacts[job.contact_index]
-    audio_path = text_to_speech(job.message)
 
-    result = gsm.dial(current_number)
-    _log_attempt(db, job, current_number, result)
+    try:
+        worker_state.set_current_step(job.id, worker_state.CallStep.PREPARING_AUDIO)
+        audio_path = text_to_speech(job.message)
+
+        # อัปโหลดไฟล์เสียงเข้าโมดูล "ก่อน" โทรออกเสมอ — ขั้นตอนนี้กินเวลาราว 15-20 วินาที
+        # (SIMCOM บังคับส่งทีละ 256 byte หน่วง 50ms) ถ้าทำหลังปลายสายรับแล้ว คนรับจะเจอ
+        # ความเงียบยาวเป็นสิบวินาทีก่อนได้ยินเสียง จนอาจวางสายไปก่อนเพราะนึกว่าสายหลุด
+        # ย้ายมาทำตอนนี้ = ใช้เวลาช่วงที่ยังไม่มีใครรอฟัง พอรับสายปุ๊บได้ยินทันที
+        worker_state.set_current_step(job.id, worker_state.CallStep.UPLOADING_AUDIO, progress=0.0)
+        gsm.prepare_audio(audio_path, on_progress=worker_state.set_progress)
+
+        worker_state.set_current_step(job.id, worker_state.CallStep.DIALING)
+        result = gsm.dial(current_number)
+    except Exception as exc:
+        # เตรียมเสียง (เช่น gTTS ต่อเน็ตไม่ได้ / อัปโหลดเข้าโมดูลไม่สำเร็จ) หรือ dial() เองพัง
+        # ก่อนจะรู้ผลการโทรด้วยซ้ำ
+        logger.exception("Job %s: เตรียมเสียง/โทรออกล้มเหลว", job.id)
+        _log_attempt(db, job, current_number, "failed", detail=str(exc))
+        update_job_status(db, job, CallStatus.FAILED)
+        return
+
+    # เก็บคำอธิบายผลลัพธ์เป็นภาษาคนไว้ใน detail — หน้าประวัติการโทรกางดูได้ทันทีว่าทำไมไม่สำเร็จ
+    # ไม่ต้องไปเดาความหมายของคำว่า rejected/no_answer เอง
+    RESULT_DETAIL = {
+        "rejected": "ปลายสายกดปฏิเสธ หรือติดต่อเบอร์นี้ไม่ได้ (สายถูกตัดก่อนหมดเวลารอ)",
+        "no_answer": f"ไม่มีใครรับสายภายใน {cfg.call_ring_timeout_seconds} วินาที",
+        "busy": "สายไม่ว่าง ปลายสายกำลังคุยสายอื่นอยู่",
+    }
+    _log_attempt(db, job, current_number, result, detail=RESULT_DETAIL.get(result, ""))
 
     if result == "connected":
         try:
-            gsm.stream_audio(audio_path)
+            worker_state.set_current_step(job.id, worker_state.CallStep.PLAYING)
+            gsm.play_audio()
+        except Exception as exc:
+            # โทรติดแล้วแต่เล่นเสียงพัง (เช่น อัปโหลดไฟล์เข้าโมดูลไม่สำเร็จ) — เจอเองจริงระหว่าง
+            # ทดสอบกับฮาร์ดแวร์ ต้องบันทึก detail ไว้ ไม่งั้น history จะโชว์ last_result เป็น
+            # "connected" ค้างจาก _log_attempt ด้านบน ทั้งที่จริงส่งข้อความไม่สำเร็จ เข้าใจผิดได้ง่าย
+            logger.exception("Job %s: เล่นเสียงเข้าสายล้มเหลว", job.id)
+            _log_attempt(db, job, current_number, "failed", detail=str(exc))
+            update_job_status(db, job, CallStatus.FAILED)
+            return
         finally:
             gsm.hangup()
         update_job_status(db, job, CallStatus.CONNECTED)
         logger.info("Job %s: โทรติดและเล่นข้อความสำเร็จ", job.id)
         return
 
-    # ไม่รับสาย หรือสายไม่ว่าง
-    status_map = {"no_answer": CallStatus.NO_ANSWER, "busy": CallStatus.BUSY}
+    # ไม่รับสาย / ปฏิเสธ / สายไม่ว่าง — ทั้งหมดยังไม่ถือว่าจบ ต้อง retry หรือไล่เบอร์ถัดไปต่อ
+    # 'rejected' ใช้สถานะ NO_ANSWER ร่วมกัน (ไม่เพิ่มค่าใหม่ใน enum เพื่อเลี่ยง migration)
+    # ความต่างถูกเก็บไว้ใน call_logs.result/detail ซึ่งเป็นที่ที่คนอ่านจริงอยู่แล้ว
+    status_map = {
+        "no_answer": CallStatus.NO_ANSWER,
+        "rejected": CallStatus.NO_ANSWER,
+        "busy": CallStatus.BUSY,
+    }
     update_job_status(db, job, status_map.get(result, CallStatus.NO_ANSWER))
+
+    # หน่วงเวลาก่อนลองใหม่ด้วยการนัดเวลาไว้ที่ตัว job (next_attempt_at) แทนการ time.sleep()
+    # ค้าง thread — worker จะเอาเวลาช่วงรอนี้ไปโทรงานอื่นในคิวต่อได้ทันที
+    # เดิม sleep ค้างไว้ 30 วิ ทำให้ทั้งคิวหยุดรอไปด้วย ทั้งที่งานอื่นไม่ได้เกี่ยวอะไรกับสายที่พลาด
+    next_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=cfg.call_retry_delay_seconds)
 
     if job.retry_count < cfg.call_retry_count:
         logger.info(
-            "Job %s: เบอร์ %s ไม่รับสาย รอ %s วิ แล้ว retry (%s/%s)",
-            job.id, _mask_number(current_number),
+            "Job %s: เบอร์ %s ผลลัพธ์ %s นัดโทรซ้ำอีก %s วิ (%s/%s) — ระหว่างนี้คิวเดินต่อได้",
+            job.id, _mask_number(current_number), result,
             cfg.call_retry_delay_seconds,
             job.retry_count + 1, cfg.call_retry_count,
         )
-        time.sleep(cfg.call_retry_delay_seconds)
         update_job_status(
-            db, job, CallStatus.RETRYING, retry_count=job.retry_count + 1
+            db, job, CallStatus.RETRYING,
+            retry_count=job.retry_count + 1,
+            next_attempt_at=next_at,
         )
     else:
+        # ครบ retry ของเบอร์นี้แล้ว → ไปเบอร์ถัดไปใน escalation chain
+        # หน่วงเท่ากันก่อนโทรเบอร์ถัดไป กันโทรรัวติดๆ กันจนดูเหมือนสแปม
         logger.info(
             "Job %s: ครบรอบ retry แล้ว escalate ไปเบอร์ถัดไป (index %s -> %s)",
             job.id, job.contact_index, job.contact_index + 1,
@@ -112,49 +165,84 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
             db, job, CallStatus.ESCALATED,
             contact_index=job.contact_index + 1,
             retry_count=0,
+            next_attempt_at=next_at,
         )
 
 
-def _try_sms_fallback(db: Session, job: CallJob, phone_number: str, gsm: GSMModule, cfg: EffectiveConfig):
-    if not cfg.sms_fallback_enabled:
-        update_job_status(db, job, CallStatus.FAILED)
+def _poll_gsm_status(gsm: GSMModule):
+    """
+    เช็คว่าโมดูลยังเสียบอยู่ไหม + ดึงสัญญาณ/operator/network mode — เรียกเฉพาะตอน idle เท่านั้น
+    เพื่อไม่ให้ AT command ของการเช็คสถานะไปแทรกกลางขั้นตอนโทรที่ใช้ serial port เดียวกัน
+
+    ต้องอัปเดต gsm_connected ทุกรอบด้วย ไม่ใช่แค่ค่าสัญญาณ — เดิมตั้ง True ครั้งเดียวตอน worker
+    เริ่มทำงาน แล้วตั้ง False เฉพาะตอน worker ตายทั้ง thread ผลคือถอดโมดูลออกกลางคัน dashboard
+    ยังขึ้น "โมดูลพร้อม" ค้างอยู่ตลอด (เจอจากการทดสอบจริง: ถอด USB แล้วหน้าเว็บยังบอกออนไลน์
+    ทั้งที่ทุกค่าเป็น "ไม่ทราบ" หมดแล้ว) — สถานะที่โกหกแบบนี้อันตรายกว่าไม่มีสถานะเลย
+    """
+    # เขียน log เฉพาะตอน "สถานะเปลี่ยน" ไม่ใช่ทุกรอบที่เช็ค — เช็คทุก 10 วิ ถ้า log ทุกรอบ
+    # ตอนถอดโมดูลทิ้งไว้ข้ามคืนจะได้ log ซ้ำๆ ราว 8,600 บรรทัด/วัน กิน SD card ของ Pi ฟรีๆ
+    # โดยไม่ได้ข้อมูลเพิ่มเลย (บรรทัดที่ 2 เป็นต้นไปบอกเรื่องเดิมกับบรรทัดแรกทุกประการ)
+    was_connected = worker_state.get_state().gsm_connected
+
+    if gsm.is_responsive():
+        try:
+            signal = gsm.get_signal_quality()
+            operator, mode = gsm.get_operator_info()
+        except Exception:
+            logger.warning("ดึงสถานะสัญญาณ GSM ไม่สำเร็จ", exc_info=True)
+            signal, operator, mode = None, None, None
+        worker_state.set_gsm_connected(True, gsm.port)
+        worker_state.set_gsm_status(signal, operator, mode)
+        if not was_connected:
+            logger.info("โมดูล GSM ที่ %s กลับมาเชื่อมต่อได้แล้ว", gsm.port)
         return
 
-    sms_text = f"[ALERT] {job.message}"
-    success = gsm.send_sms(phone_number, sms_text)
-    _log_attempt(db, job, phone_number, "sms_fallback", detail=sms_text)
+    # โมดูลไม่ตอบ = ถือว่าหลุด ล้างค่าที่ค้างอยู่ทิ้งด้วย ไม่งั้นหน้าเว็บจะโชว์สัญญาณค่าเก่า
+    # ของตอนที่ยังเสียบอยู่ ซึ่งอ่านแล้วเข้าใจผิดว่ายังใช้งานได้
+    worker_state.set_gsm_connected(False)
+    worker_state.set_gsm_status(None, None, None)
+    if was_connected:
+        logger.warning("โมดูล GSM ที่ %s ไม่ตอบสนอง — จะพยายามเชื่อมต่อใหม่ทุกรอบจนกว่าจะกลับมา", gsm.port)
 
-    if success:
-        update_job_status(db, job, CallStatus.SMS_FALLBACK_SENT)
-        logger.info("Job %s: ส่ง SMS fallback สำเร็จ", job.id)
-    else:
-        update_job_status(db, job, CallStatus.FAILED)
-        logger.error("Job %s: ส่ง SMS fallback ไม่สำเร็จ - ต้องแจ้งเตือนแอดมิน", job.id)
-
-
-def _poll_gsm_status(gsm: GSMModule):
-    """เช็คสัญญาณ/operator/network mode ของ GSM module — เรียกเฉพาะตอน idle เท่านั้น
-    เพื่อไม่ให้ AT command ของการเช็คสถานะไปแทรกกลางขั้นตอนโทร/ส่ง SMS ที่ใช้ serial port เดียวกัน"""
+    # ลองต่อใหม่ทุกรอบที่ poll เผื่อผู้ใช้เสียบกลับเข้าไป หรือโมดูล reset ตัวเองหลังไฟตก
+    # (สำคัญมากบน Pi ที่ไฟเลี้ยงไม่พอ โมดูลจะ re-enumerate ตัวเองเป็นระยะ)
+    # ถ้าไม่มีบรรทัดนี้ พอหลุดครั้งเดียวต้อง restart ทั้ง process ถึงจะกลับมาโทรได้
     try:
-        signal = gsm.get_signal_quality()
-        operator, mode = gsm.get_operator_info()
-        worker_state.set_gsm_status(signal, operator, mode)
+        gsm.disconnect()
+        gsm.connect()
     except Exception:
-        logger.warning("ดึงสถานะสัญญาณ GSM ไม่สำเร็จ", exc_info=True)
+        return  # ยังไม่กลับมา ปล่อยไว้ให้รอบหน้าลองใหม่
+
+    if gsm.is_responsive():
+        worker_state.set_gsm_connected(True, gsm.port)
+        logger.info("เชื่อมต่อโมดูล GSM ที่ %s ใหม่สำเร็จ", gsm.port)
 
 
-def run_worker_loop(poll_interval: float = 3.0, config_check_interval: float = 10.0, gsm_status_interval: float = 30.0):
+def run_worker_loop(poll_interval: float = 1.0, config_check_interval: float = 10.0, gsm_status_interval: float = 1.0):
     """
     Main loop — รันแบบ background thread แยกจาก API server (SIM ตัวเดียว, ไม่มี pool)
     Config (retry/timeout) โหลดจาก dashboard (DB) ตอน start แล้วเช็คซ้ำทุก config_check_interval วิ
     เพื่อ hot-reload อัตโนมัติเมื่อมีคนแก้ผ่าน dashboard (PUT /config) โดยไม่ต้อง restart
 
-    เช็คสัญญาณ/operator ของ GSM ทุก gsm_status_interval วิ (เฉพาะตอนคิวว่าง) ไว้โชว์ในหน้า Overview
+    เช็คสัญญาณ/operator + ว่าโมดูลยังเสียบอยู่ไหม ทุก gsm_status_interval วิ (เฉพาะตอนคิวว่าง)
+
+    ตั้ง 1 วิได้เพราะการเช็ค 1 รอบใช้เวลาแค่ ~100ms (คำสั่งถามค่าใช้ _query ที่คืนทันทีที่โมดูลตอบ
+    ไม่ใช่ _send_at ที่หน่วงคงที่ 1 วิ/คำสั่ง — ก่อนแก้ 1 รอบกิน 2.5 วิ ตั้ง 1 วิไม่ได้เลย)
+    และ _poll_gsm_status เขียน log เฉพาะตอนสถานะเปลี่ยน เดินปกติจึงไม่มี log เพิ่มเลยสักบรรทัด
+
+    poll_interval ต้องลดลงมาด้วย เพราะ loop นี้ sleep(poll_interval) ทุกรอบ ถ้ายังเป็น 3 วิ
+    ต่อให้ตั้ง gsm_status_interval=1 ก็เช็คได้จริงแค่ทุก 3 วิ — ผลพลอยได้คืองานโทรที่เข้าคิวมา
+    ถูกหยิบไปโทรเร็วขึ้นจาก "ภายใน 3 วิ" เหลือ "ภายใน 1 วิ" ซึ่งดีกับระบบแจ้งเตือนฉุกเฉินอยู่แล้ว
     """
     db = SessionLocal()
     try:
         cfg = get_effective_config(db)
         cfg_updated_at = get_or_create_app_settings(db).updated_at
+        # กู้งานที่ค้างสถานะ "กำลังทำงาน" จากรอบก่อน (process ตายกลางคัน) กลับเข้าคิว
+        # ต้องทำก่อนเข้า loop เสมอ ไม่งั้นงานพวกนั้นค้างถาวรและหน้าเว็บจะขึ้นว่ามีสายค้างตลอด
+        recovered = recover_orphaned_jobs(db)
+        if recovered:
+            logger.warning("กู้งานที่ค้างจากรอบก่อน %s งานกลับเข้าคิวแล้ว", recovered)
     finally:
         db.close()
 
@@ -182,7 +270,24 @@ def run_worker_loop(poll_interval: float = 3.0, config_check_interval: float = 1
 
                 job = claim_next_job(db)
                 if job:
-                    process_job(db, job, gsm, cfg)
+                    try:
+                        process_job(db, job, gsm, cfg)
+                    except Exception:
+                        # ห้ามปล่อยให้ exception ของ job เดียวหลุดออกไปฆ่า thread ทั้งก้อน —
+                        # ตอนนี้เกิดขึ้นแน่ๆ ทุกครั้งที่โทรติด เพราะ gsm.stream_audio() ยัง
+                        # raise NotImplementedError อยู่ (ดูคอมเมนต์ในไฟล์นั้น) ถ้าไม่กันไว้
+                        # ตรงนี้ worker thread จะตายทั้ง thread ตั้งแต่การโทรทดสอบครั้งแรก
+                        # ที่ติดสาย แล้วงานที่เหลือทั้งหมดในคิวจะไม่ถูกประมวลผลอีกเลยจนกว่าจะ
+                        # restart container โดยไม่มี error โผล่ให้เห็นที่ไหนเลยนอก log
+                        logger.exception("Job %s: ล้มเหลวแบบไม่คาดคิดระหว่างประมวลผล — mark เป็น failed แล้วไปงานถัดไป", job.id)
+                        try:
+                            update_job_status(db, job, CallStatus.FAILED)
+                        except Exception:
+                            logger.exception("Job %s: mark เป็น failed ไม่สำเร็จด้วย — job นี้อาจค้างสถานะเดิม", job.id)
+                    finally:
+                        # ต้องล้างทุกทางออกของ process_job (สำเร็จ/ล้มเหลว/exception) ไม่งั้นหน้าเว็บ
+                        # จะค้างแสดงขั้นตอนสุดท้ายที่ทำค้างไว้ตลอด ทั้งที่ worker ว่างไปแล้ว
+                        worker_state.set_current_step(None, None)
                 else:
                     now = time.monotonic()
                     if now - last_gsm_status_check >= gsm_status_interval:

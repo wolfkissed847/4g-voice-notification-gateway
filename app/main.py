@@ -1,6 +1,6 @@
 """
 FastAPI Entrypoint — รับ Request แจ้งเตือนจากระบบภายนอก แล้วเข้าคิวให้ call_worker ประมวลผล
-รวม auth สำหรับ dashboard (single-user JWT) และ config ที่แก้ได้ผ่านเว็บ (retry/timeout/SMS fallback)
+รวม auth สำหรับ dashboard (single-user JWT) และ config ที่แก้ได้ผ่านเว็บ (retry/timeout)
 
 เวอร์ชันนี้เป็น SIM ตัวเดียว, GSM only (ดู branch feature/voip-multi-sim
 ถ้าต้องการ multi-SIM หรือ VoIP/Asterisk)
@@ -12,7 +12,7 @@ import logging
 import os
 import threading
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,6 +46,24 @@ from app.system_metrics import get_pi_metrics
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
 
+
+def _iso_utc(dt: datetime.datetime | None) -> str | None:
+    """
+    datetime ทุกตัวที่เก็บใน DB เป็น UTC จริง แต่เป็น naive (ไม่มี tzinfo) เพราะ SQLite ไม่รองรับ
+    timezone-aware column ดีนัก (ตั้งใจไม่แตะ database.py — ความเสี่ยงสูงกว่าประโยชน์ที่ได้)
+
+    ปัญหาเดิม: .isoformat() ตรงๆ บน naive datetime ได้ string ไม่มี timezone suffix เช่น
+    "2026-08-05T10:00:00" — ฝั่งเว็บ (`new Date(...)`) ตีความ string แบบนี้เป็น "เวลา local
+    ของเครื่องที่เปิดเว็บ" ไม่ใช่ UTC ตามสเปก ISO 8601/JS ทำให้เวลาที่แสดงเพี้ยนไป 7 ชม. (UTC+7)
+
+    แก้ที่ชั้น serialize นี้ที่เดียว: แปะ tzinfo=UTC ก่อน isoformat() ได้ string ลงท้าย "+00:00"
+    ฝั่งเว็บจะตีความถูกเป็น UTC แล้วแปลงเป็นเวลา local ของเบราว์เซอร์ให้เองอัตโนมัติ
+    """
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=datetime.timezone.utc).isoformat()
+
+
 app = FastAPI(
     title="4G Automated Voice Notification Gateway",
     description="Self-hosted Robo-calling Gateway สำหรับแจ้งเตือนเหตุฉุกเฉินผ่านสาย 4G (GSM, SIM ตัวเดียว)",
@@ -68,7 +86,7 @@ def verify_api_key(x_api_key: str = Header(...), db: Session = Depends(get_db)):
     """
     api_key = api_key_service.verify_and_touch(db, x_api_key)
     if api_key is None:
-        raise HTTPException(status_code=401, detail="API key ไม่ถูกต้องหรือถูก revoke แล้ว")
+        raise HTTPException(status_code=401, detail="API key ไม่ถูกต้อง หรืออุปกรณ์นี้ถูกลบออกจากระบบแล้ว")
     return api_key
 
 
@@ -174,16 +192,23 @@ def queue_status(db: Session = Depends(get_db), _user: str = Depends(get_current
             status=j.status.value,
             priority_group=j.priority_group,
             retry_count=j.retry_count,
-            created_at=j.created_at.isoformat(),
+            created_at=_iso_utc(j.created_at),
         )
         for j in jobs
     ]
-    return QueueStatusResponse(total_pending=len(items), items=items)
+    state = worker_state.get_state()
+    return QueueStatusResponse(
+        total_pending=len(items),
+        items=items,
+        current_job_id=state.current_job_id,
+        current_step=state.current_step,
+        current_progress=state.current_progress,
+    )
 
 
 @app.get("/config", response_model=AppConfigResponse)
 def get_config(db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
-    """ดึง config ปัจจุบัน (retry/timeout/SMS fallback) — แก้ได้ผ่าน dashboard ไม่ต้องแตะ .env"""
+    """ดึง config ปัจจุบัน (retry/timeout) — แก้ได้ผ่าน dashboard ไม่ต้องแตะ .env"""
     return AppConfigResponse(**get_masked_config(db))
 
 
@@ -216,7 +241,7 @@ def system_info(_user: str = Depends(get_current_user)):
 
     return SystemInfoResponse(
         app_version=app.version,
-        worker_started_at=state.started_at.isoformat() if state.started_at else None,
+        worker_started_at=_iso_utc(state.started_at),
         gsm_connected=state.gsm_connected,
         gsm_port=state.gsm_port,
         db_size_bytes=db_size_bytes,
@@ -233,7 +258,7 @@ def system_gsm(_user: str = Depends(get_current_user)):
         operator=state.gsm_operator,
         network_mode=state.gsm_network_mode,
         port=state.gsm_port,
-        updated_at=state.gsm_status_updated_at.isoformat() if state.gsm_status_updated_at else None,
+        updated_at=_iso_utc(state.gsm_status_updated_at),
     )
 
 
@@ -390,9 +415,9 @@ def _api_key_to_response(api_key) -> ApiKeyResponse:
     return ApiKeyResponse(
         id=api_key.id, name=api_key.name, key_prefix=api_key.key_prefix,
         is_active=api_key.is_active == "true",
-        last_used_at=api_key.last_used_at.isoformat() if api_key.last_used_at else None,
-        created_at=api_key.created_at.isoformat(),
-        revoked_at=api_key.revoked_at.isoformat() if api_key.revoked_at else None,
+        last_used_at=_iso_utc(api_key.last_used_at),
+        created_at=_iso_utc(api_key.created_at),
+        revoked_at=_iso_utc(api_key.revoked_at),
         allowed_event_types=[
             ApiKeyEventTypeRef(id=e.id, code=e.code, display_name=e.display_name)
             for e in api_key.allowed_event_types
@@ -441,8 +466,9 @@ def update_api_key(
 
 
 @app.delete("/api-keys/{key_id}", status_code=204)
-def revoke_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
-    if not api_key_service.revoke_api_key(db, key_id):
+def delete_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    """ลบอุปกรณ์ออกจากฐานข้อมูลจริง — ประวัติการโทรเดิมยังอยู่ครบ (ดู api_key_service.delete_api_key)"""
+    if not api_key_service.delete_api_key(db, key_id):
         raise HTTPException(status_code=404, detail="ไม่พบ API key นี้")
 
 
@@ -513,10 +539,11 @@ def get_history(
             status=job.status.value,
             retry_count=job.retry_count,
             contact_index=job.contact_index,
-            created_at=job.created_at.isoformat(),
-            updated_at=job.updated_at.isoformat(),
+            created_at=_iso_utc(job.created_at),
+            updated_at=_iso_utc(job.updated_at),
             last_result=last_log.result if last_log else None,
             last_phone_masked=last_log.phone_number_masked if last_log else None,
+            last_detail=last_log.detail if last_log else None,
         ))
 
     return HistoryResponse(total_count=total_count, page=page, page_size=page_size, items=items)
@@ -527,8 +554,42 @@ def get_history(
 # ไม่มี Node.js รันบน Pi เลย — ดู frontend/README.md และ Dockerfile
 _FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "static")
 
+# path ที่ต้องปล่อยให้ FastAPI จัดการเองเสมอ แม้เบราว์เซอร์จะขอเป็น HTML
+# (เอกสาร API ต้องเปิดดูในเบราว์เซอร์ได้จริง ไม่ใช่โดนกลืนไปเป็นหน้าเว็บ dashboard)
+_NON_SPA_PREFIXES = ("/assets", "/docs", "/redoc", "/openapi.json", "/health")
+
 if os.path.isdir(_FRONTEND_DIST):
     app.mount("/assets", StaticFiles(directory=os.path.join(_FRONTEND_DIST, "assets")), name="assets")
+
+    @app.middleware("http")
+    async def spa_navigation(request: Request, call_next):
+        """
+        ส่ง index.html ให้ทุกครั้งที่ "เบราว์เซอร์เปิดหน้าเว็บ" ไม่ว่า path นั้นจะชนกับ API หรือไม่
+
+        ── ปัญหาที่แก้ ────────────────────────────────────────────────────────
+        หน้าเว็บกับ API ใช้ path ซ้ำกันอยู่ 3 คู่: /history, /event-types, /api-keys
+        ตอนกดเมนูในเว็บไม่มีปัญหาเพราะ React Router เปลี่ยนหน้าเองฝั่ง client
+        แต่พอผู้ใช้ "กด F5" หรือ "เปิด URL ตรงๆ" เบราว์เซอร์จะยิงมาที่เซิร์ฟเวอร์จริง
+        แล้วไปโดน endpoint ของ API รับไปก่อน (ประกาศไว้ก่อน catch-all)
+        ผลคือได้ JSON error แทนหน้าเว็บ:
+            GET /history → 422 {"detail":[{"loc":["header","authorization"] ...}]}
+        เพราะ API ตัวนั้นบังคับให้ส่ง header ยืนยันตัวตนมาด้วย ซึ่งการเปิด URL เปล่าๆ ไม่มี
+
+        ── ทำไมแยกด้วย header Accept ──────────────────────────────────────────
+        "เบราว์เซอร์เปิดหน้าเว็บ" กับ "โค้ดเรียก API" ต่างกันชัดเจนตรงนี้:
+          - เปิดหน้าเว็บ/กด F5 → Accept: text/html,application/xhtml+xml,...
+          - fetch() ในหน้าเว็บ  → Accept: */*   (ค่า default ของ fetch)
+          - อุปกรณ์ยิง /notify   → เป็น POST ไม่ใช่ GET จึงไม่เข้าเงื่อนไขตั้งแต่แรก
+        จึงไม่ต้องมีรายชื่อ route ของหน้าเว็บให้ต้องตามแก้ทุกครั้งที่เพิ่มหน้าใหม่
+        (ซึ่งถ้าลืมแก้ก็จะกลับมาเจอบั๊กเดิมแบบเงียบๆ อีก)
+        """
+        if (
+            request.method == "GET"
+            and "text/html" in request.headers.get("accept", "")
+            and not request.url.path.startswith(_NON_SPA_PREFIXES)
+        ):
+            return FileResponse(os.path.join(_FRONTEND_DIST, "index.html"))
+        return await call_next(request)
 
     @app.get("/{full_path:path}")
     def serve_frontend(full_path: str):

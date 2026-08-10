@@ -83,12 +83,22 @@ def list_api_keys(db: Session) -> list[ApiKey]:
     return db.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
 
 
-def revoke_api_key(db: Session, key_id: int) -> bool:
+def delete_api_key(db: Session, key_id: int) -> bool:
+    """
+    ลบอุปกรณ์ออกจากฐานข้อมูลจริง (hard delete) ไม่ใช่แค่ปิดการใช้งาน
+
+    ปลอดภัยเพราะ FK ถูกออกแบบไว้รองรับแล้ว (ดู app/database.py) และ PRAGMA foreign_keys=ON
+    เปิดไว้ทุก connection แล้ว SQLite จึงบังคับใช้จริง:
+      - api_key_event_types  ON DELETE CASCADE  → สิทธิ์ที่ผูกไว้หายตามไปเอง
+      - call_jobs.api_key_id ON DELETE SET NULL → ประวัติการโทรไม่หาย แค่ตัดสายโยงไปหาอุปกรณ์
+
+    ประวัติยังอ่านรู้เรื่องหลังลบ เพราะ call_jobs.source_device เก็บ "ชื่ออุปกรณ์ ณ ตอนนั้น"
+    ไว้เป็น snapshot อยู่แล้ว ไม่ได้ join เอาชื่อจากตาราง api_keys ตอนแสดงผล
+    """
     api_key = db.query(ApiKey).filter(ApiKey.id == key_id).first()
     if api_key is None:
         return False
-    api_key.is_active = "false"
-    api_key.revoked_at = datetime.datetime.utcnow()
+    db.delete(api_key)
     db.commit()
     return True
 

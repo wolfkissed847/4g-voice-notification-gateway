@@ -41,7 +41,6 @@ class Settings(BaseSettings):
     call_retry_count: int = 2
     call_retry_delay_seconds: int = 30
     call_ring_timeout_seconds: int = 25
-    sms_fallback_enabled: bool = True
 
     # TTS
     tts_language: str = "th"

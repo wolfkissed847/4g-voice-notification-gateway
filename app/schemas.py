@@ -130,6 +130,7 @@ class HistoryItem(BaseModel):
     updated_at: str
     last_result: str | None = None
     last_phone_masked: str | None = None
+    last_detail: str | None = Field(None, description="รายละเอียดผลลัพธ์ล่าสุด เช่น error message ตอนล้มเหลว")
 
 
 class SystemInfoResponse(BaseModel):
@@ -175,6 +176,16 @@ class QueueStatusItem(BaseModel):
 class QueueStatusResponse(BaseModel):
     total_pending: int
     items: list[QueueStatusItem]
+    # ขั้นตอนย่อยที่ worker กำลังทำอยู่ ณ วินาทีนี้ (null = ว่างงาน)
+    # สถานะใน items บอกได้แค่ "in_progress" ซึ่งกินเวลายาวและมีหลายขั้นตอนซ่อนอยู่ข้างใน
+    # 2 ฟิลด์นี้ให้หน้า Signal Flow Monitor ไล่ไฟทีละขั้นตามงานจริงได้
+    current_job_id: int | None = None
+    current_step: str | None = Field(
+        None, description="preparing_audio | uploading_audio | dialing | playing | waiting_retry"
+    )
+    current_progress: float | None = Field(
+        None, description="ความคืบหน้าภายในขั้นตอนปัจจุบัน 0.0-1.0 (null = ขั้นนี้วัดไม่ได้)"
+    )
 
 
 class LoginRequest(BaseModel):
@@ -191,7 +202,6 @@ class AppConfigResponse(BaseModel):
     call_retry_count: int
     call_retry_delay_seconds: int
     call_ring_timeout_seconds: int
-    sms_fallback_enabled: bool
 
 
 class AppConfigUpdateRequest(BaseModel):
@@ -199,4 +209,3 @@ class AppConfigUpdateRequest(BaseModel):
     call_retry_count: int | None = None
     call_retry_delay_seconds: int | None = None
     call_ring_timeout_seconds: int | None = None
-    sms_fallback_enabled: bool | None = None

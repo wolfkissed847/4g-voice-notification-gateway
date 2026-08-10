@@ -4,7 +4,8 @@ call_worker ต้องดึงค่าจากที่นี่ ไม่�
 (settings ใน .env เป็นแค่ default ตอน first-run เท่านั้น)
 
 เวอร์ชันนี้ตัด backend selector/VoIP credential ออก (ดู branch feature/voip-multi-sim)
-เหลือแค่ retry/timeout/SMS fallback ที่ user ปรับผ่าน dashboard ได้
+เหลือแค่ retry/timeout ที่ user ปรับผ่าน dashboard ได้ (ตัด SMS fallback ออกแล้ว 6 ส.ค. 2569
+— ดู LIMITATIONS.md, เอาแค่โทรอย่างเดียว)
 """
 from dataclasses import dataclass
 
@@ -19,7 +20,6 @@ class EffectiveConfig:
     call_retry_count: int
     call_retry_delay_seconds: int
     call_ring_timeout_seconds: int
-    sms_fallback_enabled: bool
 
 
 def get_or_create_app_settings(db: Session) -> AppSettings:
@@ -33,7 +33,6 @@ def get_or_create_app_settings(db: Session) -> AppSettings:
         call_retry_count=settings.call_retry_count,
         call_retry_delay_seconds=settings.call_retry_delay_seconds,
         call_ring_timeout_seconds=settings.call_ring_timeout_seconds,
-        sms_fallback_enabled=str(settings.sms_fallback_enabled).lower(),
     )
     db.add(row)
     db.commit()
@@ -48,7 +47,6 @@ def get_effective_config(db: Session) -> EffectiveConfig:
         call_retry_count=row.call_retry_count,
         call_retry_delay_seconds=row.call_retry_delay_seconds,
         call_ring_timeout_seconds=row.call_ring_timeout_seconds,
-        sms_fallback_enabled=row.sms_fallback_enabled.lower() == "true",
     )
 
 
@@ -59,7 +57,6 @@ def get_masked_config(db: Session) -> dict:
         "call_retry_count": row.call_retry_count,
         "call_retry_delay_seconds": row.call_retry_delay_seconds,
         "call_ring_timeout_seconds": row.call_ring_timeout_seconds,
-        "sms_fallback_enabled": row.sms_fallback_enabled.lower() == "true",
     }
 
 
@@ -74,9 +71,7 @@ def update_app_settings(db: Session, **fields) -> AppSettings:
     for key, value in fields.items():
         if value is None:
             continue
-        if key == "sms_fallback_enabled":
-            row.sms_fallback_enabled = str(bool(value)).lower()
-        elif key in direct_fields:
+        if key in direct_fields:
             setattr(row, key, value)
 
     db.commit()
