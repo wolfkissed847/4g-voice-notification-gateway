@@ -27,7 +27,8 @@ import { Btn, Card, PageHeader, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
 import type { Contact, Group } from '../types';
 
-export function ContactsPage() {
+/** embedded = ถูกฝังอยู่ในหน้า SetupPage ที่มีหัวข้อของตัวเองแล้ว จึงไม่ต้องขึ้นหัวข้อซ้ำ */
+export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { T } = useApp();
   const [groups, setGroups] = useState<Group[]>([]);
   const [contactsByGroup, setContactsByGroup] = useState<Record<number, Contact[]>>({});
@@ -131,16 +132,28 @@ export function ContactsPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <PageHeader
-        title={T.contacts_title}
-        meta={T.contacts_sub}
-        action={
-          <Btn variant="primary" onClick={() => setShowNew(true)}>
-            <Plus size={15} />
-            {T.add_group}
-          </Btn>
-        }
-      />
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="font-mono text-caption text-ink-2">{T.contacts_sub}</p>
+          <span className="ms-auto">
+            <Btn variant="primary" onClick={() => setShowNew(true)}>
+              <Plus size={15} />
+              {T.add_group}
+            </Btn>
+          </span>
+        </div>
+      ) : (
+        <PageHeader
+          title={T.contacts_title}
+          meta={T.contacts_sub}
+          action={
+            <Btn variant="primary" onClick={() => setShowNew(true)}>
+              <Plus size={15} />
+              {T.add_group}
+            </Btn>
+          }
+        />
+      )}
 
       {showNew ? (
         <Card className="flex max-w-2xl flex-col gap-3 border-brand p-4">

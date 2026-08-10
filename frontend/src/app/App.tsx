@@ -9,7 +9,6 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { QueuePage } from "./pages/QueuePage";
 import { CallLogPage } from "./pages/CallLogPage";
 import { SystemPage } from "./pages/SystemPage";
-import { ContactsPage } from "./pages/ContactsPage";
 import { SetupPage } from "./pages/SetupPage";
 import { DeviceConfigPage } from "./pages/DeviceConfigPage";
 import { ApiGuidePage } from "./pages/ApiGuidePage";
@@ -28,7 +27,7 @@ export default function App() {
               <Route path="/history" element={<CallLogPage />} />
               <Route path="/system" element={<SystemPage />} />
               <Route path="/settings" element={<Navigate to="/system" replace />} />
-              <Route path="/contacts" element={<ContactsPage />} />
+              <Route path="/contacts" element={<SetupPage />} />
               {/* 2 path นี้เป็นหน้าเดียวกัน (SetupPage) ต่างกันแค่แท็บที่เปิดอยู่
               เก็บทั้งคู่ไว้เพราะลิงก์เดิมที่เคยแชร์/บุ๊กมาร์กไว้ต้องยังใช้ได้ */}
               <Route path="/event-types" element={<SetupPage />} />

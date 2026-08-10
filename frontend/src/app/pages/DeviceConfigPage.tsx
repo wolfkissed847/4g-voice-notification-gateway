@@ -22,6 +22,8 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 
 import { cn } from '@/app/components/ui/utils';
+import { copyText } from '../lib/clipboard';
+import { API_BASE_URL } from '../api/client';
 import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
 import { getConfig } from '../api/config';
 import { listEventTypes, sendTestNotify } from '../api/eventTypes';
@@ -45,6 +47,7 @@ export function DeviceConfigPage() {
   const [name, setName] = useState('');
   const [picked, setPicked] = useState<number[]>([]);
   const [pendingDelete, setPendingDelete] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -105,6 +108,21 @@ export function DeviceConfigPage() {
   }
 
   const pickedTypes = eventTypes.filter((e) => picked.includes(e.id));
+
+  // navigator.clipboard ใช้ไม่ได้ตอนเปิดผ่าน http:// ที่ไม่ใช่ localhost (ไม่ใช่ secure context)
+  // copyText มี fallback ให้ และคืน false ถ้าคัดลอกไม่ได้จริง — จะได้ไม่ขึ้น "คัดลอกแล้ว" หลอกตา
+  const copy = async (key: string, text: string) => {
+    if (!(await copyText(text))) return;
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 1500);
+  };
+
+  // ตัวอย่างทั้งหมดผูกกับค่าจริงของอุปกรณ์นี้ ไม่ใช่ placeholder ให้ไปแทนค่าเอง
+  const sampleCode = pickedTypes[0]?.code ?? '<event_type_code>';
+  const curlCode = `curl -X POST ${API_BASE_URL}/notify \
+  -H "X-API-Key: ${device.key_prefix}••••••" \
+  -H "Content-Type: application/json" \
+  -d '{"event_type_code": "${sampleCode}"}'`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -232,18 +250,89 @@ export function DeviceConfigPage() {
             )}
           </Card>
 
-          <Card className="p-4">
-            <h3 className="mb-2.5 text-caption font-bold">{T.payload_title}</h3>
-            <pre className="overflow-x-auto rounded-control border border-dashed border-line bg-surface-2 p-2.5 font-mono text-micro leading-[1.9] text-ink-2">
-              {`POST /notify
-X-API-Key: ${device.key_prefix}•••••
+          {/* ── วิธียิง API ของอุปกรณ์ตัวนี้ ────────────────────────────────
+              ยกมาจากหน้า API guide แต่เติมค่าจริงของอุปกรณ์นี้ให้แล้ว (key prefix,
+              รหัสเหตุการณ์ที่ติ๊กไว้, base URL ที่กำลังเปิดอยู่)
+              หน้า API guide เป็นเอกสารกลางที่ต้องมาแทนค่าเอง ซึ่งเป็นจังหวะที่พลาดกันบ่อย
+              — พิมพ์รหัสเหตุการณ์ผิดตัวเดียวก็ได้ 404 โดยไม่รู้ว่าพิมพ์ผิดตรงไหน */}
+          <Card className="flex flex-col gap-3 p-4">
+            <div>
+              <h3 className="text-caption font-bold">{T.dev_api_title}</h3>
+              <p className="mt-1 text-micro leading-[1.7] text-ink-2">{T.dev_api_sub}</p>
+            </div>
 
-{
-  "event_type_code": "${pickedTypes[0]?.code ?? '<code>'}"
-}`}
-            </pre>
+            {pickedTypes.length === 0 ? (
+              <p className="text-caption leading-[1.8] text-warn">{T.dev_api_no_event}</p>
+            ) : null}
+
+            <CodeBlock label={T.payload_title} code={curlCode} onCopy={copy} copied={copiedKey === 'curl'} ck="curl" />
+            <CodeBlock label={T.dev_api_ok} code={OK_RESPONSE} onCopy={copy} copied={copiedKey === 'ok'} ck="ok" />
+            <CodeBlock label={T.dev_api_err} code={ERR_RESPONSE} onCopy={copy} copied={copiedKey === 'err'} ck="err" />
+
+            <p className="text-micro leading-[1.7] text-warn">{T.dev_api_key_note}</p>
+
+            <div className="flex flex-col gap-1 border-t border-line-2 pt-2.5">
+              <span className="font-mono text-micro tracking-[0.1em] text-ink-2 uppercase">{T.dev_api_status}</span>
+              {[
+                ['401', T.dev_api_status_401],
+                ['403', T.dev_api_status_403],
+                ['404', T.dev_api_status_404],
+                ['422', T.dev_api_status_422],
+              ].map(([code, desc]) => (
+                <p key={code} className="flex gap-2 text-micro leading-[1.7]">
+                  <b className="shrink-0 font-mono text-bad">{code}</b>
+                  <span className="text-ink-2">{desc}</span>
+                </p>
+              ))}
+            </div>
           </Card>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const OK_RESPONSE = `{
+  "job_id": 42,
+  "status": "queued",
+  "message": "เข้าคิวเรียบร้อยแล้ว"
+}`;
+
+const ERR_RESPONSE = `{
+  "detail": "อุปกรณ์ 'ปั๊มน้ำอาคาร A' ไม่ได้รับอนุญาตให้ยิง event type 'pump_fail'"
+}`;
+
+/** โค้ดบล็อกพร้อมปุ่มคัดลอก — ปุ่มลอยมุมขวาบนเพื่อไม่กินความกว้างของโค้ด */
+function CodeBlock({
+  label,
+  code,
+  ck,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  code: string;
+  ck: string;
+  copied: boolean;
+  onCopy: (key: string, text: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-mono text-micro tracking-[0.1em] text-ink-2 uppercase">{label}</span>
+      <div className="relative">
+        <pre className="overflow-x-auto rounded-control border border-dashed border-line bg-surface-2 p-2.5 pe-16 font-mono text-micro leading-[1.9] text-ink-2">
+          {code}
+        </pre>
+        <button
+          type="button"
+          onClick={() => onCopy(ck, code)}
+          className={cn(
+            'absolute end-1.5 top-1.5 rounded-control border px-2 py-1 font-mono text-micro transition-colors',
+            copied ? 'border-ok bg-ok-soft text-ok' : 'border-line bg-surface text-ink-2 hover:border-brand',
+          )}
+        >
+          {copied ? '✓' : '⧉'}
+        </button>
       </div>
     </div>
   );

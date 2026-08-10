@@ -61,8 +61,7 @@ function Header() {
     { path: '/history', label: T.nav_history },
     // อุปกรณ์กับประเภทเหตุการณ์รวมเป็นเมนูเดียว (SetupPage) เพราะตั้งค่าคู่กันเสมอ
     // — path ยังแยกกันอยู่ ใช้เป็นตัวเลือกแท็บ
-    { path: '/devices', label: T.setup_title, alsoMatch: ['/event-types'] },
-    { path: '/contacts', label: T.nav_contacts },
+    { path: '/devices', label: T.setup_title, alsoMatch: ['/event-types', '/contacts'] },
     { path: '/system', label: T.sys_title },
     { path: '/api-guide', label: T.nav_api },
   ];

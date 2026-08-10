@@ -22,17 +22,22 @@ import { listGroups } from '../api/groups';
 import { listEventTypes } from '../api/eventTypes';
 import { Card, PageHeader } from '../components/primitives';
 import { useApp } from '../context/AppContext';
+import { ContactsPage } from './ContactsPage';
 import { DevicesPage } from './DevicesPage';
 import { EventTypesPage } from './EventTypesPage';
 
-type TabId = 'devices' | 'events';
+type TabId = 'devices' | 'events' | 'contacts';
 
 export function SetupPage() {
   const { T } = useApp();
   const location = useLocation();
   // แท็บมาจาก path ไม่ใช่ state — ลิงก์ตรงเข้า /event-types ยังใช้ได้เหมือนเดิม
   // และปุ่มย้อนกลับของเบราว์เซอร์ทำงานถูกต้องระหว่างสองแท็บ
-  const tab: TabId = location.pathname.startsWith('/event-types') ? 'events' : 'devices';
+  const tab: TabId = location.pathname.startsWith('/event-types')
+    ? 'events'
+    : location.pathname.startsWith('/contacts')
+      ? 'contacts'
+      : 'devices';
 
   const [counts, setCounts] = useState<{ groups: number; events: number; devices: number } | null>(null);
 
@@ -146,8 +151,9 @@ export function SetupPage() {
       <div className="flex flex-wrap gap-1.5">
         {(
           [
-            { id: 'devices', to: '/devices', label: T.setup_tab_devices },
+            { id: 'contacts', to: '/contacts', label: T.setup_tab_contacts },
             { id: 'events', to: '/event-types', label: T.setup_tab_events },
+            { id: 'devices', to: '/devices', label: T.setup_tab_devices },
           ] as const
         ).map((t) => (
           <NavLink
@@ -167,7 +173,9 @@ export function SetupPage() {
 
       {/* key={tab} บังคับให้ React สร้าง component ใหม่ตอนสลับแท็บ — state ภายใน
           (ฟอร์มที่กรอกค้างไว้, dialog ที่เปิดอยู่) จึงไม่ค้างข้ามแท็บ */}
-      {tab === 'devices' ? <DevicesPage key="devices" embedded /> : <EventTypesPage key="events" embedded />}
+      {tab === 'contacts' ? <ContactsPage key="contacts" embedded /> : null}
+      {tab === 'events' ? <EventTypesPage key="events" embedded /> : null}
+      {tab === 'devices' ? <DevicesPage key="devices" embedded /> : null}
     </div>
   );
 }
