@@ -244,7 +244,12 @@ export function SystemPage() {
           </div>
           <dl className="font-mono text-caption leading-[2] break-words text-ink-2">
             <div>
-              {T.system_info_version} <b className="text-ink">{info?.app_version ?? '—'}</b>
+              {/* โชว์ commit คู่กับเลขเวอร์ชันเสมอ — เลขเวอร์ชันเป็นค่าที่คนตั้งเอง ถ้าลืมบั๊ม
+                  จะค้างอยู่ค่าเดิมตลอดไป ส่วน commit มาจาก git ตอน build จึงตอบได้จริงว่า
+                  "โค้ดที่รันอยู่คืออันล่าสุดหรือยัง" โดยไม่ต้อง SSH เข้าไปเช็ค */}
+              {T.system_info_version}{' '}
+              <b className="text-ink">{info?.app_version ?? '—'}</b>
+              {info?.app_git_sha ? <span className="text-ink-2"> · {info.app_git_sha}</span> : null}
             </div>
             <div>
               {T.system_info_worker}{' '}

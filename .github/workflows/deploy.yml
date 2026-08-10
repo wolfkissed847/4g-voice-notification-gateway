@@ -51,6 +51,9 @@ jobs:
           fi
 
       - name: Build image (native build บน Pi)
+        # ส่ง commit hash เข้าไปใน image เพื่อให้หน้าเว็บบอกได้ว่ารันโค้ด commit ไหนอยู่
+        env:
+          GIT_SHA: ${{ github.sha }}
         run: docker compose build
 
       - name: Restart container ด้วย image ใหม่

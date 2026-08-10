@@ -12,6 +12,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # commit ที่ image นี้ถูก build มา — Dockerfile รับผ่าน ARG แล้วตั้งเป็น env ให้
+    # (ดู .github/workflows/deploy.yml ที่ส่ง github.sha เข้ามา)
+    #
+    # ที่ต้องมีคู่กับเลขเวอร์ชัน: เลขเวอร์ชันเป็นค่าที่คนตั้งเอง ถ้าลืมบั๊มมันจะค้างอยู่ค่าเดิม
+    # ตลอดไปแม้ deploy ไปแล้ว 50 รอบ ส่วนค่านี้มาจาก git โดยตรง จึงตอบคำถาม
+    # "โค้ดที่รันอยู่ตอนนี้คืออันล่าสุดหรือยัง" ได้จริงโดยไม่ต้องเชื่อว่าใครจำบั๊มเลข
+    # "dev" = build จากเครื่องตัวเองโดยไม่ผ่าน CI
+    app_git_sha: str = "dev"
+
     # GSM Module (SIM ตัวเดียว)
     gsm_serial_port: str = "/dev/ttyUSB2"
     gsm_baudrate: int = 115200

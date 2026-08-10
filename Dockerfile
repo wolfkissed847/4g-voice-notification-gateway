@@ -45,6 +45,12 @@ COPY alembic.ini .
 # เอา frontend ที่ build เสร็จจาก stage 1 มาไว้ที่ /app/static
 COPY --from=frontend-builder /frontend/dist ./static
 
+# commit ที่ image นี้ถูก build มา — ส่งเข้ามาจาก workflow (ดู .github/workflows/deploy.yml)
+# วางไว้ท้ายๆ โดยตั้งใจ: ค่านี้เปลี่ยนทุก commit ถ้าวางไว้ต้นไฟล์ Docker จะทิ้ง cache
+# ของทุกชั้นที่อยู่หลังมัน = build ใหม่หมดทุกรอบ (npm install/pip install ใหม่ทุกครั้ง)
+ARG GIT_SHA=dev
+ENV APP_GIT_SHA=$GIT_SHA
+
 RUN mkdir -p audio_cache logs
 
 EXPOSE 8000

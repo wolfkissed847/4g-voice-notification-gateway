@@ -16,6 +16,10 @@
 services:
   gateway:
     build:
+      # รับจาก env ของ shell ที่สั่ง build — workflow ตั้ง GIT_SHA ให้ก่อนเรียก docker compose
+      # build เองบนเครื่องโดยไม่ตั้งค่า จะได้ "dev" ซึ่งบอกได้ว่าไม่ได้มาจาก CI
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
       context: .
       dockerfile: Dockerfile
     image: gateway-local:latest

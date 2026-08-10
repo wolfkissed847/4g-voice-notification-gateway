@@ -135,6 +135,7 @@ class HistoryItem(BaseModel):
 
 class SystemInfoResponse(BaseModel):
     app_version: str
+    app_git_sha: str = Field("dev", description="commit 7 ตัวแรกที่ image นี้ถูก build มา")
     worker_started_at: str | None = None
     gsm_connected: bool
     gsm_port: str | None = None

@@ -67,7 +67,10 @@ def _iso_utc(dt: datetime.datetime | None) -> str | None:
 app = FastAPI(
     title="4G Automated Voice Notification Gateway",
     description="Self-hosted Robo-calling Gateway สำหรับแจ้งเตือนเหตุฉุกเฉินผ่านสาย 4G (GSM, SIM ตัวเดียว)",
-    version="0.3.0",
+    # บั๊มทุกครั้งที่แก้อะไรที่ผู้ใช้เห็นผล — ดูคู่กับ app_git_sha ที่มาจาก git โดยตรง
+    # 0.4.0: ปุ่มรีสตาร์ทโมดูล, ค่าการโทรบันทึกอัตโนมัติ, มิเตอร์ Pi, สำรอง DB อัตโนมัติ,
+    #        แก้ DB หายตอน deploy, แก้ธีมกระพริบ, การ์ดติดตามสัญญาณในหน้าคิว
+    version="0.4.0",
 )
 
 app.add_middleware(
@@ -234,13 +237,24 @@ def system_info(_user: str = Depends(get_current_user)):
     """สถานะรันไทม์ของระบบ (Overview → System Info) — worker uptime, GSM, ขนาด DB"""
     state = worker_state.get_state()
 
+    # นับไฟล์พ่วงของโหมด WAL ด้วย ไม่ใช่แค่ .db
+    #
+    # โหมด WAL เขียนของใหม่ลง .db-wal ก่อน แล้วค่อยยุบเข้า .db เป็นระยะ ช่วงที่โทรถี่ๆ
+    # ไฟล์ -wal โตได้ถึงหลาย MB ก่อนถูกยุบ ถ้านับแค่ .db ตัวเลขบนหน้าเว็บจะต่ำกว่า
+    # พื้นที่ที่ใช้จริงในจังหวะนั้น ซึ่งผิดวัตถุประสงค์ของการมีตัวเลขนี้
+    # (มีไว้เฝ้าดูว่า SD card จะเต็มไหม)
     db_size_bytes = None
     db_path = settings.database_url.removeprefix("sqlite:///")
     if db_path and os.path.isfile(db_path):
-        db_size_bytes = os.path.getsize(db_path)
+        db_size_bytes = sum(
+            os.path.getsize(p)
+            for p in (db_path, f"{db_path}-wal", f"{db_path}-shm")
+            if os.path.isfile(p)
+        )
 
     return SystemInfoResponse(
         app_version=app.version,
+        app_git_sha=settings.app_git_sha[:7],
         worker_started_at=_iso_utc(state.started_at),
         gsm_connected=state.gsm_connected,
         gsm_port=state.gsm_port,

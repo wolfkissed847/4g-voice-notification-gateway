@@ -162,6 +162,8 @@ export interface HistoryResponse {
 
 export interface SystemInfo {
   app_version: string;
+  /** commit 7 ตัวแรกที่ image นี้ถูก build มา ("dev" = build เองไม่ผ่าน CI) */
+  app_git_sha: string;
   worker_started_at: string | null;
   gsm_connected: boolean;
   gsm_port: string | null;
