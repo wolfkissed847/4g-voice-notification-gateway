@@ -7,19 +7,26 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+#
+# ⚠️ ทุกบรรทัดในบล็อกนี้ต้องขึ้นต้นด้วย / เสมอ — ห้ามลบเครื่องหมายนี้ออก
+# pattern ที่ไม่มี / นำหน้าจะแมตช์โฟลเดอร์ชื่อนั้น "ทุกชั้น" ไม่ใช่แค่ที่ราก
+# เคยเจอมาแล้ว: บรรทัด `lib/` ไปแมตช์ frontend/src/app/lib/ ด้วย ทำให้ operator.ts
+# กับ clipboard.ts ไม่ถูก commit ขึ้นไป — เครื่อง dev ยัง build ผ่านเพราะไฟล์อยู่ในดิสก์
+# แต่ Docker build บน Pi (ที่ clone ใหม่ล้วนๆ) พังทันทีด้วย "Could not resolve ../lib/operator"
+# ชื่อพวกนี้ (lib, build, dist, var, parts) เป็นชื่อโฟลเดอร์ที่โปรเจกต์ฝั่ง frontend ใช้กันปกติ
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
