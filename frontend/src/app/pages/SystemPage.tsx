@@ -102,8 +102,15 @@ export function SystemPage() {
           <div className="flex flex-wrap items-center gap-2">
             <TowerIcon className="size-5 shrink-0 text-ink-2" />
             <h2 className="text-lead font-bold">{T.sys_module_4g}</h2>
-            <Pill tone={gsm?.connected ? 'ok' : 'bad'}>
-              {gsm?.connected ? T.gsm_status_ok : T.sys_module_offline}
+            {/* ระหว่างรีสตาร์ทต้องไม่ขึ้น "ออนไลน์" สีเขียว — ตอนนั้นโทรออกไม่ได้จริงๆ
+                ถ้ายังเขียวอยู่คนอ่านจะเข้าใจว่าระบบพร้อมใช้ทั้งที่กำลังหาเครือข่ายใหม่อยู่
+                ใช้สีส้ม (เตือน) ไม่ใช่แดง เพราะไม่ใช่ความผิดปกติ เป็นสถานะชั่วคราวที่เราสั่งเอง */}
+            <Pill tone={gsm?.restarting ? 'warn' : gsm?.connected ? 'ok' : 'bad'}>
+              {gsm?.restarting
+                ? T.gsm_restarting
+                : gsm?.connected
+                  ? T.gsm_status_ok
+                  : T.sys_module_offline}
             </Pill>
           </div>
           {/* ค่าทั้งหมดมาจาก AT command จริงที่ worker เช็คไว้ตอน idle (AT+CSQ, AT+COPS?) */}

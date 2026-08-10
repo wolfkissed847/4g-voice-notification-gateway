@@ -188,15 +188,21 @@ function Header() {
             <Dot tone={info?.gsm_connected ? 'ok' : 'bad'} pulse={info?.gsm_connected} />
           </NavLink>
 
-          {/* แสดงเป็น TH/EN สองตัวอักษรเท่ากันเสมอ — เดิมสลับระหว่าง "EN" กับ "ไทย"
-              ซึ่งกว้างไม่เท่ากัน ปุ่มเลยหด-ขยายทุกครั้งที่สลับภาษาแล้วดันปุ่มข้างๆ ขยับตาม */}
+          {/* ธง + รหัส 2 ตัวอักษรของ "ภาษาที่จะสลับไป" — เดิมสลับระหว่าง "EN" กับ "ไทย"
+              ซึ่งกว้างไม่เท่ากัน ปุ่มเลยหด-ขยายทุกครั้งที่สลับแล้วดันปุ่มข้างๆ ขยับตาม
+              ตอนนี้ทั้งสองสถานะเป็นธง+2 ตัวอักษรเหมือนกัน ความกว้างจึงคงที่
+
+              มีรหัสกำกับด้วยไม่ใช่ธงเปล่าๆ เพราะธงอย่างเดียวกำกวมว่าหมายถึง "ภาษาปัจจุบัน"
+              หรือ "ภาษาที่จะเปลี่ยนไป" — ตัวอักษรช่วยตัดความกำกวมนั้น
+              (ไม่ใช้ emoji ธงเพราะ Windows เรนเดอร์ออกมาเป็นตัวอักษร 2 ตัว ไม่ใช่รูปธง) */}
           <button
             type="button"
             onClick={toggleLang}
-            className={cn(chipCls, 'w-[42px] text-center font-bold')}
+            className={cn(chipCls, 'flex items-center gap-1.5 ps-1.5 pe-2')}
             aria-label={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
             title={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
           >
+            {lang === 'th' ? <FlagUK /> : <FlagTH />}
             {lang === 'th' ? 'EN' : 'TH'}
           </button>
 
@@ -226,5 +232,36 @@ function Header() {
         </div>
       </div>
     </header>
+  );
+}
+
+/* ── ธงชาติ ───────────────────────────────────────────────────────────────
+   วาดเป็น SVG เอง ไม่ใช้ emoji — Windows ไม่มีฟอนต์ธงชาติ emoji ธงจะกลายเป็น
+   ตัวอักษรสองตัวในกล่อง (🇹🇭 → "TH") ซึ่งซ้ำกับรหัสที่มีอยู่แล้วข้างๆ พอดี
+   ขนาด 18×12 (อัตราส่วน 3:2) ขอบมนนิดหน่อยให้เข้ากับปุ่มทรงกลม */
+
+const flagCls = 'shrink-0 rounded-[2px]';
+
+/** ธงไตรรงค์ — แดง/ขาว/น้ำเงิน/ขาว/แดง สัดส่วนแถบ 1:1:2:1:1 */
+function FlagTH() {
+  return (
+    <svg viewBox="0 0 18 12" width={18} height={12} className={flagCls} aria-hidden>
+      <rect width="18" height="12" fill="#A51931" />
+      <rect y="2" width="18" height="8" fill="#F4F5F8" />
+      <rect y="4" width="18" height="4" fill="#2D2A4A" />
+    </svg>
+  );
+}
+
+/** Union Jack แบบย่อ — ที่ 18px กว้าง รายละเอียดเต็มจะเละ เหลือแค่กากบาททแยงกับกากบาทตรง */
+function FlagUK() {
+  return (
+    <svg viewBox="0 0 60 40" width={18} height={12} className={flagCls} aria-hidden>
+      <rect width="60" height="40" fill="#012169" />
+      <path d="M0 0 60 40M60 0 0 40" stroke="#FFF" strokeWidth="8" />
+      <path d="M0 0 60 40M60 0 0 40" stroke="#C8102E" strokeWidth="4" />
+      <path d="M30 0V40M0 20H60" stroke="#FFF" strokeWidth="13" />
+      <path d="M30 0V40M0 20H60" stroke="#C8102E" strokeWidth="7" />
+    </svg>
   );
 }
