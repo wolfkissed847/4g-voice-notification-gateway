@@ -1,8 +1,30 @@
 // ─── Fetch wrapper ────────────────────────────────────────────────────────────
 // Base URL, JWT header injection, FastAPI {detail} error handling, 401 redirect.
 
+/**
+ * ที่อยู่ของ API
+ *
+ * ── ทำไม production ต้องเป็น window.location.origin ────────────────────────
+ * FastAPI เสิร์ฟทั้งหน้าเว็บและ API จาก origin เดียวกัน (ดู app/main.py ท้ายไฟล์)
+ * ยิงแบบ same-origin จึงถูกต้องเสมอไม่ว่าจะเปิดจากที่ไหน:
+ *   http://192.168.1.185:8000   (ในวง LAN)
+ *   https://4gcall.example.dev  (ผ่าน Cloudflare Tunnel)
+ *
+ * เดิม default เป็น "http://localhost:8000" ซึ่งถูกฝังลงไฟล์ JS ตอน build
+ * (Vite แทนค่า import.meta.env ตอน build ไม่ใช่ตอนรัน) ผลคือเปิดเว็บผ่าน tunnel
+ * แล้วเบราว์เซอร์ยิง API ไปที่ localhost ของ "เครื่องคนเปิดเว็บ" ไม่ใช่ของ Pi
+ * → Chrome เด้งขอสิทธิ์ Local Network Access แล้ว login ไม่ผ่านเพราะไม่มีเซิร์ฟเวอร์ตรงนั้น
+ *
+ * ── ทำไม dev ยังต้องเป็น localhost:8000 ───────────────────────────────────
+ * ตอน `npm run dev` หน้าเว็บอยู่ที่พอร์ต 5173 แต่ API อยู่ที่ 8000 คนละ origin กัน
+ * ถ้าใช้ origin ของหน้าเว็บจะยิงไปที่ 5173 ซึ่งไม่มี API อยู่
+ * (import.meta.env.DEV เป็นค่าคงที่ตอน build — โค้ดสาขานี้จึงถูกตัดทิ้งจาก bundle จริง)
+ *
+ * ตั้ง VITE_API_BASE_URL ทับได้ทั้งสองกรณี ถ้าต้องแยกโดเมน API ออกไปจริงๆ
+ */
 export const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) || "http://localhost:8000";
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  (import.meta.env.DEV ? "http://localhost:8000" : window.location.origin);
 
 export const TOKEN_STORAGE_KEY = "gateway_jwt";
 
