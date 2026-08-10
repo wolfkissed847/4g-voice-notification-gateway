@@ -259,7 +259,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
                 ช่องนี้เหลือไว้เป็น "ค่าสำรอง" ใช้ตอนกดทดสอบจาก dashboard ที่ไม่ได้ยิงผ่านอุปกรณ์ */}
             <div>
               <label className="text-caption text-ink-2 block mb-1.5">
-                {T.group_label} <span className="text-micro text-ink-2">{T.optional}</span>
+                {T.et_group_label}
               </label>
               <select value={form.group_id} onChange={(e) => setForm((f) => ({ ...f, group_id: e.target.value ? Number(e.target.value) : "" }))}
                 className={`${inputCls} [color-scheme:light] dark:[color-scheme:dark]`}>

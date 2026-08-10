@@ -113,7 +113,7 @@ export function DeviceConfigPage() {
       toast.error(T.allowed_events_none);
       return;
     }
-    await sendTestNotify({ event_type_code: first.code });
+    await sendTestNotify({ event_type_code: first.code, device_id: deviceId });
     toast.success(T.toast_created);
   };
 

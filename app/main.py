@@ -40,7 +40,7 @@ from app.schemas import (
     NotifyRequest, NotifyResponse,
     GsmDetailResponse, GsmRestartResponse, PiDetailResponse,
     QueueStatusItem, QueueStatusResponse,
-    SystemInfoResponse,
+    SystemInfoResponse, TestNotifyRequest,
 )
 from app.system_metrics import get_pi_metrics
 
@@ -176,8 +176,9 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> C
         raise HTTPException(
             status_code=400,
             detail=(
-                f"เหตุการณ์ '{event_type.code}' ยังไม่ได้ผูกกลุ่มผู้รับ — "
-                "ตั้งได้ที่หน้าตั้งค่าอุปกรณ์ (เลือกกลุ่มข้างเหตุการณ์นี้)"
+                f"เหตุการณ์ '{event_type.code}' ยังไม่รู้ว่าต้องโทรหากลุ่มไหน — "
+                "เลือกกลุ่มข้างเหตุการณ์นี้ที่หน้าตั้งค่าอุปกรณ์ "
+                "(หรือตั้งกลุ่มเริ่มต้นให้เหตุการณ์นี้ ถ้าต้องการกดทดสอบจากหน้าประเภทเหตุการณ์ได้ด้วย)"
             ),
         )
 
@@ -566,10 +567,21 @@ def delete_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depe
 
 @app.post("/test/notify", response_model=NotifyResponse)
 def test_notify(
-    request: NotifyRequest, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
+    request: TestNotifyRequest, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
 ):
-    """เข้าคิวจริงเหมือน /notify ทุกประการ ใช้สำหรับกดทดสอบจากหน้า Event Types โดยไม่ต้องยิง API ภายนอก"""
-    job = _resolve_and_enqueue(db, request)
+    """
+    เข้าคิวจริงเหมือน /notify ทุกประการ ใช้กดทดสอบจากหน้าเว็บโดยไม่ต้องยิง API จากอุปกรณ์จริง
+
+    ส่ง device_id มาด้วยจะจำลองเป็นอุปกรณ์ตัวนั้นทั้งหมด — ใช้กลุ่มผู้รับที่ผูกไว้กับอุปกรณ์นั้น
+    ตรวจสิทธิ์ตามที่อุปกรณ์นั้นมี และชื่ออุปกรณ์ถูกพูดในสายจริง
+    ทดสอบแล้วจึงตรงกับสิ่งที่จะเกิดขึ้นจริงตอนอุปกรณ์ยิงเข้ามาเอง ไม่ใช่ทดสอบคนละเส้นทาง
+    """
+    device = None
+    if request.device_id is not None:
+        device = db.query(ApiKey).filter(ApiKey.id == request.device_id).first()
+        if device is None:
+            raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์ที่ระบุ")
+    job = _resolve_and_enqueue(db, request, api_key=device)
     return NotifyResponse(job_id=job.id, status=job.status.value)
 
 

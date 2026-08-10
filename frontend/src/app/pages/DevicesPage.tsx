@@ -84,7 +84,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
       return;
     }
     try {
-      await sendTestNotify({ event_type_code: first.code });
+      await sendTestNotify({ event_type_code: first.code, device_id: device.id });
       toast.success(T.toast_created);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : T.error_generic);

@@ -35,6 +35,9 @@ export function sendTestNotify(data: {
   event_type_code: string;
   message?: string;
   variables?: Record<string, string>;
+  /** จำลองเป็นอุปกรณ์ตัวนี้ — จำเป็นตั้งแต่กลุ่มผู้รับผูกที่คู่ (อุปกรณ์ + เหตุการณ์)
+   *  ไม่ส่งมา ระบบไม่มีทางรู้ว่าต้องโทรหากลุ่มไหน */
+  device_id?: number;
 }): Promise<NotifyResponse> {
   return apiRequest<NotifyResponse>("/test/notify", { method: "POST", body: data });
 }
