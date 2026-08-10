@@ -20,7 +20,6 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement, ReactNode, SVGProps } from 'react';
-import { useNavigate } from 'react-router';
 
 import { cn } from '@/app/components/ui/utils';
 import { getHistory } from '../api/history';
@@ -146,7 +145,6 @@ function nodeStateAt(index: number, snap: Snapshot): NodeState {
 
 export function SignalFlowMonitor() {
   const { T } = useApp();
-  const navigate = useNavigate();
   const [pending, setPending] = useState<QueueStatusItem[]>([]);
   const [latest, setLatest] = useState<HistoryItem | null>(null);
   const [gsmConnected, setGsmConnected] = useState(false);
@@ -299,30 +297,12 @@ export function SignalFlowMonitor() {
           ) : null}
         </div>
 
-        <div className="ms-auto flex shrink-0 items-center gap-2">
-          <span
-            className="max-w-[190px] truncate text-end text-[12.5px] leading-tight"
-            style={{ color: snap.color }}
-          >
-            {headline}
-          </span>
-          <button
-            type="button"
-            onClick={() => navigate('/system')}
-            aria-label={T.flow_open_settings}
-            title={T.flow_open_settings}
-            className="flex items-center justify-center rounded-full transition-colors"
-            style={{
-              width: 28,
-              height: 28,
-              border: '1px solid var(--sfm-hairline)',
-              background: 'var(--sfm-surface-sunk)',
-              color: 'var(--sfm-muted)',
-            }}
-          >
-            <GearIcon />
-          </button>
-        </div>
+        <span
+          className="ms-auto max-w-[190px] shrink-0 truncate text-end text-[12.5px] leading-tight"
+          style={{ color: snap.color }}
+        >
+          {headline}
+        </span>
       </header>
 
       {/* ── 2 ป้ายหมวด ─────────────────────────────────────────────────── */}
@@ -688,15 +668,6 @@ const NODE_ICONS: Record<NodeId, (props: SVGProps<SVGSVGElement>) => ReactElemen
   tower: TowerIcon,
   phone: PhoneIcon,
 };
-
-function GearIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...iconBase} width={16} height={16} strokeWidth={1.7} {...props}>
-      <circle cx="12" cy="12" r="3.2" />
-      <path d="M12 2.6v2.6M12 18.8v2.6M21.4 12h-2.6M5.2 12H2.6M18.6 5.4l-1.9 1.9M7.3 16.7l-1.9 1.9M18.6 18.6l-1.9-1.9M7.3 7.3 5.4 5.4" />
-    </svg>
-  );
-}
 
 function CheckIcon(props: SVGProps<SVGSVGElement>) {
   return (
