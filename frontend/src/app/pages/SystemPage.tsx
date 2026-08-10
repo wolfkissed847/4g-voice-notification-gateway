@@ -17,6 +17,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { Moon, Sun } from 'lucide-react';
 
@@ -392,7 +393,19 @@ export function SystemPage() {
   );
 }
 
-/** กล่องยืนยันแบบง่าย — ใช้ที่เดียวในหน้านี้ จึงยังไม่ยกไปเป็น component กลาง */
+/**
+ * กล่องยืนยันแบบง่าย — ใช้ที่เดียวในหน้านี้ จึงยังไม่ยกไปเป็น component กลาง
+ *
+ * ── ทำไมต้องใช้ createPortal ─────────────────────────────────────────────
+ * `position: fixed` ปกติอ้างอิงกับขอบจอ แต่จะเปลี่ยนไปอ้างอิงกับ "บรรพบุรุษที่มี transform"
+ * แทนทันทีถ้ามีตัวใดตัวหนึ่งในสายมี transform อยู่ (กฎ containing block ของ CSS)
+ *
+ * AppShell ห่อเนื้อหาทุกหน้าด้วย <div className="animate-fade-up"> ซึ่งเป็นแอนิเมชัน
+ * ที่ขยับด้วย translateY — กล่องนี้จึงถูกจัดกึ่งกลางของ "กล่องเนื้อหาทั้งหน้า" ไม่ใช่กึ่งกลางจอ
+ * พอหน้ายาวกว่าจอ (หน้านี้ยาวมาก) กล่องเลยไปโผล่ต่ำกว่ากลางจอเยอะ
+ *
+ * ย้ายไปแขวนที่ document.body ตรงๆ ก็หลุดออกจากสายที่มี transform → กลับมากลางจอจริง
+ */
 function ConfirmDialog({
   open,
   title,
@@ -411,7 +424,7 @@ function ConfirmDialog({
   onCancel: () => void;
 }) {
   if (!open) return null;
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
       role="dialog"
@@ -431,7 +444,8 @@ function ConfirmDialog({
           </Btn>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

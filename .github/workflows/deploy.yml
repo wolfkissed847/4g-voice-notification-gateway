@@ -8,6 +8,16 @@ on:
     branches: [main]
   workflow_dispatch: {}  # กดรันเองได้จากหน้า Actions ถ้าต้องการ
 
+# push ติดๆ กันหลายครั้ง ให้ยกเลิกรอบเก่าที่ยังไม่เสร็จ แล้ว build เฉพาะ commit ล่าสุด
+#
+# ทำไมต้องมี: runner มีตัวเดียว (Pi) จึงทำได้ทีละ job ถ้า push 8 ครั้งใน 50 นาที
+# Pi จะ build ครบทั้ง 8 รอบเรียงกันโดยไม่ได้พักเลย ทั้งที่ 7 รอบแรกเป็นโค้ดที่ถูกแทนที่ไปแล้ว
+# ผลเสียคือ SD card ถูกเขียนหนัก (จุดที่พังบ่อยที่สุดของ Pi), CPU ร้อนต่อเนื่อง
+# และ container ถูก restart ทุกรอบ = เว็บสะดุดครั้งละ 2-3 วิ ซ้ำๆ โดยไม่จำเป็น
+concurrency:
+  group: deploy-pi
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     # ใช้แค่ label `self-hosted` (ทุก runner ได้ label นี้อัตโนมัติตอน config)
