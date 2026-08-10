@@ -18,6 +18,7 @@ import { Dot, PageHeader } from '../components/primitives';
 import { StatusBadge } from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
 import { usePolling } from '../lib/usePolling';
+import { SignalFlowMonitor } from '../widgets/SignalFlowMonitor';
 
 /** กริดชุดเดียวใช้ทั้งหัวตารางและแถว — เปลี่ยนคอลัมน์ที่เดียว */
 const queueGridCls =
@@ -40,6 +41,13 @@ export function QueuePage() {
           </span>
         }
       />
+
+      {/* การ์ดติดตามสัญญาณอยู่เหนือตาราง — ตารางบอกว่า "มีอะไรรออยู่บ้าง" (ภาพนิ่งของคิว)
+          ส่วนการ์ดนี้บอกว่า "ตอนนี้กำลังทำอะไรกับงานที่หยิบไปแล้ว" ซึ่งเป็นคำถามแรก
+          ที่คนเปิดหน้านี้ตอนเกิดเหตุอยากรู้ — ตารางอย่างเดียวเห็นแค่สถานะ in_progress
+          แต่ไม่รู้ว่าค้างอยู่ขั้นไหน (แปลงเสียง / อัปโหลด / กำลังโทร)
+          ใช้ component ตัวเดียวกับหน้าภาพรวม ดึงข้อมูลเองในตัว ไม่ต้องส่ง prop */}
+      <SignalFlowMonitor />
 
       <div className="overflow-x-auto overscroll-x-contain rounded-card border border-line bg-surface shadow-card">
         <div

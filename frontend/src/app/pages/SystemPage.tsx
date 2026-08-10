@@ -28,13 +28,20 @@ import { useApp } from '../context/AppContext';
 import { operatorName } from '../lib/operator';
 import type { AppConfig, GsmDetail, PiDetail, SystemInfo } from '../types';
 
+/** ขอบเขตที่ backend ยอมรับ — ต้องตรงกับ min/max ของแต่ละช่องและ validation ฝั่ง /config */
+const CFG_LIMITS = {
+  call_retry_count: [0, 10],
+  call_retry_delay_seconds: [5, 300],
+  call_ring_timeout_seconds: [10, 120],
+} as const;
+
 export function SystemPage() {
   const { T, dark, toggleDark } = useApp();
   const [gsm, setGsm] = useState<GsmDetail | null>(null);
   const [pi, setPi] = useState<PiDetail | null>(null);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [cfg, setCfg] = useState<AppConfig | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [confirmRestart, setConfirmRestart] = useState(false);
   // จำว่ารอบก่อนกำลังรีสตาร์ทอยู่ไหม เพื่อจับ "จังหวะที่เพิ่งเปลี่ยนจากกำลังทำ → เสร็จ"
   // แล้วเด้ง toast ครั้งเดียว ถ้าดูจาก restart_result อย่างเดียวจะเด้งซ้ำทุก 2 วิที่ poll
@@ -73,19 +80,56 @@ export function SystemPage() {
     };
   }, []);
 
-  const saveConfig = async () => {
-    if (!cfg) return;
-    setSaving(true);
+  /**
+   * บันทึกค่าการโทรอัตโนมัติ — ไม่มีปุ่มบันทึกแล้ว
+   *
+   * หน่วง 700ms หลังหยุดแก้ค่อยยิง ไม่ใช่ยิงทุกครั้งที่ตัวเลขเปลี่ยน เพราะ:
+   *   - กดลูกศรขึ้น/ลงรัวๆ จาก 2 ไป 8 = ยิง 6 ครั้งติดถ้าไม่หน่วง
+   *   - พิมพ์ "30" ผ่านสถานะ "3" ก่อนเสมอ ซึ่งเป็นค่าที่ไม่ได้ตั้งใจบันทึก
+   *
+   * clamp ตอนจะบันทึกไม่ใช่ตอนพิมพ์ — ถ้า clamp ทันทีที่พิมพ์ คนที่จะพิมพ์ "30"
+   * ในช่องที่ min=5 จะโดนแก้เป็น 5 ตั้งแต่กดเลข 3 แล้วพิมพ์ต่อไม่ได้
+   */
+  const cfgRef = useRef<AppConfig | null>(null);
+  cfgRef.current = cfg;
+  const saveTimer = useRef<number | null>(null);
+
+  const flushSave = async () => {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const current = cfgRef.current;
+    if (!current) return;
+
+    const clamped: AppConfig = { ...current };
+    for (const [key, [lo, hi]] of Object.entries(CFG_LIMITS) as [keyof typeof CFG_LIMITS, [number, number]][]) {
+      const n = Number(current[key]);
+      clamped[key] = Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : lo;
+    }
+    setCfg(clamped);
+
+    setSaveState('saving');
     try {
-      const updated = await updateConfig(cfg);
-      setCfg(updated);
-      toast.success(T.toast_updated);
-    } finally {
-      setSaving(false);
+      setCfg(await updateConfig(clamped));
+      setSaveState('saved');
+    } catch (e) {
+      setSaveState('failed');
+      toast.error(e instanceof Error ? e.message : T.error_generic);
     }
   };
 
-  const set =<K extends keyof AppConfig>(k: K, v: AppConfig[K]) => setCfg((c) => (c ? { ...c, [k]: v } : c));
+  const set = <K extends keyof AppConfig>(k: K, v: AppConfig[K]) => {
+    setCfg((c) => (c ? { ...c, [k]: v } : c));
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => void flushSave(), 700);
+  };
+
+  // ถ้าออกจากหน้าไปตอนที่ยังหน่วงอยู่ ค่าที่เพิ่งแก้จะหายไปเงียบๆ — เคลียร์ตัวจับเวลาทิ้ง
+  // (กรณีนี้กันได้อีกชั้นด้วย onBlur ที่ช่องกรอก ซึ่งบันทึกทันทีตอนคลิกออกจากช่อง)
+  useEffect(() => () => {
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+  }, []);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -230,7 +274,26 @@ export function SystemPage() {
       <p className="mt-1 font-mono text-micro tracking-[0.12em] text-ink-2 uppercase">{T.sys_section_call}</p>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-3.5">
         <Card className="col-span-full flex flex-col gap-3 p-4">
-          <h2 className="text-lead font-bold">{T.sys_call_config}</h2>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-lead font-bold">{T.sys_call_config}</h2>
+            {/* สถานะการบันทึกอยู่ตรงนี้แทนปุ่ม — ไม่มีปุ่มแล้ว ผู้ใช้จึงต้องมีอะไรยืนยันว่า
+                ที่แก้ไปถูกบันทึกจริง ไม่งั้นจะไม่แน่ใจแล้วกดรีเฟรชเช็คเอง
+                ไม่ใช้ toast เพราะจะเด้งทุกครั้งที่ขยับเลข รบกวนเกินไปสำหรับการกระทำเล็กๆ แบบนี้ */}
+            {saveState !== 'idle' ? (
+              <span
+                className={cn(
+                  'font-mono text-micro',
+                  saveState === 'failed' ? 'text-bad' : saveState === 'saved' ? 'text-ok' : 'text-ink-2',
+                )}
+              >
+                {saveState === 'saving'
+                  ? T.cfg_saving
+                  : saveState === 'saved'
+                    ? `✓ ${T.cfg_saved}`
+                    : T.cfg_save_failed}
+              </span>
+            ) : null}
+          </div>
           {cfg ? (
             <>
               {/* ช่องกรอกกว้าง 90px พอดีเลข 3 หลัก — เดิมยืดเต็มคอลัมน์ในการ์ดที่กว้างทั้งหน้า
@@ -244,6 +307,7 @@ export function SystemPage() {
                   max={10}
                   value={cfg.call_retry_count}
                   onChange={(v) => set('call_retry_count', v)}
+                  onCommit={() => void flushSave()}
                   help={T.retry_count_help}
                   example={T.retry_count_example(cfg.call_retry_count)}
                 />
@@ -254,6 +318,7 @@ export function SystemPage() {
                   max={300}
                   value={cfg.call_retry_delay_seconds}
                   onChange={(v) => set('call_retry_delay_seconds', v)}
+                  onCommit={() => void flushSave()}
                   help={T.retry_delay_help}
                   example={T.retry_delay_example(cfg.call_retry_delay_seconds)}
                 />
@@ -264,6 +329,7 @@ export function SystemPage() {
                   max={120}
                   value={cfg.call_ring_timeout_seconds}
                   onChange={(v) => set('call_ring_timeout_seconds', v)}
+                  onCommit={() => void flushSave()}
                   help={T.ring_timeout_help}
                   example={T.ring_timeout_example(cfg.call_ring_timeout_seconds)}
                 />
@@ -284,9 +350,6 @@ export function SystemPage() {
               </div>
 
               <p className="text-caption leading-[1.8] text-ink-2">{T.sys_call_config_note}</p>
-              <Btn variant="primary" className="self-start" onClick={() => void saveConfig()} disabled={saving}>
-                {T.save}
-              </Btn>
             </>
           ) : null}
         </Card>
@@ -421,6 +484,7 @@ function ConfigRow({
   max,
   value,
   onChange,
+  onCommit,
   help,
   example,
 }: {
@@ -430,6 +494,7 @@ function ConfigRow({
   max: number;
   value: number;
   onChange: (v: number) => void;
+  onCommit: () => void;
   help: string;
   example: string;
 }) {
@@ -445,6 +510,8 @@ function ConfigRow({
             className={cn(inputCls, 'w-[90px] font-mono')}
             value={value}
             onChange={(e) => onChange(Number(e.target.value))}
+            // บันทึกทันทีตอนคลิกออกจากช่อง ไม่ต้องรอครบ 700ms — กันค่าหายถ้ารีบเปลี่ยนหน้าต่อ
+            onBlur={onCommit}
           />
           <span className="text-caption whitespace-nowrap text-ink-2">{unit}</span>
         </div>
