@@ -139,9 +139,17 @@ export function DeviceConfigPage() {
 
   // ตัวอย่างทั้งหมดผูกกับค่าจริงของอุปกรณ์นี้ ไม่ใช่ placeholder ให้ไปแทนค่าเอง
   const sampleCode = pickedTypes[0]?.code ?? '<event_type_code>';
-  const curlCode = `curl -X POST ${API_BASE_URL}/notify \
-  -H "X-API-Key: ${device.key_prefix}••••••" \
-  -H "Content-Type: application/json" \
+  // ใช้ key เต็มจริงถ้าถอดรหัสได้ — ก็อปไปวางใน firmware ได้ทันทีโดยไม่ต้องแทนค่าเอง
+  // ถ้าเป็นอุปกรณ์ที่สร้างก่อนระบบเก็บ key ไว้ได้ ถอยไปแสดงแบบปิดบังตามเดิม
+  const keyForCode = fullKey ?? `${device.key_prefix}••••••`;
+
+  // ⚠️ ต้องเป็น \\ ไม่ใช่ \ — ใน template literal ของ JS เครื่องหมาย \ ท้ายบรรทัดคือ
+  // "ต่อบรรทัด" (กลืน newline ทิ้ง) ผลคือคำสั่งทั้งหมดถูกยุบเหลือบรรทัดเดียวยาวเหยียด
+  // ต้องเลื่อนแนวนอนอ่าน และก็อปไปวางแล้วก็ยังใช้ได้ แต่ดูไม่ออกว่ามีกี่บรรทัด
+  // เราต้องการ backslash จริงๆ ในผลลัพธ์ (เป็นตัวต่อบรรทัดของ shell) จึงต้อง escape เป็น \\
+  const curlCode = `curl -X POST ${API_BASE_URL}/notify \\
+  -H "X-API-Key: ${keyForCode}" \\
+  -H "Content-Type: application/json" \\
   -d '{"event_type_code": "${sampleCode}"}'`;
 
   return (
