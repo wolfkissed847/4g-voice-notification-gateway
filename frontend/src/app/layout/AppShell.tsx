@@ -175,17 +175,24 @@ function Header() {
               ข้อความเต็ม ("ออนไลน์"/"ออฟไลน์") ยังอยู่ใน title + aria-label ให้ทั้ง tooltip
               ตอนชี้เมาส์และ screen reader — คนที่มองไม่เห็นสีจึงยังรู้สถานะได้
               ตอนออฟไลน์ขอบเป็นสีแดงด้วย ไม่ได้พึ่งจุดสีอย่างเดียวในการเตือน */}
+          {/* ระหว่างรอผลรอบแรก (info === undefined) ต้องเป็นสีกลาง ไม่ใช่แดง
+              เดิมเขียน info?.gsm_connected ซึ่งตอนยังไม่มีข้อมูลจะได้ undefined = falsy
+              เท่ากับ "โมดูลไม่พร้อม" ผู้ใช้จึงเห็นจุดแดงแวบหนึ่งทุกครั้งที่เปลี่ยนหน้า/รีเฟรช
+              ทั้งที่ระบบปกติดี — แสดงสัญญาณเตือนที่ไม่จริงแม้แค่วินาทีเดียวก็ไม่ควร */}
           <NavLink
             to="/system"
-            title={info?.gsm_connected ? T.module_ready : T.module_not_ready}
-            aria-label={info?.gsm_connected ? T.module_ready : T.module_not_ready}
+            title={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
+            aria-label={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
             className={cn(
               chipCls,
               'grid size-[30px] place-items-center px-0',
-              !info?.gsm_connected && 'border-bad hover:border-bad',
+              info?.gsm_connected === false && 'border-bad hover:border-bad',
             )}
           >
-            <Dot tone={info?.gsm_connected ? 'ok' : 'bad'} pulse={info?.gsm_connected} />
+            <Dot
+              tone={info == null ? 'muted' : info.gsm_connected ? 'ok' : 'bad'}
+              pulse={info?.gsm_connected === true}
+            />
           </NavLink>
 
           {/* ธงอย่างเดียว ขนาด 30px เท่ากับปุ่มไอคอนอื่นในแถว — แสดงธงของ "ภาษาที่จะสลับไป"

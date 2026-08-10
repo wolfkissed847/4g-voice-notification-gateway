@@ -9,6 +9,32 @@
       <meta name="description" content="Monitor IoT device connectivity with an animated status widget that visually represents signal strength and call status for seamless communication." />
       <meta name="robots" content="noindex, nofollow" />
       <style>html, body { height: 100%; margin: 0; overflow-x: hidden; } #root { height: 100%; }</style>
+
+      <!-- ตั้งธีมก่อนหน้าเว็บวาดครั้งแรก — ต้องเป็น inline script ใน <head> เท่านั้น
+           เดิม React เป็นคนใส่คลาส .dark/.light ผ่าน useEffect ซึ่งทำงาน "หลัง" ดาวน์โหลด
+           ไฟล์ JS เสร็จและ mount แล้ว ระหว่างนั้นหน้าเว็บวาดด้วยธีมสว่าง (ค่าเริ่มต้น) ไปก่อน
+           คนที่ใช้ธีมมืดจึงเห็นจอขาวแวบหนึ่งทุกครั้งที่รีเฟรช (flash of wrong theme)
+           สคริปต์นี้เล็กและทำงานแบบ synchronous จึงเสร็จก่อนเบราว์เซอร์วาดเฟรมแรก
+
+           ⚠️ ตรรกะต้องตรงกับ getStoredDark() ใน AppContext.tsx เป๊ะๆ ถ้าแก้ที่นั่นต้องแก้ที่นี่ด้วย
+           ไม่งั้นจะกลับมากระพริบอีกแบบเงียบๆ (ตั้งคลาสไว้แบบหนึ่ง แล้ว React มาเปลี่ยนทีหลัง) -->
+      <script>
+        (function () {
+          try {
+            var stored = localStorage.getItem('gateway_dark');
+            var dark = stored !== null
+              ? stored === 'true'
+              : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var root = document.documentElement;
+            root.classList.toggle('dark', dark);
+            root.classList.toggle('light', !dark);
+            // บอกเบราว์เซอร์ด้วย เพื่อให้ scrollbar/ช่องกรอกของระบบเป็นโทนเดียวกันตั้งแต่เฟรมแรก
+            root.style.colorScheme = dark ? 'dark' : 'light';
+          } catch (e) {
+            /* localStorage ถูกปิด (โหมดส่วนตัวบางเบราว์เซอร์) — ปล่อยให้ใช้ธีมเริ่มต้นไป */
+          }
+        })();
+      </script>
       
     </head>
 

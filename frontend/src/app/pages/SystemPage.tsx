@@ -149,12 +149,16 @@ export function SystemPage() {
             {/* ระหว่างรีสตาร์ทต้องไม่ขึ้น "ออนไลน์" สีเขียว — ตอนนั้นโทรออกไม่ได้จริงๆ
                 ถ้ายังเขียวอยู่คนอ่านจะเข้าใจว่าระบบพร้อมใช้ทั้งที่กำลังหาเครือข่ายใหม่อยู่
                 ใช้สีส้ม (เตือน) ไม่ใช่แดง เพราะไม่ใช่ความผิดปกติ เป็นสถานะชั่วคราวที่เราสั่งเอง */}
-            <Pill tone={gsm?.restarting ? 'warn' : gsm?.connected ? 'ok' : 'bad'}>
-              {gsm?.restarting
-                ? T.gsm_restarting
-                : gsm?.connected
-                  ? T.gsm_status_ok
-                  : T.sys_module_offline}
+            {/* gsm === null = ยังโหลดไม่เสร็จ ต้องเป็นสีกลาง ไม่ใช่แดง "โมดูลไม่พร้อม"
+                ซึ่งเป็นการเตือนเรื่องที่ยังไม่รู้ว่าจริงหรือเปล่า */}
+            <Pill tone={gsm === null ? 'muted' : gsm.restarting ? 'warn' : gsm.connected ? 'ok' : 'bad'}>
+              {gsm === null
+                ? T.loading
+                : gsm.restarting
+                  ? T.gsm_restarting
+                  : gsm.connected
+                    ? T.gsm_status_ok
+                    : T.sys_module_offline}
             </Pill>
           </div>
           {/* ค่าทั้งหมดมาจาก AT command จริงที่ worker เช็คไว้ตอน idle (AT+CSQ, AT+COPS?) */}

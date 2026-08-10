@@ -147,7 +147,9 @@ export function SignalFlowMonitor() {
   const { T } = useApp();
   const [pending, setPending] = useState<QueueStatusItem[]>([]);
   const [latest, setLatest] = useState<HistoryItem | null>(null);
-  const [gsmConnected, setGsmConnected] = useState(false);
+  // null = ยังไม่รู้ (โหลดรอบแรกยังไม่เสร็จ) ต่างจาก false ที่แปลว่ารู้แล้วว่าโมดูลหลุด
+  // เดิมเริ่มที่ false ป้ายแดง "โมดูลยังไม่เชื่อมต่อ" จึงโผล่แวบหนึ่งทุกครั้งที่เข้าหน้า
+  const [gsmConnected, setGsmConnected] = useState<boolean | null>(null);
   const [currentStep, setCurrentStep] = useState<CallStep | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   // กะพริบโหนด API ตอนมีงานใหม่เข้ามา — ตรวจจากเลขงานล่าสุดที่เพิ่มขึ้นจริง
@@ -283,7 +285,7 @@ export function SignalFlowMonitor() {
           </span>
           {/* ดีไซน์ไม่มีป้ายนี้ แต่ระบบจริงต้องมี — ถ้าโมดูลหลุด ทุกอย่างบนการ์ดนี้
               หยุดเดินโดยไม่มีอะไรบอกสาเหตุเลย ผู้ใช้จะนึกว่าเว็บค้าง */}
-          {!gsmConnected ? (
+          {gsmConnected === false ? (
             <span
               className="shrink-0 rounded-full px-2 py-px text-[10.5px] whitespace-nowrap"
               style={{
