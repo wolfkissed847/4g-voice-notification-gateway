@@ -212,7 +212,12 @@ class CallJob(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     message = Column(Text, nullable=False)
-    event_type_id = Column(Integer, ForeignKey("event_types.id"), nullable=True)
+    # SET NULL + เก็บ snapshot ชื่อ/รหัสไว้ ด้วยเหตุผลเดียวกับ api_key_id ด้านล่าง:
+    # ลบประเภทเหตุการณ์ทิ้งแล้วประวัติการโทรเดิมต้องไม่หายและต้องยังอ่านรู้เรื่องว่าเป็นเหตุอะไร
+    # เดิมเป็น NO ACTION ทำให้ลบประเภทเหตุการณ์ที่เคยมีการโทรไม่ได้เลย (FK constraint failed → 500)
+    event_type_id = Column(Integer, ForeignKey("event_types.id", ondelete="SET NULL"), nullable=True)
+    event_type_code = Column(String, nullable=True)
+    event_type_name = Column(String, nullable=True)
     priority_group = Column(String, nullable=False)  # snapshot ชื่อ group ตอนสั่งโทร (สำหรับแสดงผลใน history)
     # อุปกรณ์ที่เป็นต้นเหตุ — api_key_id ไว้ filter/นับการใช้งานรายอุปกรณ์
     # ส่วน source_device เป็น snapshot ชื่อ ณ ตอนนั้น ด้วยเหตุผลเดียวกับ priority_group

@@ -189,6 +189,8 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> C
         priority_group=group.name,
         api_key_id=api_key.id if api_key is not None else None,
         source_device=device_name,
+        event_type_code=event_type.code,
+        event_type_name=event_type.display_name,
     )
 
 
@@ -633,8 +635,12 @@ def get_history(
         )
         items.append(HistoryItem(
             job_id=job.id,
-            event_type_code=job.event_type.code if job.event_type else None,
-            event_type_display_name=job.event_type.display_name if job.event_type else None,
+            # อ่าน snapshot ก่อน แล้วค่อยถอยไปดูจากความสัมพันธ์ — ประวัติต้องอ่านรู้เรื่อง
+            # แม้ประเภทเหตุการณ์นั้นถูกลบไปแล้ว (snapshot เป็น null เฉพาะงานเก่าก่อนมีคอลัมน์นี้)
+            event_type_code=job.event_type_code or (job.event_type.code if job.event_type else None),
+            event_type_display_name=(
+                job.event_type_name or (job.event_type.display_name if job.event_type else None)
+            ),
             group_name=job.priority_group,
             source_device=job.source_device,
             message=job.message,

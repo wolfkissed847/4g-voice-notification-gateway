@@ -20,6 +20,8 @@ def enqueue_job(
     priority_group: str,
     api_key_id: int | None = None,
     source_device: str | None = None,
+    event_type_code: str | None = None,
+    event_type_name: str | None = None,
 ) -> CallJob:
     """
     priority_group และ source_device เป็น snapshot ณ ตอนสั่งโทร ใช้แสดงผลใน history เท่านั้น
@@ -31,6 +33,8 @@ def enqueue_job(
         priority_group=priority_group,
         api_key_id=api_key_id,
         source_device=source_device,
+        event_type_code=event_type_code,
+        event_type_name=event_type_name,
         contact_index=0,
         retry_count=0,
         status=CallStatus.QUEUED,
