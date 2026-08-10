@@ -50,6 +50,22 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # ── ปิด foreign key ระหว่างรัน migration (เฉพาะ SQLite) ────────────────
+        # SQLite เปลี่ยนโครงตาราง (เช่น ผ่อน NOT NULL) ตรงๆ ไม่ได้ alembic จึงใช้วิธี
+        # "สร้างตารางใหม่ → ก็อปข้อมูล → ลบตารางเก่า" (batch mode) แต่ database.py
+        # เปิด PRAGMA foreign_keys=ON ไว้ทุก connection ตอนลบตารางเก่าจึงติด FK
+        # ของตารางอื่นที่ชี้มาหา แล้ว migration ล้มทั้งก้อน
+        #
+        # ต้องสั่งก่อนเปิด transaction เพราะ PRAGMA นี้ไม่มีผลถ้าอยู่ใน transaction แล้ว
+        # ปลอดภัยเพราะ migration เป็นการเปลี่ยนโครงสร้าง ไม่ใช่การแก้ข้อมูลที่ต้องพึ่ง FK
+        # และ connection นี้ใช้เฉพาะตอน migrate แล้วปิดทิ้ง ไม่กระทบ connection ของแอป
+        # ⚠️ ต้องสั่งผ่าน driver ตรงๆ ไม่ใช่ connection.exec_driver_sql()
+        # เพราะการสั่งผ่าน SQLAlchemy จะเปิด transaction ค้างไว้ตั้งแต่คำสั่งแรก
+        # แล้วตอนจบบล็อกนี้มันถูก rollback ทิ้ง — ผลคือ migration "รันผ่าน" ไม่มี error
+        # แต่ schema ไม่เปลี่ยนอะไรเลยและเลขเวอร์ชันไม่ขยับ (หลอกมาก ใช้เวลาหาอยู่นาน)
+        if connection.dialect.name == "sqlite":
+            connection.connection.dbapi_connection.execute("PRAGMA foreign_keys=OFF")
+
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

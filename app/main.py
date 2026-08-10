@@ -26,10 +26,11 @@ from app.auth import create_access_token, get_current_user, verify_password
 from app.call_worker import run_worker_loop
 from app.config import settings
 from app.config_service import get_masked_config, update_app_settings
-from app.database import CallJob, CallLog, detect_schema_drift, get_db, init_db
+from app.database import ApiKey, CallJob, CallLog, detect_schema_drift, get_db, init_db
 from app.queue_manager import enqueue_job, get_pending_jobs
 from app.schemas import (
-    ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyEventTypeRef, ApiKeyResponse, ApiKeyUpdateRequest,
+    ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyEventTypeRef, ApiKeyResponse,
+    ApiKeyRevealResponse, ApiKeyUpdateRequest,
     AppConfigResponse, AppConfigUpdateRequest,
     ContactCreateRequest, ContactReorderRequest, ContactResponse, ContactUpdateRequest,
     EventTypeCreateRequest, EventTypeResponse, EventTypeUpdateRequest,
@@ -62,6 +63,23 @@ def _iso_utc(dt: datetime.datetime | None) -> str | None:
     if dt is None:
         return None
     return dt.replace(tzinfo=datetime.timezone.utc).isoformat()
+
+
+
+def _link_group_id(key, event_type_id: int) -> int | None:
+    """กลุ่มที่ผูกไว้เฉพาะคู่ (อุปกรณ์นี้ + เหตุการณ์นี้) — None = ใช้กลุ่มเริ่มต้นของเหตุการณ์"""
+    for link in key.event_type_links:
+        if link.event_type_id == event_type_id:
+            return link.group_id
+    return None
+
+
+def _link_group_name(db: Session, key, event_type_id: int) -> str | None:
+    gid = _link_group_id(key, event_type_id)
+    if gid is None:
+        return None
+    group = contacts_service.get_group(db, gid)
+    return group.name if group else None
 
 
 app = FastAPI(
@@ -152,11 +170,30 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> C
         except event_types_service.MissingTemplateVariableError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # ── กลุ่มที่จะโทรหา: ของอุปกรณ์ตัวนี้ก่อน แล้วค่อยถอยไปกลุ่มเริ่มต้นของเหตุการณ์ ──
+    # อุปกรณ์คนละตัวใช้เหตุการณ์เดียวกันแต่โทรหาคนละกลุ่มได้ (ปั๊มตึก A แจ้งช่างตึก A)
+    # ถ้าไม่ได้ตั้งไว้เลยทั้งสองที่ = ยังตั้งค่าไม่ครบ ต้องบอกให้ชัดว่าต้องไปตั้งตรงไหน
+    group = None
+    if api_key is not None:
+        link_group_id = api_key_service.group_for(api_key, event_type.id)
+        if link_group_id is not None:
+            group = contacts_service.get_group(db, link_group_id)
+    if group is None:
+        group = event_type.group
+    if group is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"เหตุการณ์ '{event_type.code}' ยังไม่ได้ผูกกลุ่มผู้รับ — "
+                "ตั้งได้ที่หน้าตั้งค่าอุปกรณ์ (เลือกกลุ่มข้างเหตุการณ์นี้)"
+            ),
+        )
+
     return enqueue_job(
         db,
         message=message,
         event_type_id=event_type.id,
-        priority_group=event_type.group.name,
+        priority_group=group.name,
         api_key_id=api_key.id if api_key is not None else None,
         source_device=device_name,
     )
@@ -404,7 +441,8 @@ def _event_type_to_response(event_type) -> EventTypeResponse:
     return EventTypeResponse(
         id=event_type.id, code=event_type.code, display_name=event_type.display_name,
         message_template=event_type.message_template, group_id=event_type.group_id,
-        group_name=event_type.group.name, is_active=event_type.is_active == "true",
+        group_name=event_type.group.name if event_type.group else None,
+        is_active=event_type.is_active == "true",
     )
 
 
@@ -456,7 +494,13 @@ def _api_key_to_response(api_key) -> ApiKeyResponse:
         created_at=_iso_utc(api_key.created_at),
         revoked_at=_iso_utc(api_key.revoked_at),
         allowed_event_types=[
-            ApiKeyEventTypeRef(id=e.id, code=e.code, display_name=e.display_name)
+            ApiKeyEventTypeRef(
+                id=e.id,
+                code=e.code,
+                display_name=e.display_name,
+                group_id=_link_group_id(key, e.id),
+                group_name=_link_group_name(db, key, e.id),
+            )
             for e in api_key.allowed_event_types
         ],
     )
@@ -493,13 +537,30 @@ def update_api_key(
     """
     try:
         api_key = api_key_service.update_api_key(
-            db, key_id, name=request.name, event_type_ids=request.event_type_ids
+            db, key_id,
+            name=request.name,
+            event_type_ids=request.event_type_ids,
+            event_links=[l.model_dump() for l in request.event_links] if request.event_links is not None else None,
         )
     except api_key_service.UnknownEventTypeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if api_key is None:
         raise HTTPException(status_code=404, detail="ไม่พบ API key นี้")
     return _api_key_to_response(api_key)
+
+
+@app.get("/api-keys/{key_id}/reveal", response_model=ApiKeyRevealResponse)
+def reveal_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
+    """
+    ขอดู key เต็มของอุปกรณ์ (ต้องล็อกอิน dashboard ก่อน)
+
+    key ถูกเก็บแบบเข้ารหัสด้วยกุญแจใน .env ไม่ใช่ plaintext — ดู app/crypto.py ว่าทำไม
+    คืน key=null สำหรับอุปกรณ์ที่สร้างไว้ก่อนมีฟีเจอร์นี้ (ตอนนั้นเก็บแค่ hash)
+    หน้าเว็บจะถอยไปแสดงแค่ตัวหน้าของ key และเสนอให้ออก key ใหม่
+    """
+    if not db.query(ApiKey).filter(ApiKey.id == key_id).first():
+        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์นี้")
+    return ApiKeyRevealResponse(key=api_key_service.reveal_key(db, key_id))
 
 
 @app.delete("/api-keys/{key_id}", status_code=204)

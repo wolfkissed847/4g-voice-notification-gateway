@@ -84,8 +84,9 @@ export interface EventType {
   code: string;
   display_name: string;
   message_template: string;
-  group_id: number;
-  group_name: string;
+  /** กลุ่มเริ่มต้น — ไม่บังคับแล้ว กลุ่มจริงเลือกที่หน้าตั้งค่าอุปกรณ์ */
+  group_id: number | null;
+  group_name: string | null;
   is_active: boolean;
 }
 
@@ -96,6 +97,9 @@ export interface ApiKeyEventTypeRef {
   id: number;
   code: string;
   display_name: string;
+  /** กลุ่มที่อุปกรณ์นี้จะโทรหาเมื่อยิงเหตุการณ์นี้ (null = ใช้กลุ่มเริ่มต้นของเหตุการณ์) */
+  group_id: number | null;
+  group_name: string | null;
 }
 
 /**
@@ -117,9 +121,21 @@ export interface ApiKeyCreateResponse extends ApiKey {
   plaintext_key: string;
 }
 
+/** เหตุการณ์ที่อุปกรณ์ยิงได้ 1 รายการ + กลุ่มที่จะโทรหาเมื่อยิงเหตุการณ์นั้น */
+export interface ApiKeyEventLink {
+  event_type_id: number;
+  group_id: number | null;
+}
+
 export interface ApiKeyUpdate {
   name?: string;
   event_type_ids?: number[];
+  event_links?: ApiKeyEventLink[];
+}
+
+export interface ApiKeyReveal {
+  /** key เต็ม — null ถ้าถอดรหัสไม่ได้ (อุปกรณ์ที่สร้างก่อนมีฟีเจอร์นี้) */
+  key: string | null;
 }
 
 // ─── Test notify ──────────────────────────────────────────────────────────────

@@ -108,7 +108,7 @@ class Contact(Base):
 class EventType(Base):
     """
     ประเภทเหตุการณ์ที่ระบบภายนอกยิงเข้ามาผ่าน /notify (เช่น power_outage, server_down)
-    ผูกกับ group เดียว (many event types -> 1 group) และมี template ข้อความของตัวเอง
+    เก็บ "ข้อความที่จะพูด" เป็นหลัก — เป็นคลังตัวเลือกที่อุปกรณ์หลายตัวหยิบไปใช้ร่วมกันได้
     """
     __tablename__ = "event_types"
 
@@ -116,7 +116,14 @@ class EventType(Base):
     code = Column(String, nullable=False, unique=True, index=True)
     display_name = Column(String, nullable=False)
     message_template = Column(Text, nullable=False)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
+    # กลุ่มผู้รับ "เริ่มต้น" ของเหตุการณ์นี้ — ไม่บังคับแล้ว (เดิม nullable=False)
+    #
+    # ที่เปลี่ยนเพราะเดิมต้องเลือกกลุ่มตั้งแต่ตอนสร้างเหตุการณ์ ทั้งที่ตอนนั้นยังไม่รู้ว่า
+    # อุปกรณ์ตัวไหนจะเอาไปใช้และควรโทรหาใคร — อุปกรณ์คนละตัวใช้เหตุการณ์เดียวกัน
+    # แต่ต้องโทรหาคนละกลุ่มเป็นเรื่องปกติ (ปั๊มตึก A แจ้งช่างตึก A, ปั๊มตึก B แจ้งช่างตึก B)
+    # ตอนนี้กลุ่มจริงเลือกที่ "หน้าตั้งค่าอุปกรณ์" (ดู ApiKeyEventType.group_id)
+    # ค่านี้เหลือไว้เป็นค่าสำรองสำหรับการทดสอบจาก dashboard ที่ไม่ได้ยิงผ่านอุปกรณ์
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
     is_active = Column(String, default="true")  # เก็บเป็น string ตามรูปแบบเดิมของ AppSettings
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
@@ -139,6 +146,9 @@ class ApiKeyEventType(Base):
     event_type_id = Column(
         Integer, ForeignKey("event_types.id", ondelete="CASCADE"), primary_key=True
     )
+    # กลุ่มที่จะโทรหา "เมื่ออุปกรณ์ตัวนี้ยิงเหตุการณ์นี้" — จุดที่ผูกทั้งสามอย่างเข้าด้วยกัน
+    # null = ใช้กลุ่มเริ่มต้นของ event type (ถ้ามี)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
 
 
 class ApiKey(Base):
@@ -165,8 +175,18 @@ class ApiKey(Base):
     revoked_at = Column(DateTime, nullable=True)
 
     # event type ที่ key นี้ยิงได้ — ลบ key หรือลบ event type แล้วแถวเชื่อมหายตาม (CASCADE)
+    # key เต็มที่เข้ารหัสไว้ (ดู app/crypto.py) — มีไว้เพื่อโชว์ซ้ำได้โดยไม่ต้องออก key ใหม่
+    # ไม่ได้ใช้ตรวจสอบสิทธิ์ การตรวจยังใช้ key_hash เหมือนเดิม (เทียบ hash ไม่ต้องถอดรหัส)
+    # null = key ที่สร้างไว้ก่อนมีฟีเจอร์นี้ หน้าเว็บจะถอยไปแสดงแค่ตัวหน้าของ key
+    key_encrypted = Column(Text, nullable=True)
+
+    # relationship แบบ secondary ใช้อ่าน "ยิงอะไรได้บ้าง" ได้สะดวก แต่พา group_id มาด้วยไม่ได้
+    # จึงมี event_type_links ควบคู่ไว้สำหรับอ่านกลุ่มที่ผูกรายคู่ (อุปกรณ์+เหตุการณ์)
+    event_type_links = relationship(
+        "ApiKeyEventType", cascade="all, delete-orphan", backref="api_key"
+    )
     allowed_event_types = relationship(
-        "EventType", secondary="api_key_event_types", backref="allowed_api_keys"
+        "EventType", secondary="api_key_event_types", backref="allowed_api_keys", viewonly=True
     )
 
 

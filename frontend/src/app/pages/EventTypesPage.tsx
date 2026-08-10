@@ -55,13 +55,13 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
 
   const openCreate = () => { setForm(EMPTY_FORM); setFormErr(""); setFormOpen(true); };
   const openEdit = (et: EventType) => {
-    setForm({ id: et.id, code: et.code, display_name: et.display_name, message_template: et.message_template, group_id: et.group_id, is_active: et.is_active });
+    setForm({ id: et.id, code: et.code, display_name: et.display_name, message_template: et.message_template, group_id: et.group_id ?? "", is_active: et.is_active });
     setFormErr("");
     setFormOpen(true);
   };
 
   const submitForm = async () => {
-    if (!form.display_name.trim() || !form.message_template.trim() || form.group_id === "") {
+    if (!form.display_name.trim() || !form.message_template.trim()) {
       setFormErr(T.error_generic);
       return;
     }
@@ -72,7 +72,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
         const updated = await updateEventType(form.id, {
           display_name: form.display_name,
           message_template: form.message_template,
-          group_id: Number(form.group_id),
+          group_id: form.group_id === "" ? null : Number(form.group_id),
           is_active: form.is_active,
         });
         setEventTypes((ets) => ets.map((e) => (e.id === updated.id ? updated : e)));
@@ -83,7 +83,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
           code: form.code.trim(),
           display_name: form.display_name,
           message_template: form.message_template,
-          group_id: Number(form.group_id),
+          group_id: form.group_id === "" ? null : Number(form.group_id),
         });
         setEventTypes((ets) => [...ets, created]);
         toast.success(T.toast_created);
@@ -153,7 +153,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
         <div className="flex flex-wrap items-center gap-3">
           <p className="font-mono text-caption text-ink-2">{T.event_types_sub}</p>
           <span className="ms-auto">
-            <Btn variant="primary" onClick={openCreate} disabled={groups.length === 0}>
+            <Btn variant="primary" onClick={openCreate}>
               <Plus size={15} />
               {T.add_event_type}
             </Btn>
@@ -164,7 +164,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
           title={T.event_types_title}
           meta={T.event_types_sub}
           action={
-            <Btn variant="primary" onClick={openCreate} disabled={groups.length === 0}>
+            <Btn variant="primary" onClick={openCreate}>
               <Plus size={15} />
               {T.add_event_type}
             </Btn>
@@ -180,14 +180,10 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
             <Layers size={26} className="text-ink-2" strokeWidth={1.5} />
           </span>
           <p className="text-lead font-semibold">{T.no_event_types}</p>
-          {groups.length === 0 ? (
-            <p className="text-caption text-warn">{T.contacts_sub}</p>
-          ) : (
-            <Btn variant="primary" className="mt-0.5" onClick={openCreate}>
-              <Plus size={15} />
-              {T.add_event_type}
-            </Btn>
-          )}
+          <Btn variant="primary" className="mt-0.5" onClick={openCreate}>
+            <Plus size={15} />
+            {T.add_event_type}
+          </Btn>
         </div>
       ) : (
         <div className="bg-surface rounded-card border border-line overflow-hidden">
@@ -258,13 +254,19 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
                 placeholder={T.message_template_ph} rows={3} className={inputCls} />
               <p className="text-micro text-ink-2 mt-1">{T.message_template_hint}</p>
             </div>
+            {/* กลุ่มผู้รับไม่ใช่ของบังคับอีกแล้ว — กลุ่มจริงเลือกที่หน้าตั้งค่าอุปกรณ์
+                เพราะอุปกรณ์คนละตัวใช้เหตุการณ์เดียวกันแต่ต้องโทรหาคนละกลุ่มได้
+                ช่องนี้เหลือไว้เป็น "ค่าสำรอง" ใช้ตอนกดทดสอบจาก dashboard ที่ไม่ได้ยิงผ่านอุปกรณ์ */}
             <div>
-              <label className="text-caption text-ink-2 block mb-1.5">{T.group_label}</label>
+              <label className="text-caption text-ink-2 block mb-1.5">
+                {T.group_label} <span className="text-micro text-ink-2">{T.optional}</span>
+              </label>
               <select value={form.group_id} onChange={(e) => setForm((f) => ({ ...f, group_id: e.target.value ? Number(e.target.value) : "" }))}
-                className={inputCls}>
-                <option value="">—</option>
+                className={`${inputCls} [color-scheme:light] dark:[color-scheme:dark]`}>
+                <option value="">{T.et_group_optional_none}</option>
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
+              <p className="text-micro text-ink-2 mt-1 leading-[1.7]">{T.et_group_optional_hint}</p>
             </div>
             {form.id && (
               <div className="flex items-center justify-between">

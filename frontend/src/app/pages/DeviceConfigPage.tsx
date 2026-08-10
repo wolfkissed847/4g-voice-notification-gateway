@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { cn } from '@/app/components/ui/utils';
 import { copyText } from '../lib/clipboard';
 import { API_BASE_URL } from '../api/client';
-import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
+import { listApiKeys, deleteApiKey, revealApiKey, updateApiKey } from '../api/apiKeys';
 import { getConfig } from '../api/config';
 import { listEventTypes, sendTestNotify } from '../api/eventTypes';
 import { listContacts, listGroups } from '../api/groups';
@@ -45,7 +45,11 @@ export function DeviceConfigPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   const [name, setName] = useState('');
-  const [picked, setPicked] = useState<number[]>([]);
+  // เก็บเป็น map "เหตุการณ์ -> กลุ่มที่จะโทร" ไม่ใช่แค่รายการ id ที่ติ๊ก
+  // เพราะตอนนี้กลุ่มผูกอยู่ที่คู่ (อุปกรณ์ + เหตุการณ์) ไม่ได้ผูกที่ตัวเหตุการณ์แล้ว
+  // อุปกรณ์คนละตัวใช้เหตุการณ์เดียวกันแต่โทรหาคนละกลุ่มได้
+  const [links, setLinks] = useState<Record<number, number | null>>({});
+  const [fullKey, setFullKey] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -65,7 +69,9 @@ export function DeviceConfigPage() {
       setConfig(cfg);
       if (found) {
         setName(found.name);
-        setPicked(found.allowed_event_types.map((e) => e.id));
+        setLinks(Object.fromEntries(found.allowed_event_types.map((e) => [e.id, e.group_id])));
+        // key เต็มดึงแยกจาก list — ดู revealApiKey ว่าทำไมไม่แนบมากับ list
+        void revealApiKey(found.id).then((r) => setFullKey(r.key)).catch(() => setFullKey(null));
       }
       // ดึงเบอร์ของทุกกลุ่มไว้ประกอบกล่องสรุป — จำนวนกลุ่มน้อย เรียกพร้อมกันได้
       const lists = await Promise.all(grps.map(async (g) => [g.id, await listContacts(g.id)] as const));
@@ -73,13 +79,27 @@ export function DeviceConfigPage() {
     })();
   }, [deviceId]);
 
+  const picked = Object.keys(links).map(Number);
+
   const toggle = (etId: number) =>
-    setPicked((prev) => (prev.includes(etId) ? prev.filter((x) => x !== etId) : [...prev, etId]));
+    setLinks((prev) => {
+      const next = { ...prev };
+      if (etId in next) delete next[etId];
+      // ติ๊กใหม่ = ยังไม่เลือกกลุ่ม (null) ผู้ใช้ต้องเลือกเอง ไม่เดาให้
+      else next[etId] = null;
+      return next;
+    });
+
+  const setLinkGroup = (etId: number, groupId: number | null) =>
+    setLinks((prev) => ({ ...prev, [etId]: groupId }));
 
   const save = async () => {
     setSaving(true);
     try {
-      const updated = await updateApiKey(deviceId, { name: name.trim(), event_type_ids: picked });
+      const updated = await updateApiKey(deviceId, {
+        name: name.trim(),
+        event_links: Object.entries(links).map(([id, gid]) => ({ event_type_id: Number(id), group_id: gid })),
+      });
       setDevice(updated);
       toast.success(T.toast_updated);
     } finally {
@@ -134,14 +154,39 @@ export function DeviceConfigPage() {
         <h1 className="mt-2 text-page font-bold">
           {T.device_config_title} · {device.name}
         </h1>
-        <p className="mt-1 font-mono text-caption text-ink-2">
-          key {device.key_prefix}•••••
-        </p>
-        <p className="mt-1 text-caption leading-[1.8] text-ink-2">{T.key_no_copy_hint}</p>
+        {fullKey ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-caption text-ink-2">{T.dev_key_full}</span>
+            <code className="min-w-0 flex-1 overflow-x-auto rounded-control border border-line bg-surface-2 px-2.5 py-1.5 font-mono text-caption whitespace-nowrap">
+              {fullKey}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copy('key', fullKey)}
+              className={cn(
+                'shrink-0 rounded-control border px-2.5 py-1.5 font-mono text-micro transition-colors',
+                copiedKey === 'key'
+                  ? 'border-ok bg-ok-soft text-ok'
+                  : 'border-line bg-surface text-ink-2 hover:border-brand',
+              )}
+            >
+              {copiedKey === 'key' ? `✓ ${T.copied}` : `⧉ ${T.copy}`}
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="mt-1 font-mono text-caption text-ink-2">key {device.key_prefix}•••••</p>
+            <p className="mt-1 text-caption leading-[1.8] text-warn">{T.dev_key_locked}</p>
+          </>
+        )}
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(290px,100%),1fr))] items-start gap-3.5">
-        <Card className="col-span-full flex min-w-0 flex-col gap-4 p-4 xl:col-span-2">
+      {/* 2 คอลัมน์ตายตัวบนจอกว้าง ไม่ใช่ auto-fit — auto-fit ตัดสินจำนวนคอลัมน์จากความกว้าง
+          ที่เหลือ ทำให้การ์ดฝั่งขวาบางจอได้ 1 คอลัมน์บางจอได้ 2 แล้วความสูงไม่สัมพันธ์กัน
+          ฝั่งซ้าย (ฟอร์มที่ต้องกรอก) กว้างกว่าเพราะมีช่องกรอกและรายการเหตุการณ์ยาวๆ
+          ฝั่งขวาเป็นข้อมูลอ่านอย่างเดียว จึงแคบกว่าได้โดยไม่เสียการอ่าน */}
+      <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <Card className="flex min-w-0 flex-col gap-4 p-4">
           <section className="flex flex-col gap-3">
             <Field label={T.device_name_label}>
               <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
@@ -154,23 +199,62 @@ export function DeviceConfigPage() {
             {eventTypes.length === 0 ? (
               <p className="text-caption leading-[1.8] text-warn">{T.allowed_events_empty_hint}</p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {eventTypes.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => toggle(e.id)}
-                    className={cn(
-                      'rounded-full border px-3.5 py-2 text-caption transition-colors',
-                      picked.includes(e.id)
-                        ? 'border-brand bg-brand-soft font-semibold text-brand'
-                        : 'border-line bg-surface text-ink hover:border-brand',
-                    )}
-                  >
-                    {e.display_name}
-                    <span className="ms-1.5 font-mono text-micro opacity-70">{e.code}</span>
-                  </button>
-                ))}
+              /* แถวละเหตุการณ์ ไม่ใช่ชิปติ๊ก — เพราะแต่ละอันต้องเลือกกลุ่มผู้รับของตัวเอง
+                 ซึ่งเป็นข้อมูลที่ใส่ในชิปกลมๆ ไม่ได้ ติ๊กแล้วช่องเลือกกลุ่มจะโผล่ในแถวเดียวกัน */
+              <div className="flex flex-col gap-1.5">
+                {eventTypes.map((e) => {
+                  const on = e.id in links;
+                  return (
+                    <div
+                      key={e.id}
+                      className={cn(
+                        'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control border px-3 py-2.5 transition-colors',
+                        on ? 'border-brand bg-brand-soft/40' : 'border-line bg-surface',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggle(e.id)}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
+                      >
+                        <span
+                          className={cn(
+                            'grid size-4 shrink-0 place-items-center rounded-[4px] border text-[10px] font-bold',
+                            on ? 'border-brand bg-brand text-brand-ink' : 'border-line',
+                          )}
+                        >
+                          {on ? '✓' : ''}
+                        </span>
+                        <span className="min-w-0">
+                          <span className={cn('text-caption', on && 'font-semibold')}>{e.display_name}</span>
+                          <span className="ms-1.5 font-mono text-micro text-ink-2">{e.code}</span>
+                        </span>
+                      </button>
+
+                      {on ? (
+                        <label className="flex shrink-0 items-center gap-1.5">
+                          <span className="text-micro text-ink-2">{T.dev_call_group}</span>
+                          <select
+                            value={links[e.id] ?? ''}
+                            onChange={(ev) => setLinkGroup(e.id, ev.target.value ? Number(ev.target.value) : null)}
+                            className={cn(
+                              inputCls,
+                              'w-auto min-w-[150px] py-1.5 text-caption [color-scheme:light] dark:[color-scheme:dark]',
+                              links[e.id] == null && 'border-warn',
+                            )}
+                          >
+                            <option value="">{T.dev_call_group_none}</option>
+                            {groups.map((g) => (
+                              <option key={g.id} value={g.id}>
+                                {g.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {picked.length === 0 ? (
@@ -204,14 +288,21 @@ export function DeviceConfigPage() {
             ) : (
               <div className="flex flex-col gap-3.5">
                 {pickedTypes.map((et) => {
-                  const group = groups.find((g) => g.id === et.group_id);
-                  const contacts = contactsByGroup[et.group_id] ?? [];
+                  // กลุ่มมาจากที่ผูกไว้กับอุปกรณ์ตัวนี้ ไม่ใช่กลุ่มเริ่มต้นของ event type
+                  const gid = links[et.id];
+                  const group = gid == null ? undefined : groups.find((g) => g.id === gid);
+                  const contacts: Contact[] = gid == null ? [] : (contactsByGroup[gid] ?? []);
                   return (
                     <div key={et.id} className="flex min-w-0 flex-col gap-1">
                       {/* leading สูงเพราะเป็นประโยคไทยหลายบรรทัด */}
                       <p className="text-caption leading-[2] text-ink-2">
                         ถ้ายิง <b className="font-mono text-ink">{et.code}</b>
-                        <br />→ โทรกลุ่ม <b className="text-ink">{group?.name ?? '—'}</b>
+                        <br />→ โทรกลุ่ม{' '}
+                        {group ? (
+                          <b className="text-ink">{group.name}</b>
+                        ) : (
+                          <b className="text-warn">{T.dev_call_group_missing}</b>
+                        )}
                         {contacts.map((c) => (
                           <span key={c.id}>
                             <br />
@@ -255,7 +346,7 @@ export function DeviceConfigPage() {
               รหัสเหตุการณ์ที่ติ๊กไว้, base URL ที่กำลังเปิดอยู่)
               หน้า API guide เป็นเอกสารกลางที่ต้องมาแทนค่าเอง ซึ่งเป็นจังหวะที่พลาดกันบ่อย
               — พิมพ์รหัสเหตุการณ์ผิดตัวเดียวก็ได้ 404 โดยไม่รู้ว่าพิมพ์ผิดตรงไหน */}
-          <Card className="flex flex-col gap-3 p-4">
+          <Card className="flex min-w-0 flex-col gap-3 p-4">
             <div>
               <h3 className="text-caption font-bold">{T.dev_api_title}</h3>
               <p className="mt-1 text-micro leading-[1.7] text-ink-2">{T.dev_api_sub}</p>

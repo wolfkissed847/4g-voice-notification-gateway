@@ -28,7 +28,7 @@ def get_event_type_by_code(db: Session, code: str) -> EventType | None:
 
 
 def create_event_type(
-    db: Session, code: str, display_name: str, message_template: str, group_id: int
+    db: Session, code: str, display_name: str, message_template: str, group_id: int | None = None
 ) -> EventType:
     if get_event_type_by_code(db, code) is not None:
         raise DuplicateEventTypeCodeError(f"event type code '{code}' มีอยู่แล้ว")

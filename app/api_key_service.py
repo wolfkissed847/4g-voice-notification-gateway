@@ -13,7 +13,8 @@ import secrets
 
 from sqlalchemy.orm import Session
 
-from app.database import ApiKey, EventType
+from app.crypto import decrypt, encrypt
+from app.database import ApiKey, ApiKeyEventType, EventType
 
 _KEY_PREFIX = "gw_live_"
 
@@ -44,11 +45,40 @@ def _resolve_event_types(db: Session, event_type_ids: list[int]) -> list[EventTy
     return found
 
 
+def set_event_links(db: Session, api_key: ApiKey, links: list[dict]) -> None:
+    """
+    ตั้งใหม่ทั้งชุดว่าอุปกรณ์นี้ยิงเหตุการณ์ไหนได้ และแต่ละเหตุการณ์โทรหากลุ่มไหน
+
+    links = [{"event_type_id": 1, "group_id": 2 | None}, ...]
+    group_id = None แปลว่าใช้กลุ่มเริ่มต้นของ event type นั้น (ถ้ามี)
+
+    แทนที่ทั้งชุดเสมอ ไม่ merge ทีละรายการ — หน้าเว็บส่งสถานะเต็มมาทุกครั้งอยู่แล้ว
+    การ merge จะทำให้ลบสิทธิ์ออกไม่ได้ (ไม่มีทางบอกว่า "อันนี้เอาออก" ด้วย payload แบบเพิ่มอย่างเดียว)
+    """
+    _resolve_event_types(db, [l["event_type_id"] for l in links])  # โยน error ถ้ามี id ที่ไม่มีจริง
+    db.query(ApiKeyEventType).filter(ApiKeyEventType.api_key_id == api_key.id).delete()
+    for l in links:
+        db.add(ApiKeyEventType(
+            api_key_id=api_key.id,
+            event_type_id=l["event_type_id"],
+            group_id=l.get("group_id"),
+        ))
+
+
+def group_for(api_key: ApiKey, event_type_id: int) -> int | None:
+    """กลุ่มที่ต้องโทรเมื่ออุปกรณ์นี้ยิงเหตุการณ์นี้ — None = ให้ผู้เรียกถอยไปใช้กลุ่มเริ่มต้น"""
+    for link in api_key.event_type_links:
+        if link.event_type_id == event_type_id:
+            return link.group_id
+    return None
+
+
 def create_api_key(db: Session, name: str, event_type_ids: list[int] | None = None) -> tuple[ApiKey, str]:
     """name = ชื่ออุปกรณ์ (เช่น 'โหนดตึก A ชั้น 3'), event_type_ids = รายการที่อุปกรณ์นี้ยิงได้"""
     plaintext, prefix, key_hash = generate_key()
-    api_key = ApiKey(name=name, key_prefix=prefix, key_hash=key_hash)
-    api_key.allowed_event_types = _resolve_event_types(db, event_type_ids or [])
+    api_key = ApiKey(name=name, key_prefix=prefix, key_hash=key_hash, key_encrypted=encrypt(plaintext))
+    db.flush()  # ต้องมี id ก่อนถึงจะผูกแถวเชื่อมได้
+    set_event_links(db, api_key, [{"event_type_id": i} for i in (event_type_ids or [])])
     db.add(api_key)
     db.commit()
     db.refresh(api_key)
@@ -60,6 +90,7 @@ def update_api_key(
     key_id: int,
     name: str | None = None,
     event_type_ids: list[int] | None = None,
+    event_links: list[dict] | None = None,
 ) -> ApiKey | None:
     """
     แก้ชื่ออุปกรณ์ / รายการ event type ที่ยิงได้ — โดยที่ key ตัวเดิมยังใช้งานได้เหมือนเดิม
@@ -72,8 +103,11 @@ def update_api_key(
         return None
     if name is not None:
         api_key.name = name
-    if event_type_ids is not None:
-        api_key.allowed_event_types = _resolve_event_types(db, event_type_ids)
+    # event_links ละเอียดกว่า (มีกลุ่มรายเหตุการณ์) จึงชนะถ้าส่งมาทั้งคู่
+    if event_links is not None:
+        set_event_links(db, api_key, event_links)
+    elif event_type_ids is not None:
+        set_event_links(db, api_key, [{"event_type_id": i} for i in event_type_ids])
     db.commit()
     db.refresh(api_key)
     return api_key
@@ -122,3 +156,17 @@ def verify_and_touch(db: Session, plaintext: str) -> ApiKey | None:
     api_key.last_used_at = datetime.datetime.utcnow()
     db.commit()
     return api_key
+
+
+def reveal_key(db: Session, key_id: int) -> str | None:
+    """
+    คืน key เต็มของอุปกรณ์ — None ถ้าถอดรหัสไม่ได้ (key เก่าที่สร้างก่อนมีฟีเจอร์นี้)
+
+    แยกเป็น endpoint ต่างหากแทนที่จะใส่มากับ list ของอุปกรณ์ เพราะ list ถูกเรียกทุกครั้ง
+    ที่เปิดหน้า ถ้าแนบ key เต็มไปด้วยทุกครั้ง มันจะไปโผล่ใน log ของ proxy/เบราว์เซอร์
+    และใน cache โดยไม่จำเป็น — อ่านเมื่อผู้ใช้ขอดูจริงๆ เท่านั้น
+    """
+    api_key = db.query(ApiKey).filter(ApiKey.id == key_id).first()
+    if api_key is None:
+        return None
+    return decrypt(api_key.key_encrypted)

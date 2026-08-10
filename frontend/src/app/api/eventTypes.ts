@@ -9,7 +9,8 @@ export function createEventType(data: {
   code: string;
   display_name: string;
   message_template: string;
-  group_id: number;
+  /** null = ไม่ระบุกลุ่มเริ่มต้น (กลุ่มจริงตั้งรายอุปกรณ์ที่หน้าอุปกรณ์ & key) */
+  group_id?: number | null;
 }): Promise<EventType> {
   return apiRequest<EventType>("/event-types", { method: "POST", body: data });
 }
@@ -19,7 +20,7 @@ export function updateEventType(
   data: {
     display_name?: string;
     message_template?: string;
-    group_id?: number;
+    group_id?: number | null;
     is_active?: boolean;
   }
 ): Promise<EventType> {

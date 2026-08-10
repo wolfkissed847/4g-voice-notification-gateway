@@ -61,7 +61,9 @@ class EventTypeCreateRequest(BaseModel):
     code: str = Field(..., description="รหัสไม่ซ้ำ เช่น power_outage")
     display_name: str
     message_template: str
-    group_id: int
+    # ไม่บังคับแล้ว — กลุ่มผู้รับจริงเลือกที่หน้าตั้งค่าอุปกรณ์ (ต่ออุปกรณ์ต่อเหตุการณ์)
+    # ค่านี้เหลือไว้เป็นกลุ่มสำรองสำหรับการทดสอบจาก dashboard ที่ไม่ได้ยิงผ่านอุปกรณ์
+    group_id: int | None = None
 
 
 class EventTypeUpdateRequest(BaseModel):
@@ -76,8 +78,8 @@ class EventTypeResponse(BaseModel):
     code: str
     display_name: str
     message_template: str
-    group_id: int
-    group_name: str
+    group_id: int | None = None
+    group_name: str | None = None
     is_active: bool
 
 
@@ -88,16 +90,28 @@ class ApiKeyCreateRequest(BaseModel):
     )
 
 
+class ApiKeyEventLink(BaseModel):
+    """เหตุการณ์ที่อุปกรณ์ยิงได้ 1 รายการ + กลุ่มที่จะโทรหาเมื่อยิงเหตุการณ์นั้น"""
+    event_type_id: int
+    group_id: int | None = None
+
+
 class ApiKeyUpdateRequest(BaseModel):
     """แก้ได้โดยที่ key เดิมยังใช้ได้ — ไม่ต้องแฟลช firmware ใหม่"""
     name: str | None = None
+    # ส่ง event_links มาแทน event_type_ids ถ้าต้องการกำหนดกลุ่มรายเหตุการณ์ด้วย
+    # (event_type_ids ยังรับอยู่เพื่อความเข้ากันได้ — ตีความว่าใช้กลุ่มเริ่มต้นทุกอัน)
     event_type_ids: list[int] | None = None
+    event_links: list[ApiKeyEventLink] | None = None
 
 
 class ApiKeyEventTypeRef(BaseModel):
     id: int
     code: str
     display_name: str
+    # กลุ่มที่อุปกรณ์ตัวนี้จะโทรหาเมื่อยิงเหตุการณ์นี้ (null = ใช้กลุ่มเริ่มต้นของเหตุการณ์)
+    group_id: int | None = None
+    group_name: str | None = None
 
 
 class ApiKeyResponse(BaseModel):
@@ -109,6 +123,10 @@ class ApiKeyResponse(BaseModel):
     created_at: str
     revoked_at: str | None = None
     allowed_event_types: list[ApiKeyEventTypeRef] = Field(default_factory=list)
+
+
+class ApiKeyRevealResponse(BaseModel):
+    key: str | None = Field(None, description="key เต็ม — null ถ้าถอดรหัสไม่ได้ (key เก่าที่เก็บแค่ hash)")
 
 
 class ApiKeyCreateResponse(ApiKeyResponse):
