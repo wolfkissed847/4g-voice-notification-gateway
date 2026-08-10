@@ -49,9 +49,22 @@ export const TR = {
     filter_status: "สถานะ", filter_group: "กลุ่มผู้รับ",
     settings_title: "การตั้งค่า", settings_sub: "พฤติกรรมการโทรและ fallback",
     retry_section: "พฤติกรรม retry", retry_section_sub: "กำหนดจำนวนครั้งและระยะเวลาในการโทรซ้ำ",
-    retry_count: "จำนวน retry", retry_count_sub: "โทรซ้ำสูงสุดกี่ครั้งก่อนจะถือว่าล้มเหลว",
-    retry_delay: "หน่วงเวลาระหว่าง retry", retry_delay_sub: "วินาทีที่รอก่อนโทรซ้ำ",
-    ring_timeout: "Ring timeout", ring_timeout_sub: "วินาทีที่รอสายก่อนตัดว่าไม่รับ",
+    retry_count: "จำนวนครั้งที่โทรซ้ำ", retry_count_sub: "โทรซ้ำสูงสุดกี่ครั้งก่อนจะถือว่าล้มเหลว",
+    retry_delay: "เวลารอก่อนโทรซ้ำ", retry_delay_sub: "วินาทีที่รอก่อนโทรซ้ำ",
+    ring_timeout: "เวลารอให้รับสาย", ring_timeout_sub: "วินาทีที่รอสายก่อนตัดว่าไม่รับ",
+    unit_times: "ครั้ง", unit_seconds: "วินาที",
+    retry_count_help: "ถ้าเบอร์แรกไม่รับ จะโทรซ้ำเบอร์เดิมอีกกี่ครั้ง ครบแล้วจึงข้ามไปเบอร์ถัดไปในกลุ่ม",
+    retry_count_example: (n: number) =>
+      n === 0
+        ? "ตั้ง 0 = ไม่โทรซ้ำเลย ไม่รับปุ๊บข้ามไปเบอร์ถัดไปทันที (เหมาะกับเหตุด่วนที่ต้องหาคนรับให้เร็วที่สุด)"
+        : `ตั้ง ${n} → โทรเบอร์แรกทั้งหมด ${n + 1} ครั้ง (ครั้งแรก + ซ้ำอีก ${n}) ถ้ายังไม่รับจึงไปเบอร์ที่ 2`,
+    retry_delay_help: "รอกี่วินาทีก่อนโทรซ้ำ ระหว่างรอ ระบบไม่ได้อยู่เฉยๆ — เอาเวลาไปโทรงานอื่นในคิวต่อได้เลย",
+    retry_delay_example: (n: number) => `ตั้ง ${n} → ไม่รับตอน 10:00:00 จะโทรซ้ำอีกทีตอน 10:00:${String(n % 60).padStart(2, "0")}`,
+    ring_timeout_help: "ปล่อยให้ปลายทางดังนานแค่ไหนก่อนตัดว่าไม่รับ สั้นไปคนหยิบไม่ทัน ยาวไปคิวงานถัดไปเดินช้า",
+    ring_timeout_example: (n: number) => `ตั้ง ${n} → ดัง ${n} วินาทีแล้วยังไม่รับ = วางสายเอง นับเป็น "ไม่รับสาย" 1 ครั้ง`,
+    call_budget_title: "รวมแล้วเบอร์หนึ่งใช้เวลาสูงสุด",
+    call_budget: (sec: number, tries: number) =>
+      `${sec} วินาที (~${Math.ceil(sec / 60)} นาที) ต่อ 1 เบอร์ — โทร ${tries} ครั้ง แล้วจึงข้ามไปเบอร์ถัดไป`,
     save_btn: "บันทึกการตั้งค่า", save_ok: "บันทึกการตั้งค่าสำเร็จ",
     contacts_title: "กลุ่มผู้รับการแจ้งเตือน", contacts_sub: "จัดการเบอร์โทรตามลำดับ escalation",
     add_group: "เพิ่มกลุ่ม", new_group: "กลุ่มใหม่", new_group_ph: "เช่น database_team", create: "สร้าง",
@@ -308,8 +321,21 @@ export const TR = {
     settings_title: "Settings", settings_sub: "Call behavior and fallback options",
     retry_section: "Retry behavior", retry_section_sub: "Configure retry count and timing",
     retry_count: "Retry count", retry_count_sub: "Maximum retries before marking as failed",
-    retry_delay: "Delay between retries", retry_delay_sub: "Seconds to wait before redialing",
+    retry_delay: "Delay before retry", retry_delay_sub: "Seconds to wait before redialing",
     ring_timeout: "Ring timeout", ring_timeout_sub: "Seconds to wait for answer before hanging up",
+    unit_times: "times", unit_seconds: "seconds",
+    retry_count_help: "If the first contact does not answer, how many more times to redial the same number before moving on to the next contact in the group.",
+    retry_count_example: (n: number) =>
+      n === 0
+        ? "0 = never redial — move to the next contact immediately (best when speed matters most)"
+        : `${n} → the first number is dialed ${n + 1} times total (first attempt + ${n} retries) before contact 2 is tried`,
+    retry_delay_help: "How long to wait before redialing. The system is not idle during this time — it picks up other queued jobs meanwhile.",
+    retry_delay_example: (n: number) => `${n} → no answer at 10:00:00, redial happens at 10:00:${String(n % 60).padStart(2, "0")}`,
+    ring_timeout_help: "How long to let the phone ring before giving up. Too short and nobody can pick up; too long and the queue moves slowly.",
+    ring_timeout_example: (n: number) => `${n} → rings for ${n}s with no answer, then hangs up and counts as one "no answer"`,
+    call_budget_title: "Worst case per contact",
+    call_budget: (sec: number, tries: number) =>
+      `${sec}s (~${Math.ceil(sec / 60)} min) per contact — ${tries} attempts before moving to the next one`,
     save_btn: "Save settings", save_ok: "Settings saved successfully",
     contacts_title: "Notification groups", contacts_sub: "Manage phone numbers by escalation order",
     add_group: "Add group", new_group: "New group", new_group_ph: "e.g. database_team", create: "Create",
