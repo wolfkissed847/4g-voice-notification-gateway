@@ -66,20 +66,12 @@ def _iso_utc(dt: datetime.datetime | None) -> str | None:
 
 
 
-def _link_group_id(key, event_type_id: int) -> int | None:
-    """กลุ่มที่ผูกไว้เฉพาะคู่ (อุปกรณ์นี้ + เหตุการณ์นี้) — None = ใช้กลุ่มเริ่มต้นของเหตุการณ์"""
-    for link in key.event_type_links:
+def _event_link(api_key, event_type_id: int):
+    """แถวเชื่อมของคู่ (อุปกรณ์นี้ + เหตุการณ์นี้) — None ถ้าไม่มี"""
+    for link in api_key.event_type_links:
         if link.event_type_id == event_type_id:
-            return link.group_id
+            return link
     return None
-
-
-def _link_group_name(db: Session, key, event_type_id: int) -> str | None:
-    gid = _link_group_id(key, event_type_id)
-    if gid is None:
-        return None
-    group = contacts_service.get_group(db, gid)
-    return group.name if group else None
 
 
 app = FastAPI(
@@ -498,8 +490,8 @@ def _api_key_to_response(api_key) -> ApiKeyResponse:
                 id=e.id,
                 code=e.code,
                 display_name=e.display_name,
-                group_id=_link_group_id(key, e.id),
-                group_name=_link_group_name(db, key, e.id),
+                group_id=(link.group_id if (link := _event_link(api_key, e.id)) else None),
+                group_name=(link.group.name if link and link.group else None),
             )
             for e in api_key.allowed_event_types
         ],

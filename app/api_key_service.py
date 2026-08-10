@@ -77,9 +77,16 @@ def create_api_key(db: Session, name: str, event_type_ids: list[int] | None = No
     """name = ชื่ออุปกรณ์ (เช่น 'โหนดตึก A ชั้น 3'), event_type_ids = รายการที่อุปกรณ์นี้ยิงได้"""
     plaintext, prefix, key_hash = generate_key()
     api_key = ApiKey(name=name, key_prefix=prefix, key_hash=key_hash, key_encrypted=encrypt(plaintext))
-    db.flush()  # ต้องมี id ก่อนถึงจะผูกแถวเชื่อมได้
-    set_event_links(db, api_key, [{"event_type_id": i} for i in (event_type_ids or [])])
+    # ⚠️ ลำดับ 3 บรรทัดนี้สำคัญ ห้ามสลับ:
+    #   add   = เอา object เข้า session
+    #   flush = ยิง INSERT จริงเพื่อให้ได้ id กลับมา (ยังไม่ commit)
+    #   แล้วค่อยผูกแถวเชื่อม ซึ่งต้องใช้ api_key.id
+    # เคยเขียน flush ก่อน add มาแล้ว ผลคือ object ยังไม่อยู่ใน session จึงไม่มีอะไรให้ flush
+    # id เลยเป็น None แล้วแถวเชื่อมถูก insert ด้วย api_key_id = NULL → NOT NULL constraint failed
+    # (พังเฉพาะตอน "สร้างอุปกรณ์พร้อมเลือกสิทธิ์" ไม่พังตอนสร้างเปล่าๆ จึงหลุดรอดมาได้)
     db.add(api_key)
+    db.flush()
+    set_event_links(db, api_key, [{"event_type_id": i} for i in (event_type_ids or [])])
     db.commit()
     db.refresh(api_key)
     return api_key, plaintext

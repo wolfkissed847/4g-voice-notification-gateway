@@ -150,6 +150,10 @@ class ApiKeyEventType(Base):
     # null = ใช้กลุ่มเริ่มต้นของ event type (ถ้ามี)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
 
+    # มี relationship ไว้เพื่ออ่านชื่อกลุ่มได้จากตัว link เอง ไม่ต้องส่ง session ไปด้วย
+    # (ชั้นที่แปลงเป็น response ไม่มี db ให้ใช้ และไม่ควรต้องมี)
+    group = relationship("Group")
+
 
 class ApiKey(Base):
     """
