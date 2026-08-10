@@ -1,181 +1,162 @@
-# 4G Automated Voice Notification Gateway
+<div align="center">
 
-**ภาษาไทย:** การออกแบบและพัฒนาระบบเกตเวย์โทรแจ้งเตือนด้วยข้อความเสียงอัตโนมัติผ่านเครือข่าย 4G
-**English:** Design and Development of an Automated Voice Notification Gateway Server over 4G Network
+# 📞 4G Voice Notification Gateway
 
-> **หมายเหตุเรื่อง branch:** โปรเจคนี้มี branch `feature/voip-multi-sim` แยกไว้ต่างหาก
-> ซึ่งมีระบบ VoIP (Asterisk + Zadarma) และ multi-SIM pool เพิ่มเติม — branch `main` นี้ตัดสองส่วนนั้นออก
-> เพื่อให้ระบบเรียบง่ายและโฟกัสที่ SIM ตัวเดียวผ่าน GSM เท่านั้น
+**ระบบเกตเวย์โทรแจ้งเตือนด้วยข้อความเสียงอัตโนมัติผ่านเครือข่าย 4G**
 
-## 📌 Project Goal
+<sub>Design and Development of an Automated Voice Notification Gateway Server over 4G Network</sub>
 
-ระบบ Robo-calling Gateway ขนาดเล็ก ทำงานแบบ Self-hosted (On-Premise) ภายในองค์กร ใช้สำหรับโทรแจ้งเตือน
-เจ้าหน้าที่ไอที/ทีมช่างโดยอัตโนมัติเมื่อเกิดเหตุฉุกเฉิน (เช่น เซิร์ฟเวอร์ล่ม, ไฟดับ)
+<br/>
 
-- **โทรออก**: ผ่านซิมจริง (SIMCOM A7670C, AT command) — ไม่พึ่ง Cloud VoIP
-- **รับคำสั่ง**: ระบบ/บอร์ดภายนอกยิง `POST /notify` เข้ามา (มี API key ป้องกัน)
-- **Dashboard**: ดูสถานะคิว + ปรับ config (retry/timeout/SMS fallback) ผ่านเว็บ — **ไม่ใช่ช่องสั่งโทร**
-- **เครือข่าย**: Pi ใช้ LAN ออฟฟิศเป็นหลัก สลับไปใช้ 4G อัตโนมัติเมื่อ LAN หลุด (เช่นตอนไฟดับ)
+![Status](https://img.shields.io/badge/status-in%20development-orange)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-A22846?logo=raspberrypi&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## 🏗️ Hardware Architecture
+<br/>
 
-| Component | Detail |
+*เมื่อระบบมีปัญหา — ไม่ต้องรอให้ใครเห็นอีเมล ให้โทรศัพท์ดังเลย*
+
+</div>
+
+---
+
+## 💡 ระบบนี้คืออะไร
+
+**Robo-calling Gateway ขนาดเล็ก** ที่ติดตั้งใช้เองภายในองค์กร (Self-hosted / On-Premise) บน Raspberry Pi
+ทำหน้าที่ **โทรศัพท์ไปหาเจ้าหน้าที่โดยอัตโนมัติพร้อมพูดข้อความภาษาไทย** เมื่อเกิดเหตุฉุกเฉิน
+เช่น เซิร์ฟเวอร์ล่ม ตู้ควบคุมขัดข้อง หรือค่าเซ็นเซอร์ผิดปกติ
+
+โทรออกผ่าน **ซิมโทรศัพท์จริง** ด้วยคำสั่ง AT ที่ส่งตรงเข้าโมดูล 4G — ไม่พึ่งบริการ Cloud Call Center
+ที่ต้องจ่ายรายเดือน และไม่พึ่ง VoIP
+
+> **ที่มาของโจทย์:** เดิมองค์กรใช้บริการแจ้งเตือนจากภายนอกแบบจ่ายรายเดือน ค่าใช้จ่ายสะสมไปเรื่อยๆ
+> โครงงานนี้จึงออกแบบและพัฒนาระบบขึ้นมาเองเพื่อ **ลดค่าใช้จ่ายระยะยาว** และ **ควบคุมระบบได้เต็มที่**
+> — พัฒนาระหว่างการปฏิบัติงานสหกิจศึกษา สาขาวิศวกรรมคอมพิวเตอร์
+
+---
+
+## ⚡ ทำงานยังไง
+
+```mermaid
+flowchart LR
+    IoT["🔌 อุปกรณ์ IoT<br/>เซ็นเซอร์ / ระบบ monitor"]
+    API["⚙️ FastAPI<br/>ตรวจ API key"]
+    Queue["📋 คิวงาน<br/>SQLite"]
+    TTS["🗣️ gTTS<br/>ข้อความ → เสียงไทย"]
+    GSM["📡 โมดูล 4G<br/>SIMCOM A7670E"]
+    Phone["📞 เจ้าหน้าที่"]
+
+    IoT -->|"POST /notify"| API --> Queue --> TTS --> GSM -->|"โทรออกผ่านซิมจริง"| Phone
+
+    style IoT fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    style API fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    style Queue fill:#fef3c7,stroke:#f59e0b,color:#78350f
+    style TTS fill:#fce7f3,stroke:#ec4899,color:#831843
+    style GSM fill:#f0fdf4,stroke:#22c55e,color:#166534
+    style Phone fill:#f0fdf4,stroke:#22c55e,color:#166534
+```
+
+**หัวใจของการออกแบบคือ อุปกรณ์ปลายทางไม่ต้องรู้อะไรเลยว่าจะโทรหาใคร**
+
+บอร์ด/เซ็นเซอร์แค่ส่งมาว่า *"เกิดเหตุประเภทนี้"* พร้อม API key ประจำตัว จากนั้นเป็นหน้าที่ของเกตเวย์
+ที่จะตัดสินใจเองว่าต้องโทรหากลุ่มไหน เรียงลำดับใคร และพูดข้อความว่าอะไร — ทั้งหมดแก้ได้จากหน้าเว็บ
+โดย**ไม่ต้องแฟลช firmware ของบอร์ดใหม่เลย** ย้ายจุดติดตั้งหรือเปลี่ยนเบอร์คนรับสายก็แก้ที่เดียวจบ
+
+### ลำดับการโทร (Escalation)
+
+| ขั้น | เกิดอะไรขึ้น |
+|:---:|---|
+| 1️⃣ | โทรหาเบอร์แรกในกลุ่ม → เล่นข้อความเสียงภาษาไทยเข้าสาย |
+| 2️⃣ | ไม่รับสาย / สายไม่ว่าง → โทรซ้ำตามจำนวนรอบที่ตั้งไว้ |
+| 3️⃣ | ยังไม่รับอีก → ไล่ไปเบอร์ถัดไปในกลุ่ม |
+| 4️⃣ | ครบทุกเบอร์แล้วไม่มีใครรับ → บันทึกเป็น `failed` พร้อมเหตุผลให้ตรวจสอบย้อนหลังได้ |
+
+---
+
+## 🖥️ หน้าตาระบบ
+
+<div align="center">
+
+| ภาพรวมระบบ | จัดการอุปกรณ์ |
 |---|---|
-| Controller | Raspberry Pi |
-| GSM/4G Module | SIMCOM A7670C (4G LTE Cat1, VoLTE, USB, AT Command) — **1 ตัว** |
-| SIM Card | GOMO (AIS network), Data 10GB + Voice pay-per-minute + SMS top-up pack |
-| เครือข่าย | LAN สายแลนออฟฟิศ (หลัก) + 4G จากโมดูลตัวเดียวกัน (สำรอง, auto-failover) |
+| ![Dashboard](figma/handoff/mockups/02-dashboard-light.png) | ![Devices](figma/handoff/mockups/04-devices-light.png) |
 
-## 📂 Project Structure
-
-```
-4g-voice-notification-gateway/
-├── app/
-│   ├── main.py            # FastAPI entrypoint: /notify, /auth/login, /queue/status, /config
-│   ├── config.py          # ค่า bootstrap จาก .env
-│   ├── config_service.py  # Config ที่แก้ผ่าน dashboard ได้ (retry/timeout/SMS fallback)
-│   ├── database.py        # SQLite models — queue, call logs, app settings
-│   ├── schemas.py         # Pydantic request/response models
-│   ├── queue_manager.py   # FIFO queue logic (atomic claim)
-│   ├── gsm_module.py      # AT Command wrapper สำหรับ SIMCOM A7670C
-│   ├── tts_service.py     # gTTS wrapper: text → mp3 (ภาษาไทย, cache ตาม hash)
-│   ├── call_worker.py     # Background worker: state machine + retry/escalation/SMS fallback
-│   ├── auth.py            # Single-user JWT login (dashboard)
-│   └── secrets_crypto.py  # Encrypt helper (เผื่ออนาคตเพิ่ม secret ที่ต้อง encrypt)
-├── network_setup/         # Script + เอกสาร LAN+4G auto-failover
-├── scripts/                # hash_password.py, generate_encryption_key.py
-├── frontend/               # Dashboard (Vite + React + Tailwind) — build เป็น static bundle
-├── .github/workflows/      # deploy.yml — self-hosted runner build+deploy บน push
-├── audio_cache/            # ไฟล์เสียงที่ gTTS สร้าง (gitignored)
-├── logs/                   # log การโทร/สถานะ (gitignored)
-├── data/                   # Docker volume: gateway.db, audio_cache, logs (gitignored)
-├── Dockerfile              # Multi-stage: build frontend + Python runtime
-├── docker-compose.yml
-├── RUNNER_SETUP.md         # ขั้นตอนติดตั้ง self-hosted GitHub Actions runner บน Pi
-├── .env.example
-├── .gitignore
-├── .dockerignore
-├── .pre-commit-config.yaml
-├── .gitleaks.toml
-├── requirements.txt
-├── requirements-dev.txt
-├── LICENSE                 # MIT
-└── README.md
-```
-
-## ⚙️ Setup
-
-```bash
-git clone https://github.com/<your-username>/4g-voice-notification-gateway.git
-cd 4g-voice-notification-gateway
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python scripts/hash_password.py           # ตั้งรหัสผ่าน admin
-python scripts/generate_encryption_key.py # สร้าง encryption key (เผื่ออนาคต)
-# แก้ .env ใส่ค่าที่ได้จาก 2 คำสั่งด้านบน + เบอร์โทร escalation
-```
-
-### เชื่อมต่อฮาร์ดแวร์
-1. เสียบซิม GOMO (AIS) เข้าโมดูล A7670C
-2. ต่อโมดูลเข้า Raspberry Pi ผ่านสาย USB (**ใช้ไฟเลี้ยงแยกสำหรับโมดูล ไม่ใช้ขา 5V ของ Pi โดยตรง**
-   เพราะโมดูลกินกระแสพุ่งสูงตอนส่งสัญญาณ)
-3. เช็ค serial port: `ls /dev/ttyUSB*` แล้วใส่ path ที่ถูกต้องใน `.env` (`GSM_SERIAL_PORT`)
-4. ทดสอบโมดูลด้วย `AT` command ผ่าน `minicom` หรือ `screen` ก่อนรันระบบจริง
-5. ตั้งค่า network failover (LAN+4G): ดู [`network_setup/README.md`](./network_setup/README.md)
-
-### รันเซิร์ฟเวอร์
-```bash
-.\venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## 📡 API Usage
-
-### แจ้งเตือนฉุกเฉิน (ระบบ/บอร์ดภายนอกเรียก)
-```bash
-curl -X POST http://localhost:8000/notify \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: <API_SECRET_KEY จาก .env>" \
-  -d '{
-    "message": "เซิร์ฟเวอร์หลักล่ม กรุณาตรวจสอบด่วน",
-    "priority_group": "network_team"
-  }'
-```
-
-### Dashboard: login แล้วดู/แก้ config
-```bash
-# login
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"<รหัสผ่านที่ตั้งไว้>"}'
-
-# ใช้ access_token ที่ได้ เรียกดู queue/config
-curl http://localhost:8000/queue/status -H "Authorization: Bearer <token>"
-curl http://localhost:8000/config -H "Authorization: Bearer <token>"
-```
-
-## 🔁 Call Logic Summary
-
-- **Connected** → เล่นไฟล์เสียง gTTS (ภาษาไทย) เข้าสาย
-- **No Answer / Busy** →
-  1. Retry ตามจำนวนรอบ + ระยะเวลาที่ตั้งไว้ (ปรับผ่าน dashboard `/config`)
-  2. Escalation Chain → โทรหาเบอร์ลำดับถัดไปในกลุ่มเดียวกัน (เบอร์อยู่ใน `.env`)
-  3. ถ้ายังไม่สำเร็จ → ส่ง SMS สรุปเหตุการณ์ (≤70 ตัวอักษร, EN+TH ปนกัน)
-
-## 🐳 Deploy ด้วย Docker + CI/CD (Pi build เอง ผ่าน self-hosted runner)
-
-Pi รัน **GitHub Actions self-hosted runner** ของตัวเอง — push โค้ดขึ้น `main` แล้ว Pi จะ
-checkout โค้ดล่าสุด, build Docker image, restart container ให้เองทั้งหมด ไม่ต้อง SSH เข้าเครื่องอีกเลย
-
-```
-git push (branch main) → Pi (self-hosted runner) รับงานจาก GitHub
-                        → docker compose build  (native build บนเครื่องเดียวกับที่รัน)
-                        → docker compose up -d --force-recreate
-```
-
-**Setup ครั้งแรกบน Pi (ทำ 2 อย่าง):**
-
-1. **ติดตั้ง self-hosted runner** — ดูขั้นตอนละเอียดใน [`RUNNER_SETUP.md`](./RUNNER_SETUP.md)
-   (ทำครั้งเดียว ใช้เวลาไม่กี่นาที)
-
-2. **เตรียมโปรเจค:**
-   ```bash
-   git clone https://github.com/<your-username>/4g-voice-notification-gateway.git
-   cd 4g-voice-notification-gateway
-   cp .env.example .env   # แก้ค่าจริง (ดูหัวข้อ Setup ด้านบน)
-   mkdir -p data/audio_cache data/logs
-   touch data/gateway.db
-   docker compose up -d --build   # รันครั้งแรกด้วยมือ ครั้งต่อไปให้ push แล้วปล่อยให้ CI จัดการ
-   ```
-
-หลังจากนี้ **แค่ push โค้ดขึ้น GitHub** — self-hosted runner จะ build + restart container ให้เอง
-ดูความคืบหน้าได้ที่แท็บ **Actions** บน GitHub repo
-
-**หมายเหตุสำคัญ:**
-- Build ครั้งแรกช้าสุด (~10-20 นาที) ครั้งต่อไปเร็วขึ้นมากถ้า Docker layer cache ยังอยู่
-  (ไม่ได้แก้ `requirements.txt`/`frontend/package.json`)
-- `Dockerfile` ใช้ [piwheels.org](https://www.piwheels.org) แทน PyPI ปกติ — ลดเวลา compile
-  `cryptography`/`bcrypt` บน ARM จากหลักสิบนาทีเหลือไม่กี่วินาที (ดาวน์โหลด wheel สำเร็จรูปแทน)
-- ถ้า Pi มีแค่ 1GB RAM แนะนำเปิด swap ไว้ก่อน build ครั้งแรก กัน OOM ตอน `npm install`/`vite build`
-- ไฟล์ `data/gateway.db`, `data/audio_cache/`, `data/logs/` mount เป็น volume ไว้แล้ว ข้อมูลไม่หายตอน rebuild
-
-
-
-- ห้าม hardcode พาสเวิร์ด/เบอร์โทร/token ลงโค้ด — ใช้ `.env` เท่านั้น (ถูก block ใน `.gitignore`)
-- ติดตั้ง pre-commit hook เพื่อสแกนหาความลับก่อน commit ทุกครั้ง:
-  ```bash
-  pip install -r requirements-dev.txt --break-system-packages
-  pre-commit install
-  ```
-
-## 🌿 Branches
-
-| Branch | สโคป |
+| ประวัติการโทร | โหมดมืด |
 |---|---|
-| `main` | SIM ตัวเดียว, GSM only, เรียบง่ายที่สุด (branch นี้) |
-| `feature/voip-multi-sim` | เพิ่ม VoIP (Asterisk+Zadarma) + multi-SIM pool — เก็บไว้พัฒนาต่อในอนาคต |
+| ![History](figma/handoff/mockups/07-call-history.png) | ![Dark](figma/handoff/mockups/03-dashboard-dark.png) |
 
-## 📄 License
+</div>
 
-MIT License — ดูรายละเอียดใน [LICENSE](./LICENSE)
+Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป็นโค้ดจริงทั้ง 10 หน้า รองรับทั้งภาษาไทย/อังกฤษ
+โหมดสว่าง/มืด และปรับตามขนาดจอตั้งแต่มือถือจนถึงจอกว้าง
+
+---
+
+## 🧩 เทคโนโลยีที่ใช้
+
+<table>
+<tr><td><b>Backend</b></td><td>FastAPI · SQLAlchemy · Alembic · SQLite (WAL mode)</td></tr>
+<tr><td><b>Frontend</b></td><td>Vite · React 18 · TypeScript · Tailwind CSS v4 · shadcn/ui</td></tr>
+<tr><td><b>เสียงพูด</b></td><td>Google Text-to-Speech (gTTS) — ภาษาไทย</td></tr>
+<tr><td><b>ฮาร์ดแวร์</b></td><td>Raspberry Pi 3 · SIMCOM A7670E (4G LTE Cat.1) · ซิม GOMO (AIS)</td></tr>
+<tr><td><b>Deploy</b></td><td>Docker (multi-stage build) · GitHub Actions self-hosted runner บน Pi</td></tr>
+<tr><td><b>ความปลอดภัย</b></td><td>API key รายอุปกรณ์ (เก็บแค่ sha256 hash) · JWT + bcrypt · gitleaks pre-commit</td></tr>
+</table>
+
+### สถาปัตยกรรม 3 ชั้น
+
+```
+🌐 API Layer      รับคำสั่ง ตรวจสิทธิ์ จัดการข้อมูลทั้งหมด
+      ↓
+📋 Queue Layer    คิว FIFO บน SQLite + กันงานซ้อนกันแบบ atomic
+      ↓
+📞 Worker Layer   State machine คุมการโทร + คุยกับโมดูล 4G ด้วยคำสั่ง AT
+```
+
+แต่ละชั้นทำงานแยกจากกัน ทดสอบทีละส่วนได้ และถ้าโมดูลฮาร์ดแวร์มีปัญหา ชั้น API กับ Dashboard
+ยังทำงานต่อได้ตามปกติ ไม่ล้มทั้งระบบ
+
+---
+
+## ✅ สถานะการพัฒนา
+
+| ส่วน | สถานะ |
+|---|:---:|
+| Backend — API, คิวงาน, worker, ระบบสิทธิ์, จัดการกลุ่ม/เบอร์/ประเภทเหตุการณ์ | ✅ |
+| Dashboard 10 หน้า ต่อ API จริง | ✅ |
+| ระบบจัดการเวอร์ชันฐานข้อมูล (Alembic migrations) | ✅ |
+| Docker + CI/CD deploy อัตโนมัติ | ✅ |
+| ทดสอบกับฮาร์ดแวร์จริง — โทรออก, เล่นเสียงเข้าสาย, วางสาย | ✅ |
+| ทดสอบลำดับการโทรครบทุกเบอร์กับฮาร์ดแวร์จริง | 🔲 |
+| ติดตั้งใช้งานจริงบน Raspberry Pi | 🔲 |
+
+---
+
+## 📐 ขอบเขตของระบบ
+
+ระบบนี้ตั้งใจออกแบบให้เล็กและตรงจุด จึงมีขอบเขตที่ชัดเจนตั้งแต่ต้น:
+
+- **ต้องมีทั้งไฟฟ้าและอินเทอร์เน็ต** จึงจะแจ้งเตือนได้ — ครอบคลุมเหตุอย่างเซิร์ฟเวอร์ล่มหรืออุปกรณ์
+  ขัดข้องขณะระบบยังทำงานปกติ ไม่ได้ออกแบบมารับมือกรณีไฟดับทั้งอาคาร
+- **ซิมใบเดียว = โทรได้ทีละสาย** งานแจ้งเตือนหลายรายการจะเรียงคิวกันไป
+- **ผู้ดูแลระบบคนเดียว** เหมาะกับการใช้ภายในองค์กรเดียว ยังไม่รองรับหลายองค์กรใช้ร่วมกัน
+
+ข้อจำกัดเหล่านี้เป็นการตัดสินใจโดยตั้งใจ เพื่อให้ระบบเรียบง่ายและเชื่อถือได้ในขอบเขตที่ออกแบบไว้
+
+> **หมายเหตุเรื่อง branch:** โปรเจคนี้มี branch `feature/voip-multi-sim` แยกไว้ ซึ่งมีระบบ VoIP
+> (Asterisk + Zadarma) และ multi-SIM pool เพิ่มเติม — branch `main` ตัดสองส่วนนั้นออกเพื่อให้ระบบ
+> เรียบง่ายและโฟกัสที่ซิมใบเดียวผ่าน GSM เท่านั้น
+
+---
+
+<div align="center">
+
+📄 *เอกสารวิธีติดตั้งและใช้งานจะเพิ่มเข้ามาเมื่อระบบพร้อมใช้งานจริง*
+
+**License:** [MIT](LICENSE)
+
+</div>

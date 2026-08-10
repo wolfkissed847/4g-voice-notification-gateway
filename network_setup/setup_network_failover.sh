@@ -1,10 +1,14 @@
 #!/bin/bash
 # ===================================================================
 # setup_network_failover.sh
-# ตั้งค่า Raspberry Pi ให้ใช้ LAN (สายแลนออฟฟิศ) เป็นหลัก
-# แล้วสลับไปใช้ 4G จากโมดูล A7670C อัตโนมัติเมื่อ LAN หลุด (เช่นตอนไฟดับ)
 #
-# ใช้ NetworkManager (default บน Raspberry Pi OS Bookworm ขึ้นไป)
+# ยังไม่ได้ใช้งานในดีไซน์ปัจจุบัน (ดู network_setup/README.md) — ตัดออกเพราะยังไม่ verify ว่า
+# A7670C คุยสาย (voice call) พร้อมกับใช้ 4G data ได้จริงหรือไม่ (VoLTE vs CSFB) ตอนนี้ Pi ใช้ LAN
+# เป็นอินเทอร์เน็ตทางเดียว ส่วนการโทรผ่าน AT command ไม่ต้องพึ่ง LAN/4G data อยู่แล้ว
+#
+# เก็บ script นี้ไว้เผื่อกลับมาทำต่อ ถ้าทดสอบกับฮาร์ดแวร์จริงแล้วว่ารองรับ voice+data พร้อมกัน:
+# ตั้งค่า Raspberry Pi ให้ใช้ LAN (สายแลนออฟฟิศ) เป็นหลัก แล้วสลับไปใช้ 4G จากโมดูล A7670C
+# อัตโนมัติเมื่อ LAN หลุด (เช่นตอนไฟดับ) ผ่าน NetworkManager (default บน Raspberry Pi OS Bookworm ขึ้นไป)
 # รัน: sudo bash network_setup/setup_network_failover.sh
 #
 # หมายเหตุ: script นี้ตั้งค่า "ลำดับความสำคัญ" ของ connection เท่านั้น

@@ -10,11 +10,29 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: [self-hosted, raspberry-pi]
+    # ใช้แค่ label `self-hosted` (ทุก runner ได้ label นี้อัตโนมัติตอน config)
+    # เดิมเขียน [self-hosted, raspberry-pi] แต่ตอนติดตั้ง runner จริงไม่ได้ใส่ label เพิ่ม
+    # ผลคืองาน deploy จะค้างรอในคิวตลอดไปเพราะไม่มี runner ตัวไหนตรงเงื่อนไข
+    # (โปรเจคนี้มี runner ตัวเดียวคือ Pi อยู่แล้ว จึงไม่ต้องแยก label)
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # ⚠️ clean: false สำคัญมาก ห้ามลบทิ้ง
+          # ค่าเริ่มต้นของ actions/checkout คือ clean: true ซึ่งรัน `git clean -ffdx` ก่อน checkout
+          # แฟลก -x หมายถึง "ลบไฟล์ที่อยู่ใน .gitignore ด้วย" — นั่นแปลว่าทุกครั้งที่ deploy
+          # โฟลเดอร์ data/ (ฐานข้อมูล + ประวัติการโทรทั้งหมด) และไฟล์ .env จะถูกลบทิ้งเกลี้ยง
+          clean: false
+
+      - name: เตรียมโฟลเดอร์ข้อมูล + เช็คว่ามี .env
+        run: |
+          mkdir -p data/audio_cache data/logs
+          if [ ! -f .env ]; then
+            echo "::error::ไม่พบไฟล์ .env — ต้องสร้างครั้งเดียวบน Pi ที่ $(pwd)/.env (ก็อปจาก .env.example แล้วแก้ค่าจริง)"
+            exit 1
+          fi
 
       - name: Build image (native build บน Pi)
         run: docker compose build

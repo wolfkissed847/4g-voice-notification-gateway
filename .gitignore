@@ -217,21 +217,38 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# ── เฉพาะโปรเจคนี้ (รวมมาจาก .gitignore เดิมตอน merge) ──
-project-summary.md
-Coop_Report_Outline.md
+# ── เฉพาะโปรเจคนี้ ──────────────────────────────────────────────────────────
+
+# เอกสารส่วนตัว (ร่างรายงานสหกิจ/สไลด์/สรุปอ่านเอง) — ยังไม่แชร์ขึ้น GitHub
+docs/
+
+# ── ฐานข้อมูล ──
+# *.db ไม่ครอบคลุมไฟล์พ่วงของ SQLite โหมด WAL เพราะมันลงท้ายด้วย -wal / -shm ไม่ใช่ .db
+# (เคยหลุดขึ้น repo สาธารณะมาแล้วตอน commit 6a8d326 — ต้องมี 2 บรรทัดล่างนี้เสมอ)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+data/
+
+# ── ผลลัพธ์จากการ build (สร้างใหม่ได้เสมอ ไม่ควรอยู่ใน git) ──
+# static/ = ผลลัพธ์ `vite build` ที่ FastAPI เอาไปเสิร์ฟ — Dockerfile build เองตอน deploy
+static/
 frontend/node_modules/
 frontend/dist/
-data/
-asterisk_config/pjsip.conf
-asterisk_config/extensions.conf
-asterisk_config/manager.conf
-*.db
-*.sqlite3
+
+# ── ไฟล์ที่ระบบสร้างตอนรัน ──
 audio_cache/*
 !audio_cache/.gitkeep
 logs/*
 !logs/.gitkeep
+
+# ── ของเก่าจาก branch VoIP (asterisk) — มี credential อยู่ข้างใน ──
+asterisk_config/pjsip.conf
+asterisk_config/extensions.conf
+asterisk_config/manager.conf
+
+# ── อื่นๆ ──
 *.py[cod]
 .venv/
 .DS_Store
