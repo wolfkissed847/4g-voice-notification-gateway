@@ -32,14 +32,30 @@ fi
 
 # สำรองไปไว้ใน /app/data ก่อน (โฟลเดอร์นี้ mount กับดิสก์ Pi อยู่แล้ว)
 # แล้วค่อยย้ายออกมา — จะได้ไม่ต้อง mount อะไรเพิ่มให้ container
+#
+# ⚠️ ห้าม hardcode path ของไฟล์ DB — ต้องอ่านจาก DATABASE_URL ที่แอปใช้จริง
+# เพราะ sqlite3.connect() กับไฟล์ที่ไม่มีอยู่จะ "สร้างไฟล์เปล่าให้" ไม่ใช่ error
+# ถ้าเดา path ผิดจะได้ไฟล์สำรองที่เปิดผ่าน integrity_check ทุกอย่างดูปกติ
+# แต่ข้างในว่างเปล่า — รู้ตัวอีกทีตอนต้องกู้จริงแล้วไม่มีอะไรให้กู้ (เจอมาแล้วตอนเทสรอบแรก)
 docker exec gateway python -c "
-import sqlite3, sys
-src = sqlite3.connect('/app/data/gateway.db')
+import os, sqlite3, sys
+url = os.environ.get('DATABASE_URL', 'sqlite:///./gateway.db')
+if not url.startswith('sqlite:'):
+    sys.exit('รองรับเฉพาะ sqlite — เจอ: ' + url.split(':')[0])
+# sqlite:///./x.db -> ./x.db (relative กับ cwd ของแอป) | sqlite:////a/b.db -> /a/b.db
+src_path = os.path.abspath(url.split('sqlite:///', 1)[1])
+if not os.path.exists(src_path):
+    sys.exit('ไม่พบไฟล์ฐานข้อมูลที่ ' + src_path)
+src = sqlite3.connect('file:' + src_path + '?mode=ro', uri=True)   # เปิดอ่านอย่างเดียว กันเผลอสร้างไฟล์เปล่า
 dst = sqlite3.connect('/app/data/_backup_tmp.db')
 with dst:
     src.backup(dst)   # backup API — ได้ข้อมูลครบถึงวินาทีล่าสุดรวมส่วนที่ยังอยู่ใน WAL
+tables = [r[0] for r in dst.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")]
 dst.close(); src.close()
-" || { echo "[$(date '+%F %T')] ❌ สำรองไม่สำเร็จ"; exit 1; }
+if not tables:
+    sys.exit('สำรองแล้วแต่ไม่มีตารางเลย — path ผิดหรือฐานข้อมูลว่าง: ' + src_path)
+print('  จาก %s (%d ตาราง)' % (src_path, len(tables)))
+" || { echo "[$(date '+%F %T')] ❌ สำรองไม่สำเร็จ"; rm -f "$PROJECT_DIR/data/_backup_tmp.db"; exit 1; }
 
 mv "$PROJECT_DIR/data/_backup_tmp.db" "$OUT"
 gzip -f "$OUT"
