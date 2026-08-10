@@ -34,7 +34,8 @@ function isRecentlyActive(lastUsedAt: string | null): boolean {
   return Date.now() - new Date(lastUsedAt).getTime() < ONLINE_WINDOW_MS;
 }
 
-export function DevicesPage() {
+/** embedded = ถูกฝังอยู่ในหน้า SetupPage ที่มีหัวข้อของตัวเองแล้ว จึงไม่ต้องขึ้นหัวข้อซ้ำ */
+export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { T } = useApp();
   const navigate = useNavigate();
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -94,15 +95,28 @@ export function DevicesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title={T.devices_title}
-        meta={loading ? T.devices_sub : T.devices_summary(keys.length, active)}
-        action={
-          <Btn variant="primary" onClick={() => setShowAdd(true)}>
-            + {T.add_device}
-          </Btn>
-        }
-      />
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="font-mono text-caption text-ink-2">
+            {loading ? T.devices_sub : T.devices_summary(keys.length, active)}
+          </p>
+          <span className="ms-auto">
+            <Btn variant="primary" onClick={() => setShowAdd(true)}>
+              + {T.add_device}
+            </Btn>
+          </span>
+        </div>
+      ) : (
+        <PageHeader
+          title={T.devices_title}
+          meta={loading ? T.devices_sub : T.devices_summary(keys.length, active)}
+          action={
+            <Btn variant="primary" onClick={() => setShowAdd(true)}>
+              + {T.add_device}
+            </Btn>
+          }
+        />
+      )}
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(290px,100%),1fr))] gap-3">
         {keys.map((d) => {

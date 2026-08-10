@@ -59,8 +59,9 @@ function Header() {
     { path: '/overview', label: T.nav_overview },
     { path: '/queue', label: T.nav_queue },
     { path: '/history', label: T.nav_history },
-    { path: '/devices', label: T.devices_title },
-    { path: '/event-types', label: T.nav_event_types },
+    // อุปกรณ์กับประเภทเหตุการณ์รวมเป็นเมนูเดียว (SetupPage) เพราะตั้งค่าคู่กันเสมอ
+    // — path ยังแยกกันอยู่ ใช้เป็นตัวเลือกแท็บ
+    { path: '/devices', label: T.setup_title, alsoMatch: ['/event-types'] },
     { path: '/contacts', label: T.nav_contacts },
     { path: '/system', label: T.sys_title },
     { path: '/api-guide', label: T.nav_api },
@@ -72,7 +73,13 @@ function Header() {
   };
 
   // ชื่อหน้าปัจจุบันสำหรับปุ่มเมนูบนมือถือ — startsWith เพื่อให้ /devices/12 ยังนับเป็นแท็บ "อุปกรณ์"
-  const current = tabs.find((t) => location.pathname.startsWith(t.path)) ?? tabs[0];
+  // เมนูหนึ่งอันอาจครอบหลาย path ได้ (เมนู "อุปกรณ์ & เหตุการณ์" ครอบทั้ง /devices และ
+  // /event-types ซึ่งเป็นสองแท็บของหน้าเดียวกัน) จึงเช็คทั้ง path หลักและ alsoMatch
+  // ใช้ตัวนี้แทน isActive ของ NavLink ที่ดูแค่ path เดียวตรงๆ
+  const isTabActive = (t: (typeof tabs)[number]) =>
+    location.pathname.startsWith(t.path) || (t.alsoMatch ?? []).some((p) => location.pathname.startsWith(p));
+
+  const current = tabs.find(isTabActive) ?? tabs[0];
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur-md">
@@ -124,12 +131,10 @@ function Header() {
                 <NavLink
                   key={tab.path}
                   to={tab.path}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-2.5 border-b border-line-2 px-3.5 py-2.5 text-caption text-ink last:border-b-0',
-                      isActive ? 'bg-brand-soft font-semibold' : 'font-medium',
-                    )
-                  }
+                  className={cn(
+                    'flex items-center gap-2.5 border-b border-line-2 px-3.5 py-2.5 text-caption text-ink last:border-b-0',
+                    isTabActive(tab) ? 'bg-brand-soft font-semibold' : 'font-medium',
+                  )}
                 >
                   <span className="font-mono text-micro text-ink-2">
                     {String(i + 1).padStart(2, '0')}
@@ -147,16 +152,14 @@ function Header() {
             <NavLink
               key={tab.path}
               to={tab.path}
-              className={({ isActive }) =>
-                cn(
-                  // ตัวอักษรเป็น text-ink (ดำ) ทั้งสองสถานะ — บอก active ด้วยกรอบ+พื้น+น้ำหนักตัวอักษร
-                  // ไม่ใช้สีตัวอักษรเป็นตัวบอก เพราะอ่านง่ายกว่าและไม่พึ่งการแยกสีอย่างเดียว
-                  'rounded-full border px-3.5 py-1.5 text-caption whitespace-nowrap transition-colors',
-                  isActive
-                    ? 'border-brand bg-brand-soft font-semibold text-ink'
-                    : 'border-line bg-surface font-medium text-ink hover:border-brand',
-                )
-              }
+              className={cn(
+                // ตัวอักษรเป็น text-ink (ดำ) ทั้งสองสถานะ — บอก active ด้วยกรอบ+พื้น+น้ำหนักตัวอักษร
+                // ไม่ใช้สีตัวอักษรเป็นตัวบอก เพราะอ่านง่ายกว่าและไม่พึ่งการแยกสีอย่างเดียว
+                'rounded-full border px-3.5 py-1.5 text-caption whitespace-nowrap transition-colors',
+                isTabActive(tab)
+                  ? 'border-brand bg-brand-soft font-semibold text-ink'
+                  : 'border-line bg-surface font-medium text-ink hover:border-brand',
+              )}
             >
               {tab.label}
             </NavLink>

@@ -10,8 +10,7 @@ import { QueuePage } from "./pages/QueuePage";
 import { CallLogPage } from "./pages/CallLogPage";
 import { SystemPage } from "./pages/SystemPage";
 import { ContactsPage } from "./pages/ContactsPage";
-import { EventTypesPage } from "./pages/EventTypesPage";
-import { DevicesPage } from "./pages/DevicesPage";
+import { SetupPage } from "./pages/SetupPage";
 import { DeviceConfigPage } from "./pages/DeviceConfigPage";
 import { ApiGuidePage } from "./pages/ApiGuidePage";
 
@@ -30,10 +29,12 @@ export default function App() {
               <Route path="/system" element={<SystemPage />} />
               <Route path="/settings" element={<Navigate to="/system" replace />} />
               <Route path="/contacts" element={<ContactsPage />} />
-              <Route path="/event-types" element={<EventTypesPage />} />
+              {/* 2 path นี้เป็นหน้าเดียวกัน (SetupPage) ต่างกันแค่แท็บที่เปิดอยู่
+              เก็บทั้งคู่ไว้เพราะลิงก์เดิมที่เคยแชร์/บุ๊กมาร์กไว้ต้องยังใช้ได้ */}
+              <Route path="/event-types" element={<SetupPage />} />
               {/* /api-keys เปลี่ยนเป็น /devices ตามดีไซน์ (1 key = 1 อุปกรณ์)
                   redirect ไว้เผื่อมี bookmark เดิม */}
-              <Route path="/devices" element={<DevicesPage />} />
+              <Route path="/devices" element={<SetupPage />} />
               <Route path="/devices/:id" element={<DeviceConfigPage />} />
               <Route path="/api-keys" element={<Navigate to="/devices" replace />} />
               <Route path="/api-guide" element={<ApiGuidePage />} />

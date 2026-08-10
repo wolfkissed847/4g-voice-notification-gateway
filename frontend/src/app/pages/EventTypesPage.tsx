@@ -30,7 +30,8 @@ interface FormState {
 
 const EMPTY_FORM: FormState = { code: "", display_name: "", message_template: "", group_id: "", is_active: true };
 
-export function EventTypesPage() {
+/** embedded = ถูกฝังอยู่ในหน้า SetupPage ที่มีหัวข้อของตัวเองแล้ว จึงไม่ต้องขึ้นหัวข้อซ้ำ */
+export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { T } = useApp();
   const [eventTypes, setEventTypes] = useState<EventType[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -148,16 +149,28 @@ export function EventTypesPage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <PageHeader
-        title={T.event_types_title}
-        meta={T.event_types_sub}
-        action={
-          <Btn variant="primary" onClick={openCreate} disabled={groups.length === 0}>
-            <Plus size={15} />
-            {T.add_event_type}
-          </Btn>
-        }
-      />
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="font-mono text-caption text-ink-2">{T.event_types_sub}</p>
+          <span className="ms-auto">
+            <Btn variant="primary" onClick={openCreate} disabled={groups.length === 0}>
+              <Plus size={15} />
+              {T.add_event_type}
+            </Btn>
+          </span>
+        </div>
+      ) : (
+        <PageHeader
+          title={T.event_types_title}
+          meta={T.event_types_sub}
+          action={
+            <Btn variant="primary" onClick={openCreate} disabled={groups.length === 0}>
+              <Plus size={15} />
+              {T.add_event_type}
+            </Btn>
+          }
+        />
+      )}
 
       {eventTypes.length === 0 ? (
         /* ตัด MOCK_EVENT_TYPES_PREVIEW ออก — เดิมโชว์ power_outage/network_outage ปลอมไว้
