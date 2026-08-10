@@ -21,8 +21,26 @@ services:
     image: gateway-local:latest
     container_name: gateway
     restart: unless-stopped
+
+    # จำกัด RAM ไม่ให้ตัวเองลามไปกินจนเครื่องล่ม
+    # Pi 3B มี RAM รวม ~905 MB ระบบนี้ใช้จริงราว 150-250 MB (FastAPI + worker + gTTS)
+    # ให้เพดาน 600 MB = เผื่อไว้เท่าตัว แต่ยังเหลือ ~300 MB ให้ OS, cloudflared และ runner
+    #
+    # ที่ต้องมีเพราะถ้าวันหนึ่งมี memory leak หรือมีคนยิง API ถล่ม แล้วไม่มีเพดานไว้
+    # Linux OOM killer จะเลือกฆ่า "โปรเซสที่กินเยอะที่สุด" ซึ่งอาจเป็น sshd หรือ Docker เอง
+    # = เข้าเครื่องไม่ได้เลย ต้องไปถอดปลั๊ก มีเพดานแล้ว container นี้ตายคนเดียวแล้ว restart เอง
+    mem_limit: 600m
+
     ports:
-      - "8000:8000"
+      # ผูกกับ 127.0.0.1 อย่างเดียว ไม่เปิดออกวง LAN
+      #
+      # ทางเข้าเดียวคือ Cloudflare Tunnel (cloudflared ใช้ network_mode: host จึงยิงเข้า
+      # localhost:8000 ได้ตรงๆ) ซึ่งมี WAF/rate limit ของ Cloudflare คั่นอยู่ข้างหน้า
+      # ต่างจากพอร์ตที่เปิดโล่งในวง LAN ที่ทุกอุปกรณ์ในบ้าน/ออฟฟิศยิงถึงได้โดยไม่มีอะไรกรอง
+      #
+      # ถ้าต้องการเข้าจาก LAN ตรงๆ (เช่น tunnel ล่ม) เปลี่ยนกลับเป็น "8000:8000"
+      # หรือทำ SSH tunnel ชั่วคราว: ssh -L 8000:localhost:8000 user@<ip-ของ-pi>
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     volumes:

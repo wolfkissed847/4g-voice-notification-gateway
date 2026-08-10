@@ -41,7 +41,11 @@ export function SystemPage() {
   }, []);
 
   // gsm/pi/info เป็นค่าอ่านอย่างเดียว poll ได้อิสระ — เดิมดึงครั้งเดียวตอน mount ทำให้หน้านี้
-  // "ค้าง" ไม่อัปเดตเลยจนกว่าจะ reload เอง ใช้จังหวะเดียวกับ DashboardPage (5 วิ)
+  // "ค้าง" ไม่อัปเดตเลยจนกว่าจะ reload เอง
+  //
+  // 2 วิ (ถี่กว่าหน้าอื่นที่ใช้ 5 วิ) เพราะหน้านี้คือหน้าที่คนเปิดค้างไว้ "เพื่อดูว่าเครื่องเป็นยังไง"
+  // โดยเฉพาะตอนไล่ปัญหา เช่นดูว่า CPU พุ่งตอนโทรไหม อุณหภูมิขึ้นถึงเท่าไหร่ ถ้า 5 วิจะพลาดจังหวะสั้นๆ ไป
+  // ต้นทุนต่ำเพราะฝั่ง backend อ่านค่าจาก /proc ตรงๆ ไม่มี query ฐานข้อมูล
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -52,7 +56,7 @@ export function SystemPage() {
       setInfo(i);
     };
     void load();
-    const id = setInterval(() => void load(), 5000);
+    const id = setInterval(() => void load(), 2000);
     return () => {
       cancelled = true;
       clearInterval(id);
