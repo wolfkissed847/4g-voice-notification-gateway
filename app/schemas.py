@@ -148,6 +148,14 @@ class GsmDetailResponse(BaseModel):
     network_mode: str | None = Field(None, description="เช่น '4G (LTE)', '3G (UMTS)'")
     port: str | None = None
     updated_at: str | None = None
+    restarting: bool = Field(False, description="worker กำลังปิด/เปิดคลื่นวิทยุอยู่ตอนนี้")
+    restart_result: str | None = Field(None, description="ผลของการรีสตาร์ทครั้งล่าสุด: 'ok' | 'failed'")
+    restart_at: str | None = Field(None, description="เวลาที่รีสตาร์ทเสร็จครั้งล่าสุด (UTC)")
+
+
+class GsmRestartResponse(BaseModel):
+    accepted: bool = Field(description="รับคำสั่งไว้แล้วหรือไม่ — False = มีคำสั่งค้างอยู่ก่อนแล้ว")
+    message: str
 
 
 class PiDetailResponse(BaseModel):

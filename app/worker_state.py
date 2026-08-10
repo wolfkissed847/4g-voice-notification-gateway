@@ -25,6 +25,16 @@ class WorkerState:
     # ตอนนี้มีแค่ขั้นอัปโหลดไฟล์เสียงที่วัดได้ เพราะรู้ขนาดไฟล์และส่งเป็นก้อนๆ นับได้
     current_progress: float | None = None
 
+    # ── คำสั่งรีสตาร์ทโมดูลจากหน้าเว็บ ────────────────────────────────────
+    # ทำเป็น "ธง" ให้ worker มาหยิบไปทำเอง ไม่ใช่ให้ API thread สั่งโมดูลตรงๆ
+    # เพราะพอร์ต serial เปิดได้ทีละโปรแกรม/ทีละ thread — worker ถือไว้ตลอดเวลา
+    # ถ้า API แทรกเข้าไปเขียนพร้อมกัน คำสั่งสองชุดจะปนกันในสายเดียว แล้วอ่านคำตอบผิดทั้งคู่
+    # ผลพลอยได้: worker เช็คธงนี้เฉพาะตอนไม่มีงานโทรค้างอยู่ จึงไม่มีทางไปตัดสายที่กำลังคุยอยู่
+    gsm_restart_requested: bool = False
+    gsm_restarting: bool = False
+    gsm_restart_result: str | None = None   # 'ok' | 'failed' | None (ยังไม่เคยสั่ง)
+    gsm_restart_at: datetime.datetime | None = None
+
 
 class CallStep:
     """ขั้นตอนย่อยระหว่างประมวลผลงานโทร 1 งาน — ละเอียดกว่า CallStatus ที่เก็บลง DB
@@ -76,6 +86,37 @@ def set_progress(progress: float):
     """อัปเดตความคืบหน้าของขั้นตอนปัจจุบันอย่างเดียว (ไม่แตะ step) — เรียกถี่ได้ระหว่างอัปโหลด"""
     with _lock:
         _state.current_progress = progress
+
+
+def request_gsm_restart() -> bool:
+    """
+    ขอให้ worker รีสตาร์ทโมดูลในรอบถัดไป — คืน False ถ้ามีคำขอค้างอยู่แล้วหรือกำลังทำอยู่
+
+    เรียกจาก API thread เท่านั้น ตัวที่ลงมือทำจริงคือ worker (ดูเหตุผลที่ dataclass ด้านบน)
+    """
+    with _lock:
+        if _state.gsm_restart_requested or _state.gsm_restarting:
+            return False
+        _state.gsm_restart_requested = True
+        return True
+
+
+def take_gsm_restart_request() -> bool:
+    """worker เรียกเพื่อ 'รับงาน' — คืน True ครั้งเดียวต่อ 1 คำขอ แล้วเคลียร์ธงทันที"""
+    with _lock:
+        if not _state.gsm_restart_requested:
+            return False
+        _state.gsm_restart_requested = False
+        _state.gsm_restarting = True
+        _state.gsm_restart_result = None
+        return True
+
+
+def finish_gsm_restart(ok: bool):
+    with _lock:
+        _state.gsm_restarting = False
+        _state.gsm_restart_result = "ok" if ok else "failed"
+        _state.gsm_restart_at = datetime.datetime.utcnow()
 
 
 def get_state() -> WorkerState:

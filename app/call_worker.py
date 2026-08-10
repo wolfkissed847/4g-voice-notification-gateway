@@ -268,6 +268,22 @@ def run_worker_loop(poll_interval: float = 1.0, config_check_interval: float = 1
                         cfg_updated_at = row.updated_at
                         logger.info("Config reloaded จาก dashboard (updated_at=%s)", cfg_updated_at)
 
+                # เช็คคำขอรีสตาร์ทโมดูล "ก่อน" หยิบงานใหม่ — วางไว้ตรงนี้โดยตั้งใจ เพราะเป็น
+                # จุดเดียวที่การันตีได้ว่าไม่มีสายที่กำลังคุยอยู่ (process_job ทำงานแบบ blocking
+                # จนจบสายเสมอ) ปุ่มบนหน้าเว็บจึงไม่มีทางไปตัดสายที่คนกำลังฟังข้อความอยู่
+                if worker_state.take_gsm_restart_request():
+                    logger.warning("ได้รับคำสั่งรีสตาร์ทโมดูลจากหน้าเว็บ — เริ่มปิด/เปิดคลื่นวิทยุ")
+                    try:
+                        ok = gsm.restart_radio()
+                    except Exception:
+                        logger.exception("รีสตาร์ทโมดูลล้มเหลว")
+                        ok = False
+                    worker_state.finish_gsm_restart(ok)
+                    logger.warning("รีสตาร์ทโมดูล%s", "สำเร็จ" if ok else "ไม่สำเร็จ")
+                    # บังคับให้เช็คสถานะสัญญาณใหม่ทันทีในรอบถัดไป ไม่ต้องรอครบ interval
+                    # ผู้ใช้ที่เพิ่งกดปุ่มจะได้เห็นค่าใหม่บนหน้าเว็บเลย ไม่ใช่ค่าค้างจากก่อนรีสตาร์ท
+                    last_gsm_status_check = 0.0
+
                 job = claim_next_job(db)
                 if job:
                     try:

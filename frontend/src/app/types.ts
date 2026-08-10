@@ -175,6 +175,16 @@ export interface GsmDetail {
   network_mode: string | null;
   port: string | null;
   updated_at: string | null;
+  /** worker กำลังปิด/เปิดคลื่นวิทยุอยู่ตอนนี้ */
+  restarting: boolean;
+  /** ผลของการรีสตาร์ทครั้งล่าสุด */
+  restart_result: 'ok' | 'failed' | null;
+  restart_at: string | null;
+}
+
+export interface GsmRestartResponse {
+  accepted: boolean;
+  message: string;
 }
 
 export interface PiDetail {

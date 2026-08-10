@@ -53,6 +53,13 @@ export const TR = {
     retry_delay: "เวลารอก่อนโทรซ้ำ", retry_delay_sub: "วินาทีที่รอก่อนโทรซ้ำ",
     ring_timeout: "เวลารอให้รับสาย", ring_timeout_sub: "วินาทีที่รอสายก่อนตัดว่าไม่รับ",
     unit_times: "ครั้ง", unit_seconds: "วินาที",
+    gsm_restart: "รีสตาร์ทโมดูล", gsm_restarting: "กำลังรีสตาร์ท…",
+    gsm_restart_confirm_title: "รีสตาร์ทโมดูล 4G?",
+    gsm_restart_confirm_body: "โมดูลจะปิด-เปิดคลื่นวิทยุแล้วหาเครือข่ายใหม่ ใช้เวลาราว 10-30 วินาที ระหว่างนี้โทรออกไม่ได้ · งานที่รอในคิวจะถูกโทรต่อให้เองหลังเสร็จ · ระบบจะไม่ตัดสายที่กำลังคุยอยู่ (รอจนสายจบก่อนเสมอ)",
+    gsm_restart_hint: "ใช้เมื่อสัญญาณหาย หาเครือข่ายไม่เจอ หรือโมดูลไม่ตอบสนอง",
+    gsm_restart_ok: "รีสตาร์ทโมดูลสำเร็จ กลับเข้าเครือข่ายแล้ว",
+    gsm_restart_failed: "รีสตาร์ทแล้วแต่ยังไม่กลับเข้าเครือข่าย — ลองเช็คซิม/สายอากาศ",
+    gsm_restart_sent: "ส่งคำสั่งแล้ว รอโมดูลกลับมาสักครู่",
     retry_count_help: "ถ้าเบอร์แรกไม่รับ จะโทรซ้ำเบอร์เดิมอีกกี่ครั้ง ครบแล้วจึงข้ามไปเบอร์ถัดไปในกลุ่ม",
     retry_count_example: (n: number) =>
       n === 0
@@ -324,6 +331,13 @@ export const TR = {
     retry_delay: "Delay before retry", retry_delay_sub: "Seconds to wait before redialing",
     ring_timeout: "Ring timeout", ring_timeout_sub: "Seconds to wait for answer before hanging up",
     unit_times: "times", unit_seconds: "seconds",
+    gsm_restart: "Restart module", gsm_restarting: "Restarting…",
+    gsm_restart_confirm_title: "Restart the 4G module?",
+    gsm_restart_confirm_body: "The radio is switched off and on, then re-registers on the network. Takes about 10-30 seconds, during which no calls can be placed. Queued jobs are dialed once it is back, and any call in progress is always allowed to finish first.",
+    gsm_restart_hint: "Use when signal is lost, the network cannot be found, or the module stops responding",
+    gsm_restart_ok: "Module restarted and back on the network",
+    gsm_restart_failed: "Restarted but not registered yet — check the SIM and antenna",
+    gsm_restart_sent: "Command sent, waiting for the module to come back",
     retry_count_help: "If the first contact does not answer, how many more times to redial the same number before moving on to the next contact in the group.",
     retry_count_example: (n: number) =>
       n === 0

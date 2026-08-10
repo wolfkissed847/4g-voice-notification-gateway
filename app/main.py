@@ -37,7 +37,7 @@ from app.schemas import (
     HistoryItem, HistoryResponse,
     LoginRequest, LoginResponse,
     NotifyRequest, NotifyResponse,
-    GsmDetailResponse, PiDetailResponse,
+    GsmDetailResponse, GsmRestartResponse, PiDetailResponse,
     QueueStatusItem, QueueStatusResponse,
     SystemInfoResponse,
 )
@@ -259,7 +259,30 @@ def system_gsm(_user: str = Depends(get_current_user)):
         network_mode=state.gsm_network_mode,
         port=state.gsm_port,
         updated_at=_iso_utc(state.gsm_status_updated_at),
+        restarting=state.gsm_restarting,
+        restart_result=state.gsm_restart_result,
+        restart_at=_iso_utc(state.gsm_restart_at),
     )
+
+
+@app.post("/system/gsm/restart", response_model=GsmRestartResponse, status_code=202)
+def system_gsm_restart(_user: str = Depends(get_current_user)):
+    """
+    สั่งรีสตาร์ทโมดูล 4G (ปิด-เปิดคลื่นวิทยุ) — ใช้ตอนโมดูลค้าง/หาเครือข่ายไม่เจอ
+
+    ตอบ 202 ทันทีโดยไม่รอให้เสร็จ เพราะขั้นตอนนี้กินเวลาถึง 30 วินาที ถ้ารอจะค้าง
+    HTTP connection ไว้จนหมดเวลา timeout ของเบราว์เซอร์/Cloudflare ก่อนได้คำตอบ
+    ให้หน้าเว็บ poll /system/gsm ดูค่า restarting/restart_result เอาแทน
+
+    ตัวที่ลงมือทำจริงคือ call worker ไม่ใช่ request นี้ — พอร์ต serial เปิดได้ทีละ thread
+    และ worker ถือไว้ตลอด ถ้าเขียนสวนเข้าไปคำสั่งสองชุดจะปนกันในสายเดียว
+    worker จะหยิบไปทำในจังหวะที่ไม่มีสายค้างอยู่ จึงไม่ตัดสายที่กำลังคุยกันอยู่
+    """
+    if not worker_state.get_state().gsm_connected:
+        raise HTTPException(status_code=409, detail="โมดูลยังไม่เชื่อมต่อ — รีสตาร์ทไม่ได้")
+    if not worker_state.request_gsm_restart():
+        return GsmRestartResponse(accepted=False, message="มีคำสั่งรีสตาร์ทค้างอยู่แล้ว รอให้รอบนี้เสร็จก่อน")
+    return GsmRestartResponse(accepted=True, message="รับคำสั่งแล้ว โมดูลจะรีสตาร์ทภายในไม่กี่วินาที")
 
 
 @app.get("/system/pi", response_model=PiDetailResponse)

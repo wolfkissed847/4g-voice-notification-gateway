@@ -15,14 +15,14 @@
  * ที่ตัดออกเพราะไม่มีข้อมูล/endpoint: เครดิตซิม, รีสตาร์ทโมดูล, เสียงชาย-หญิง+ความเร็ว,
  * เปลี่ยนรหัสผ่าน, ออกจากระบบทุกอุปกรณ์ — บอกไว้ในการ์ดท้ายหน้าตรงๆ ไม่ทำช่องหลอก
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import { toast } from 'sonner';
 import { Moon, Sun } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { getConfig, updateConfig } from '../api/config';
-import { getGsmDetail, getPiDetail, getSystemInfo } from '../api/system';
+import { getGsmDetail, getPiDetail, getSystemInfo, restartGsm } from '../api/system';
 import { Btn, Card, Divider, PageHeader, Pill, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
 import { operatorName } from '../lib/operator';
@@ -35,6 +35,10 @@ export function SystemPage() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  // จำว่ารอบก่อนกำลังรีสตาร์ทอยู่ไหม เพื่อจับ "จังหวะที่เพิ่งเปลี่ยนจากกำลังทำ → เสร็จ"
+  // แล้วเด้ง toast ครั้งเดียว ถ้าดูจาก restart_result อย่างเดียวจะเด้งซ้ำทุก 2 วิที่ poll
+  const wasRestarting = useRef(false);
 
   // config เป็นฟอร์มที่แก้ได้ ดึงครั้งเดียวพอ — poll ทับระหว่างพิมพ์จะเด้งค่าที่ยังไม่ได้กด "บันทึก" ทิ้ง
   useEffect(() => {
@@ -52,6 +56,11 @@ export function SystemPage() {
     const load = async () => {
       const [g, p, i] = await Promise.all([getGsmDetail(), getPiDetail(), getSystemInfo()]);
       if (cancelled) return;
+      if (wasRestarting.current && !g.restarting) {
+        if (g.restart_result === 'ok') toast.success(T.gsm_restart_ok);
+        else if (g.restart_result === 'failed') toast.error(T.gsm_restart_failed);
+      }
+      wasRestarting.current = g.restarting;
       setGsm(g);
       setPi(p);
       setInfo(i);
@@ -118,6 +127,29 @@ export function SystemPage() {
               {T.sys_module_updated} {gsm?.updated_at ? new Date(gsm.updated_at).toLocaleString() : '—'}
             </div>
           </dl>
+
+          {/* mt-auto ดันปุ่มลงชิดขอบล่างการ์ด — การ์ดทุกใบสูงเท่ากันแล้ว ถ้าไม่ดันลง
+              ปุ่มจะลอยอยู่กลางการ์ดโดยมีที่ว่างห้อยอยู่ข้างใต้ */}
+          <div className="mt-auto flex flex-col gap-1.5 pt-1">
+            <Btn
+              className="self-start"
+              disabled={!gsm?.connected || gsm.restarting}
+              onClick={() => setConfirmRestart(true)}
+            >
+              {gsm?.restarting ? (
+                <span className="flex items-center gap-2">
+                  <RefreshIcon className="size-4 animate-spin" />
+                  {T.gsm_restarting}
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <RefreshIcon className="size-4" />
+                  {T.gsm_restart}
+                </span>
+              )}
+            </Btn>
+            <p className="text-micro leading-[1.6] text-ink-2">{T.gsm_restart_hint}</p>
+          </div>
         </Card>
 
         <Card className="flex min-w-0 flex-col gap-3 p-4">
@@ -260,7 +292,81 @@ export function SystemPage() {
         <h2 className="text-caption font-bold text-warn">{T.sys_missing_title}</h2>
         <p className="text-caption leading-[1.9] text-ink-2">{T.sys_missing_body}</p>
       </div>
+
+      {/* ยืนยันก่อนรีสตาร์ท — ไม่ใช่ปุ่มกดพลาดแล้วไม่เป็นไร ระหว่างรีสตาร์ทโทรออกไม่ได้เลย
+          ซึ่งถ้าเกิดเหตุพอดีช่วงนั้นคือแจ้งเตือนไม่ถึงคน */}
+      <ConfirmDialog
+        open={confirmRestart}
+        title={T.gsm_restart_confirm_title}
+        body={T.gsm_restart_confirm_body}
+        confirmLabel={T.gsm_restart}
+        cancelLabel={T.cancel}
+        onCancel={() => setConfirmRestart(false)}
+        onConfirm={async () => {
+          setConfirmRestart(false);
+          try {
+            const res = await restartGsm();
+            if (res.accepted) toast.success(T.gsm_restart_sent);
+            else toast.error(res.message);
+            wasRestarting.current = true; // กันพลาดกรณี poll รอบถัดไปมาช้ากว่าที่ worker ทำเสร็จ
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : T.error_generic);
+          }
+        }}
+      />
     </div>
+  );
+}
+
+/** กล่องยืนยันแบบง่าย — ใช้ที่เดียวในหน้านี้ จึงยังไม่ยกไปเป็น component กลาง */
+function ConfirmDialog({
+  open,
+  title,
+  body,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onCancel}
+    >
+      <div
+        className="animate-fade-up flex w-full max-w-[420px] flex-col gap-3 rounded-card border border-line bg-surface p-5 shadow-card"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lead font-bold">{title}</h2>
+        <p className="text-caption leading-[1.9] text-ink-2">{body}</p>
+        <div className="mt-1 flex flex-wrap justify-end gap-2">
+          <Btn onClick={onCancel}>{cancelLabel}</Btn>
+          <Btn variant="primary" onClick={onConfirm}>
+            {confirmLabel}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RefreshIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconBase} {...props}>
+      <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" />
+      <path d="M20.5 4.5V10h-5.5" />
+    </svg>
   );
 }
 

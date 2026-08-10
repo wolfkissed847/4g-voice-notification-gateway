@@ -188,8 +188,16 @@ function Header() {
             <Dot tone={info?.gsm_connected ? 'ok' : 'bad'} pulse={info?.gsm_connected} />
           </NavLink>
 
-          <button type="button" onClick={toggleLang} className={chipCls}>
-            {lang === 'th' ? 'EN' : 'ไทย'}
+          {/* แสดงเป็น TH/EN สองตัวอักษรเท่ากันเสมอ — เดิมสลับระหว่าง "EN" กับ "ไทย"
+              ซึ่งกว้างไม่เท่ากัน ปุ่มเลยหด-ขยายทุกครั้งที่สลับภาษาแล้วดันปุ่มข้างๆ ขยับตาม */}
+          <button
+            type="button"
+            onClick={toggleLang}
+            className={cn(chipCls, 'w-[42px] text-center font-bold')}
+            aria-label={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+            title={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+          >
+            {lang === 'th' ? 'EN' : 'TH'}
           </button>
 
           {/* ไอคอนแทนข้อความ — ข้อความไทย "สลับเป็นสว่าง/มืด" ยาวจนเบียดปุ่มอื่นตกบรรทัดบนจอแคบ
