@@ -1,132 +1,180 @@
 /**
- * SignalFlowMonitor — การ์ดแสดงเส้นทาง API → Pi → 4G → ปลายทาง ตามสถานะจริง
- * พอร์ตจาก figma/handoff/components/SignalFlowMonitor.tsx
+ * SignalFlowMonitor — การ์ดติดตามงานแจ้งเตือน 1 งาน ตั้งแต่ API รับเรื่องจนปลายสายได้ยินเสียง
  *
- * ── ต่างจากต้นฉบับ 3 จุด ────────────────────────────────────────────────────
- * 1. ต้นฉบับขับ animation ด้วย useDemoFlow() ที่นับ tick วนลูปเอง (ข้อมูลปลอม)
- *    ของเราคำนวณ state จริงจาก /queue/status + /system/gsm + /history
- *    และตัด dropdown "เลือก state เอง" ที่ท้ายการ์ดออก — เป็นเครื่องมือ demo ของดีไซน์
- *    ถ้าเหลือไว้ ผู้ใช้กดแล้วจะเข้าใจว่าสั่งระบบได้ ทั้งที่มันแค่เปลี่ยนภาพ
+ * พอร์ตจาก figma/Signal Flow Monitor Design/ (ดีไซน์ใหม่ แทนของเดิมทั้งใบ)
  *
- * 2. ต้นฉบับสลับได้ 6 layout (A Linear · B Circular · C Camera · D Step Flow · E Radar
- *    · F Timeline) — พอร์ต A (Linear) มาก่อนตามที่ README ของ handoff แนะนำเอง
- *    ("เริ่มจาก A อันเดียวก่อนก็ทำงานครบ") อีก 5 ตัวเป็นการนำเสนอข้อมูลชุดเดียวกัน
- *    ในรูปทรงต่างกัน เพิ่มทีหลังได้โดยไม่ต้องแตะ logic ข้อมูลเลย
- *    จึงยังไม่ใส่ปุ่มสลับ layout ไว้ เพราะจะมี 5 ปุ่มที่กดแล้วไม่มีอะไรเกิดขึ้น
+ * ── ต่างจากไฟล์ดีไซน์ 3 จุด ────────────────────────────────────────────────
+ * 1. ดีไซน์ใช้ useSignalFlow() ที่วนสถานะเองทุก N วินาที + SNAPSHOTS ที่เขียนค่าไว้ตายตัว
+ *    (queued: 3, status: 'กำลังเตรียมเสียง') ของเราคำนวณจากข้อมูลจริงทั้งหมดผ่าน
+ *    snapshotFrom() — ทุกตัวเลขบนการ์ดนี้คือสิ่งที่ worker กำลังทำอยู่จริง ณ วินาทีนั้น
  *
- * 3. substep (0-7) ของต้นฉบับคือ 8 ขั้นที่ไล่ทีละจังหวะ — backend เราไม่ได้รายงาน
- *    ว่างานอยู่ขั้นไหน จึง map หยาบๆ จากสถานะของงาน (ดู stateFromData)
- *    ถ้าต้องการไล่ทีละขั้นจริงต้องมี GET /history/{job_id} ที่คืน call_logs ทั้งชุด
- *    — บอกไว้ในการ์ดตรงๆ ไม่ทำ animation ปลอมให้ดูเหมือนมีข้อมูล
+ * 2. ดีไซน์แยกเป็น 6 ไฟล์ (index/FlowRow/ProgressBar/Legend/icons/states)
+ *    รวมเป็นไฟล์เดียวตามแบบ widget อื่นในโปรเจคนี้ แบ่งส่วนด้วยหัวข้อคอมเมนต์แทน
+ *
+ * 3. เพิ่มของที่ดีไซน์ไม่มีแต่ระบบจริงต้องมี: ป้ายเตือนโมดูลหลุด และไฟกะพริบตอน
+ *    มีคำขอใหม่ยิงเข้ามา (ผูกกับเลขงานที่เพิ่มขึ้นจริง ไม่ใช่ตั้งเวลาให้กะพริบเอง)
+ *
+ * ── ระบบสี ────────────────────────────────────────────────────────────────
+ * เขียว = ผ่านแล้ว · สีสถานะ = กำลังทำอยู่ · เทา = ยังไม่ถึง · แดง = ล้มเหลว
+ * ทั้งสามอยู่บนจอพร้อมกัน จึงอ่านออกในแวบเดียวว่างานเดินไปถึงไหน
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, ReactElement, ReactNode, SVGProps } from 'react';
+import { useNavigate } from 'react-router';
 
 import { cn } from '@/app/components/ui/utils';
 import { getHistory } from '../api/history';
 import { getQueueStatus } from '../api/queue';
 import { getGsmDetail } from '../api/system';
 import { useApp } from '../context/AppContext';
-import type { HistoryItem, QueueStatusItem } from '../types';
+import type { CallStep, HistoryItem, QueueStatusItem } from '../types';
 
-export type FlowState = 'idle' | 'calling' | 'ringing' | 'success' | 'failed';
-type NodeId = 'api' | 'pi' | 'antenna' | 'phone';
-type Tone = 'muted' | 'accent' | 'warn' | 'ok' | 'bad';
-type LayoutId = 'linear' | 'circular' | 'camera' | 'stepflow' | 'radar' | 'timeline';
+/* ── โครงข้อมูล ──────────────────────────────────────────────────────────── */
 
-const LAYOUTS: { id: LayoutId; abbr: string; label: string }[] = [
-  { id: 'linear', abbr: 'A', label: 'Linear' },
-  { id: 'circular', abbr: 'B', label: 'Circular' },
-  { id: 'camera', abbr: 'C', label: 'Camera' },
-  { id: 'stepflow', abbr: 'D', label: 'Step Flow' },
-  { id: 'radar', abbr: 'E', label: 'Radar' },
-  { id: 'timeline', abbr: 'F', label: 'Timeline' },
-];
+type NodeId = 'api' | 'pi' | 'tower' | 'phone';
+/** สถานะรายโหนด — ผ่านแล้ว / กำลังทำ / ยังไม่ถึง / พัง */
+type NodeState = 'passed' | 'current' | 'pending' | 'failed';
 
-const LAYOUT_STORAGE_KEY = 'gateway_flow_layout';
-
-const NODES: NodeId[] = ['api', 'pi', 'antenna', 'phone'];
-/** substep ที่เส้นเชื่อมแต่ละช่วงเริ่มวิ่ง (0-7) */
-const LINE_STEP = [1, 3, 5];
-const NODE_STEP: Record<NodeId, number> = { api: 0, pi: 2, antenna: 4, phone: 6 };
-
-const stateTone: Record<FlowState, Tone> = {
-  idle: 'muted',
-  calling: 'accent',
-  ringing: 'warn',
-  success: 'ok',
-  failed: 'bad',
+type Snapshot = {
+  /** โหนดที่งานอยู่ตอนนี้ (0-3) — null เมื่อระบบว่างหรืองานจบแล้ว */
+  nodeIndex: number | null;
+  /** 0-8 จำนวนขั้นที่ผ่านไปแล้ว คุมทั้งแถบความคืบหน้าและสีของโหนด/เส้น */
+  passedSteps: number;
+  /** ตัวแปร CSS ของสีที่สื่อสถานะนี้ */
+  color: string;
+  failed: boolean;
 };
 
-// brand แทน accent ตามกติกาใน src/styles/tw-theme.css
-const toneText = { muted: 'text-ink-2', accent: 'text-brand', warn: 'text-warn', ok: 'text-ok', bad: 'text-bad' } as const;
-const toneBorder = { muted: 'border-line', accent: 'border-brand', warn: 'border-warn', ok: 'border-ok', bad: 'border-bad' } as const;
-const toneBg = { muted: 'bg-surface-2', accent: 'bg-brand-soft', warn: 'bg-warn-soft', ok: 'bg-ok-soft', bad: 'bg-bad-soft' } as const;
-const toneFill = { muted: 'bg-ink-2', accent: 'bg-brand', warn: 'bg-warn', ok: 'bg-ok', bad: 'bg-bad' } as const;
+const COLOR = {
+  grey: 'var(--sfm-grey)',
+  blue: 'var(--sfm-blue)',
+  orange: 'var(--sfm-orange)',
+  green: 'var(--sfm-green)',
+  red: 'var(--sfm-red)',
+} as const;
 
-const REFRESH_MS = 4000;
+const ORDINALS = ['01', '02', '03', '04'];
+const NODE_IDS: NodeId[] = ['api', 'pi', 'tower', 'phone'];
+
+/** 2 วิ — ขั้นตอนย่อยบางขั้นสั้นมาก (แปลงเสียงใช้ไม่ถึง 1 วิ) ถ้ารีเฟรชช้ากว่านี้
+ *  จะกระพริบข้ามขั้นนั้นไปเลย ผู้ใช้เห็นแค่ขั้นยาวๆ เหมือนไม่มีอะไรเกิดขึ้น */
+const REFRESH_MS = 2000;
+
+/** แสดงผลของสายที่เพิ่งจบนานแค่ไหนก่อนกลับไปสถานะพัก
+ *  6 วิ = การ์ดรีเฟรชทุก 2 วิ จึงการันตีว่าเห็นผลอย่างน้อย 2-3 รอบก่อนหาย
+ *  ไม่หน่วงงานถัดไป: มีงานใหม่เข้ามาเมื่อไหร่ไฟไล่รอบใหม่ทันที ไม่ต้องรอครบ 6 วิ */
+const RESULT_LINGER_MS = 6_000;
 
 /**
- * แปลงข้อมูลจริงเป็น state + substep ของภาพ
+ * แปลงข้อมูลจริง → snapshot ของภาพ
  *
- * queued      → รับ payload แล้ว รอ worker หยิบ (ขั้นต้น)
- * in_progress → worker กำลังโทร (ไปถึงเสาสัญญาณ)
- * retrying / no_answer / busy / escalated → กำลังเรียกหรือรอ retry
- * งานล่าสุดที่จบแล้ว connected / sms_fallback_sent → สำเร็จ, failed → ล้มเหลว
+ * ลำดับความสำคัญ: ขั้นตอนย่อยที่ worker รายงานสดๆ > งานที่กำลังทำ > งานที่รอในคิว
+ *                 > ผลของสายที่เพิ่งจบ (6 วิ) > ว่าง
+ *
+ * ค่า passedSteps ผูกกับโหนดแบบ "โหนด i ผ่านแล้วเมื่อ i*2+2 <= passedSteps"
+ * (โหนดละ 2 ขั้น) จึงต้องเลือกเลขให้ตรงกับโหนดที่กำลังทำงานเสมอ
  */
-function stateFromData(
+function snapshotFrom(
   pending: QueueStatusItem[],
   latest: HistoryItem | null,
-  gsmConnected: boolean,
-): { state: FlowState; substep: number } {
-  const active = pending.find((j) => j.status === 'in_progress');
-  if (active) return { state: 'calling', substep: gsmConnected ? 5 : 3 };
-
-  const waiting = pending.find((j) => j.status === 'retrying' || j.status === 'escalated');
-  if (waiting) return { state: 'ringing', substep: 7 };
-
-  if (pending.length > 0) return { state: 'calling', substep: 1 };
-
-  if (latest?.status === 'connected' || latest?.status === 'sms_fallback_sent') {
-    return { state: 'success', substep: 7 };
+  currentStep: CallStep | null,
+  progress: number | null,
+): Snapshot {
+  if (currentStep) {
+    switch (currentStep) {
+      case 'preparing_audio':
+        return { nodeIndex: 1, passedSteps: 2, color: COLOR.blue, failed: false };
+      case 'uploading_audio':
+        // ขั้นนี้กินเวลา 15-20 วิ ยาวกว่าขั้นอื่นมาก ถ้าตรึงไว้ช่องเดียวแถบจะนิ่งสนิท
+        // เกือบตลอดการโทรจนดูเหมือนค้าง — กางเป็น 2 ช่องแล้วเลื่อนตามจำนวน byte
+        // ที่ส่งเข้าโมดูลไปแล้วจริงๆ ที่ worker รายงานมา ไม่ใช่จับเวลาเดาเอา
+        return {
+          nodeIndex: 2,
+          passedSteps: progress != null && progress >= 0.5 ? 5 : 4,
+          color: COLOR.blue,
+          failed: false,
+        };
+      case 'dialing':
+        return { nodeIndex: 3, passedSteps: 6, color: COLOR.orange, failed: false };
+      case 'playing':
+        return { nodeIndex: 3, passedSteps: 7, color: COLOR.green, failed: false };
+      case 'waiting_retry':
+        return { nodeIndex: 3, passedSteps: 6, color: COLOR.red, failed: true };
+    }
   }
-  if (latest?.status === 'failed') return { state: 'failed', substep: 7 };
 
-  return { state: 'idle', substep: 0 };
+  // worker ถืองานอยู่แต่ยังไม่ทันรายงานขั้นตอน — เกิดได้ในช่วงเสี้ยววินาทีแรกที่หยิบงาน
+  if (pending.some((j) => j.status === 'in_progress')) {
+    return { nodeIndex: 1, passedSteps: 2, color: COLOR.blue, failed: false };
+  }
+
+  // รอโทรซ้ำ = สายที่แล้ว "ไม่สำเร็จ" ต้องขึ้นแดงที่ปลายทาง ไม่ใช่ส้มเหมือนกำลังเรียกอยู่
+  // (ยังไม่ได้เริ่มโทรรอบใหม่ แค่รอถึงเวลานัด)
+  if (pending.some((j) => j.status === 'retrying' || j.status === 'escalated')) {
+    return { nodeIndex: 3, passedSteps: 6, color: COLOR.red, failed: true };
+  }
+
+  if (pending.length > 0) {
+    return { nodeIndex: 0, passedSteps: 0, color: COLOR.blue, failed: false };
+  }
+
+  // สายเพิ่งจบ — โชว์ผลแวบหนึ่งก่อนกลับไปว่าง ไม่งั้นจะกระโดดจาก "กำลังพูดข้อความ"
+  // ไปเป็น "ว่าง" ทันทีจนผู้ใช้ไม่รู้เลยว่าตกลงสายนั้นสำเร็จหรือล้มเหลว
+  // ใช้ updated_at (เวลาที่สถานะเปลี่ยนล่าสุด) ไม่ใช่ created_at เพราะงานที่ retry
+  // หลายรอบ created_at คือตอนเข้าคิว ซึ่งห่างจากเวลาที่โทรจบจริงหลายนาที
+  if (latest && Date.now() - new Date(latest.updated_at).getTime() < RESULT_LINGER_MS) {
+    if (latest.status === 'connected') {
+      return { nodeIndex: null, passedSteps: 8, color: COLOR.green, failed: false };
+    }
+    if (latest.status === 'failed') {
+      return { nodeIndex: 3, passedSteps: 6, color: COLOR.red, failed: true };
+    }
+  }
+
+  return { nodeIndex: null, passedSteps: 0, color: COLOR.grey, failed: false };
 }
+
+/** โหนด i ผ่านไปแล้วเมื่องานเดินเลยมันไป (โหนดละ 2 ขั้นบนแถบ 8 ช่อง) */
+function nodeStateAt(index: number, snap: Snapshot): NodeState {
+  if (snap.failed && index === snap.nodeIndex) return 'failed';
+  if (snap.nodeIndex === index) return 'current';
+  if (index * 2 + 2 <= snap.passedSteps) return 'passed';
+  return 'pending';
+}
+
+/* ── การ์ด ───────────────────────────────────────────────────────────────── */
 
 export function SignalFlowMonitor() {
   const { T } = useApp();
+  const navigate = useNavigate();
   const [pending, setPending] = useState<QueueStatusItem[]>([]);
   const [latest, setLatest] = useState<HistoryItem | null>(null);
   const [gsmConnected, setGsmConnected] = useState(false);
-  // จำ layout ที่เลือกไว้ — ผู้ใช้ไม่ต้องเลือกใหม่ทุกครั้งที่เปิดหน้า
-  const [layout, setLayout] = useState<LayoutId>(() => {
-    const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
-    return LAYOUTS.some((l) => l.id === saved) ? (saved as LayoutId) : 'linear';
-  });
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  /**
-   * โหมดแสดงผล: 'auto' = ตามสถานะจริง / ค่าอื่น = บังคับให้แสดงสถานะนั้น
-   *
-   * ตอนแรกผมตัด dropdown นี้ออกเพราะคิดว่าเป็นเครื่องมือ demo ของดีไซเนอร์
-   * แต่คิดใหม่แล้วมันมีประโยชน์จริง: บอร์ด A7680C ยังไม่มา ต้องถ่ายภาพหน้าจอ
-   * ทุกสถานะไปใส่รายงาน ถ้าไม่มีตัวนี้ต้องรอให้เกิดเหตุจริงถึงจะเห็นภาพ ringing/failed
-   * กันเข้าใจผิดด้วยการขึ้นป้าย "สาธิต" ให้เห็นชัดตลอดเวลาที่ไม่ได้อยู่โหมด auto
-   */
-  const [mode, setMode] = useState<'auto' | FlowState>('auto');
-  /** จำนวน request ที่บังคับไว้ตอนสาธิต (null = ใช้จำนวนงานในคิวจริง) */
-  const [reqOverride, setReqOverride] = useState<number | null>(null);
-
-  useEffect(() => {
-    localStorage.setItem(LAYOUT_STORAGE_KEY, layout);
-  }, [layout]);
+  const [currentStep, setCurrentStep] = useState<CallStep | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  // กะพริบโหนด API ตอนมีงานใหม่เข้ามา — ตรวจจากเลขงานล่าสุดที่เพิ่มขึ้นจริง
+  // ไม่ใช่ตั้งเวลาให้กะพริบเอง จะได้ไม่หลอกว่ามีงานเข้าทั้งที่ไม่มี
+  const [apiFlash, setApiFlash] = useState(false);
+  const lastJobId = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [queue, history, gsm] = await Promise.all([getQueueStatus(), getHistory({ page: 1, page_size: 1 }), getGsmDetail()]);
+      const [queue, history, gsm] = await Promise.all([
+        getQueueStatus(),
+        getHistory({ page: 1, page_size: 1 }),
+        getGsmDetail(),
+      ]);
       if (cancelled) return;
       setPending(queue.items);
+      setCurrentStep(queue.current_step);
+      setProgress(queue.current_progress);
+      const newest = history.items[0]?.job_id ?? null;
+      if (lastJobId.current !== null && newest !== null && newest > lastJobId.current) {
+        setApiFlash(true);
+        setTimeout(() => setApiFlash(false), 1500);
+      }
+      lastJobId.current = newest;
       setLatest(history.items[0] ?? null);
       setGsmConnected(gsm.connected);
     };
@@ -138,858 +186,531 @@ export function SignalFlowMonitor() {
     };
   }, []);
 
-  const live = stateFromData(pending, latest, gsmConnected);
-  // โหมดสาธิตบังคับสถานะ: calling ให้ไล่กลางทาง (substep 3) สถานะอื่นถือว่าจบขั้นแล้ว (7)
-  const state = mode === 'auto' ? live.state : mode;
-  const substep = mode === 'auto' ? live.substep : mode === 'calling' ? 3 : mode === 'idle' ? 0 : 7;
-  const tone = stateTone[state];
-  const isDemo = mode !== 'auto';
+  const snap = snapshotFrom(pending, latest, currentStep, progress);
+  const busy = snap.nodeIndex !== null && !snap.failed;
 
-  const stateLabel: Record<FlowState, string> = {
-    idle: T.flow_state_idle,
-    calling: T.flow_state_calling,
-    ringing: T.flow_state_ringing,
-    success: T.flow_state_success,
-    failed: T.flow_state_failed,
+  const labels: Record<NodeId, string> = {
+    api: T.flow_node_api,
+    pi: T.flow_node_pi,
+    tower: T.flow_node_antenna,
+    phone: T.flow_node_phone,
   };
 
-  // จำนวนจุดวิ่งบนเส้นแรก = จำนวนงานในคิวจริง (จำกัด 1-4 ตามที่ดีไซน์รองรับ)
-  const packetCount = reqOverride ?? Math.min(4, Math.max(1, pending.length || 1));
-  const queuedCount = pending.filter((j) => j.status === 'queued').length;
+  // ถ้า worker กำลังทำขั้นตอนย่อยอยู่ ให้ใช้ชื่อขั้นตอนนั้นแทนคำกว้างๆ อย่าง "กำลังต่อสาย"
+  // — บอกตรงๆ ว่าตอนนี้อยู่ขั้นไหนมีค่ากับการดีบักมากกว่ามาก โดยเฉพาะขั้นอัปโหลดเสียง
+  // ที่กินเวลาเป็นสิบวินาที ถ้าไม่บอกผู้ใช้จะนึกว่าระบบค้าง
+  const stepHeadline: Record<CallStep, string> = {
+    preparing_audio: T.flow_step_preparing,
+    uploading_audio: T.flow_step_uploading,
+    dialing: T.flow_step_dialing,
+    playing: T.flow_step_playing,
+    waiting_retry: T.flow_step_waiting_retry,
+  };
+  // ตอนรอโทรซ้ำต้องบอกด้วยว่าสายที่แล้วพลาดเพราะอะไร ไม่ใช่แค่ว่ากำลังรอ —
+  // ปฏิเสธสาย / ไม่รับ / สายไม่ว่าง เป็นคนละเรื่องกันสำหรับคนที่ต้องตัดสินใจว่าจะทำอะไรต่อ
+  const resultHeadline: Record<string, string> = {
+    rejected: T.flow_result_rejected,
+    no_answer: T.flow_result_no_answer,
+    busy: T.flow_result_busy,
+  };
+  const waitingRetry =
+    !currentStep && pending.some((j) => j.status === 'retrying' || j.status === 'escalated');
 
-  const shared: LayoutProps = { state, substep, packets: packetCount, tone, T, latest, queued: queuedCount };
+  const headline = currentStep
+    ? stepHeadline[currentStep]
+    : waitingRetry && latest?.last_result
+      ? (resultHeadline[latest.last_result] ?? T.flow_state_ringing)
+      : snap.nodeIndex === 0
+        ? T.flow_cap_received
+        : snap.passedSteps === 8
+          ? T.flow_state_success
+          : snap.failed
+            ? T.flow_state_failed
+            : T.flow_state_idle;
+
+  const stepCaption: Record<CallStep, string> = {
+    preparing_audio: T.flow_cap_tts,
+    uploading_audio: T.flow_cap_upload,
+    dialing: T.flow_cap_dialing,
+    playing: T.flow_cap_playing,
+    waiting_retry: T.flow_cap_retry,
+  };
+  const caption = currentStep
+    ? stepCaption[currentStep]
+    : snap.failed
+      ? T.flow_cap_retry
+      : snap.nodeIndex === 0
+        ? T.flow_cap_received
+        : null;
+
+  const shownStep = Math.min(snap.passedSteps + (busy ? 1 : 0), 8);
 
   return (
-    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line-2 px-4 py-3">
-        {/* จุดสีนำหน้าหัวข้อ ตามภาพ — สีตามสถานะปัจจุบัน */}
-        <span className={cn('size-2 shrink-0 rounded-full', toneFill[tone], state !== 'idle' && 'animate-soft-pulse')} />
-        <h3 className="text-lead font-bold whitespace-nowrap">{T.flow_title}</h3>
-
-        <select
-          value={mode}
-          onChange={(e) => setMode(e.target.value as 'auto' | FlowState)}
-          className={cn(
-            'rounded-control border bg-surface px-2 py-1 font-mono text-micro',
-            isDemo ? 'border-warn text-warn' : 'border-line text-ink-2',
-          )}
-        >
-          <option value="auto">▶ {T.flow_auto}</option>
-          <option value="idle">{T.flow_state_idle}</option>
-          <option value="calling">{T.flow_state_calling}</option>
-          <option value="ringing">{T.flow_state_ringing}</option>
-          <option value="success">{T.flow_state_success}</option>
-          <option value="failed">{T.flow_state_failed}</option>
-        </select>
-
-        <span className="rounded-md border border-brand bg-surface px-2 py-0.5 font-mono text-micro whitespace-nowrap text-brand">
-          {T.flow_req(packetCount)}
-        </span>
-
-        {isDemo ? (
-          <span className="rounded-full border border-warn bg-warn-soft px-2.5 py-0.5 font-mono text-micro whitespace-nowrap text-warn">
-            {T.flow_demo_mode}
-          </span>
-        ) : null}
-        {!gsmConnected && !isDemo ? (
-          <span className="rounded-full border border-bad bg-bad-soft px-2.5 py-0.5 font-mono text-micro whitespace-nowrap text-bad">
-            {T.flow_gsm_offline}
-          </span>
-        ) : null}
-
-        {/* สถานะเป็นข้อความสีตามโทน ไม่ใช่ pill — ตามภาพ */}
-        <span className={cn('ms-auto max-w-[180px] truncate text-caption font-medium', toneText[tone])}>
-          {stateLabel[state]}
-        </span>
-        <button
-          type="button"
-          title={T.flow_layout_style}
-          onClick={() => setSettingsOpen((v) => !v)}
-          className={cn(
-            'grid size-7 shrink-0 place-items-center rounded-md border font-mono',
-            settingsOpen ? 'border-brand bg-brand text-brand-ink' : 'border-line bg-transparent text-ink-2',
-          )}
-        >
-          ⚙
-        </button>
-      </div>
-
-      {settingsOpen ? (
-        <div className="flex animate-fade-up flex-col gap-2 border-b border-line-2 bg-surface-2 px-4 py-3">
-          <span className="font-mono text-micro tracking-[0.12em] text-ink-2 uppercase">{T.flow_layout_style}</span>
-          <div className="flex flex-wrap gap-1.5">
-            {LAYOUTS.map((l) => (
-              <button
-                key={l.id}
-                type="button"
-                onClick={() => setLayout(l.id)}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-control border px-2.5 py-1.5 text-caption font-medium',
-                  layout === l.id ? 'border-brand bg-brand text-brand-ink' : 'border-line bg-surface text-ink-2',
-                )}
-              >
-                <span className="font-mono text-micro opacity-65">{l.abbr}</span>
-                {l.label}
-              </button>
-            ))}
-          </div>
-
-          {/* ตัวเลือกนี้บังคับจำนวนจุดวิ่งตอนสาธิต — ปกติใช้จำนวนงานในคิวจริง
-              กด "auto" (ปุ่มซ้ายสุด) เพื่อกลับไปใช้ค่าจริง */}
-          <span className="mt-1 font-mono text-micro tracking-[0.12em] text-ink-2 uppercase">
-            {T.flow_incoming_requests}
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setReqOverride(null)}
-              className={cn(
-                'rounded-control border px-3 py-1 font-mono text-caption',
-                reqOverride === null ? 'border-brand bg-brand text-brand-ink' : 'border-line bg-surface text-ink-2',
-              )}
-            >
-              {T.flow_auto}
-            </button>
-            {[1, 2, 3, 4].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setReqOverride(n)}
-                className={cn(
-                  'rounded-control border px-3 py-1 font-mono text-caption',
-                  reqOverride === n ? 'border-brand bg-brand text-brand-ink' : 'border-line bg-surface text-ink-2',
-                )}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {isDemo ? (
-        <p className="border-b border-line-2 bg-warn-soft px-4 py-2 text-micro leading-[1.7] text-warn">
-          {T.flow_demo_note}
-        </p>
-      ) : null}
-
-      {/* แถบ SIGNAL STEP 8 ช่อง — อยู่ใน mockup แต่ไม่มีใน handoff .tsx (ไล่จาก substep เดียวกับโหนด) */}
-      <div className="flex flex-wrap items-center gap-2.5 px-4 pt-3">
-        <span className="font-mono text-micro tracking-[0.16em] text-ink-2 uppercase">{T.flow_signal_step}</span>
-        <span className="ms-auto font-mono text-micro whitespace-nowrap">
-          <span className={toneText[tone]}>{stateLabel[state]}</span>
-        </span>
-      </div>
-      <div className="flex gap-1 px-4 pt-1.5">
-        {Array.from({ length: 8 }).map((_, i) => (
+    <article
+      className="font-sans"
+      style={{
+        background: 'var(--sfm-surface)',
+        color: 'var(--sfm-ink)',
+        border: '1px solid var(--sfm-border)',
+        borderRadius: 'var(--sfm-radius)',
+        boxShadow: 'var(--sfm-shadow)',
+        padding: 16,
+      }}
+      aria-label={`${T.flow_title} — ${headline}`}
+    >
+      {/* ── 1 หัวการ์ด ─────────────────────────────────────────────────── */}
+      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span
-            key={i}
-            className={cn(
-              'h-1.5 flex-1 rounded-full transition-colors',
-              state === 'idle' ? 'bg-line' : i <= substep ? toneFill[tone] : 'bg-line',
-            )}
+            className={cn('relative shrink-0 rounded-full', busy && 'sfm-ring')}
+            style={
+              {
+                width: 8,
+                height: 8,
+                background: snap.color,
+                '--sfm-state': snap.color,
+              } as CSSProperties
+            }
           />
-        ))}
+          <h2 className="truncate text-[17px] leading-tight font-bold">{T.flow_title}</h2>
+          <span
+            className="shrink-0 rounded-full px-2 py-px font-mono text-[10px] tracking-[0.08em]"
+            style={{
+              background: 'var(--sfm-surface-sunk)',
+              border: '1px solid var(--sfm-hairline)',
+              color: 'var(--sfm-muted)',
+            }}
+          >
+            {T.flow_req(pending.length)}
+          </span>
+          {/* ดีไซน์ไม่มีป้ายนี้ แต่ระบบจริงต้องมี — ถ้าโมดูลหลุด ทุกอย่างบนการ์ดนี้
+              หยุดเดินโดยไม่มีอะไรบอกสาเหตุเลย ผู้ใช้จะนึกว่าเว็บค้าง */}
+          {!gsmConnected ? (
+            <span
+              className="shrink-0 rounded-full px-2 py-px text-[10.5px] whitespace-nowrap"
+              style={{
+                background: 'color-mix(in srgb, var(--sfm-red) 12%, var(--sfm-surface))',
+                border: '1px solid var(--sfm-red)',
+                color: 'var(--sfm-red)',
+              }}
+            >
+              {T.flow_gsm_offline}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="ms-auto flex shrink-0 items-center gap-2">
+          <span
+            className="max-w-[190px] truncate text-end text-[12.5px] leading-tight"
+            style={{ color: snap.color }}
+          >
+            {headline}
+          </span>
+          <button
+            type="button"
+            onClick={() => navigate('/system')}
+            aria-label={T.flow_open_settings}
+            title={T.flow_open_settings}
+            className="flex items-center justify-center rounded-full transition-colors"
+            style={{
+              width: 28,
+              height: 28,
+              border: '1px solid var(--sfm-hairline)',
+              background: 'var(--sfm-surface-sunk)',
+              color: 'var(--sfm-muted)',
+            }}
+          >
+            <GearIcon />
+          </button>
+        </div>
+      </header>
+
+      {/* ── 2 ป้ายหมวด ─────────────────────────────────────────────────── */}
+      <div
+        className="mt-4 mb-2 font-mono text-[9.5px] tracking-[0.16em] uppercase"
+        style={{ color: 'var(--sfm-muted)' }}
+      >
+        {T.flow_signal_step} · {shownStep}/8
       </div>
 
-      {layout === 'linear' ? <LinearLayout {...shared} /> : null}
-      {layout === 'circular' ? <CircularLayout {...shared} /> : null}
-      {layout === 'camera' ? <CameraLayout {...shared} /> : null}
-      {layout === 'stepflow' ? <StepFlowLayout {...shared} /> : null}
-      {layout === 'radar' ? <RadarLayout {...shared} /> : null}
-      {layout === 'timeline' ? <TimelineLayout {...shared} /> : null}
+      {/* ── 3 แถบความคืบหน้า 8 ช่อง ─────────────────────────────────────── */}
+      <ProgressBar snap={snap} steps={T.flow_steps} T={T} />
 
-      {/* legend ซ้าย + badge layout ขวา ตามภาพ (เดิมผมเอา badge ไปไว้ที่หัวการ์ด) */}
-      <div className="flex flex-wrap items-center gap-3 border-t border-line-2 px-4 py-3">
-        <Legend T={T} short state={state} substep={substep} tone={tone} />
-        <span className="ms-auto rounded-md border border-line bg-surface-2 px-2 py-0.5 font-mono text-micro whitespace-nowrap text-ink-2">
-          Layout {LAYOUTS.find((l) => l.id === layout)?.abbr} · {LAYOUTS.find((l) => l.id === layout)?.label}
-        </span>
+      {/* ── 4 เส้นทาง ──────────────────────────────────────────────────────
+          ไม่ใช้ overflow-x-auto: คอลัมน์ย่อได้ถึง 56px แถวจึงกว้างต่ำสุดราว 272px
+          พอดีจอ 320px อยู่แล้ว ไม่ต้องมีแถบเลื่อน — และที่สำคัญกว่านั้นคือ
+          overflow-x ที่ไม่ใช่ visible จะบังคับให้ overflow-y กลายเป็น auto ตามไปด้วย
+          วงแหวน sfm-ring ที่ scale เกินขอบโหนดจึงไปดัน scrollbar แนวตั้งขึ้นมาเอง */}
+      <div className="mt-4 flex items-start justify-center">
+        {NODE_IDS.map((id, i) => {
+          const state = nodeStateAt(i, snap);
+          // เส้นที่ "กำลังส่ง" คือเส้นที่วิ่งเข้าหาโหนดปัจจุบัน
+          const linkPassed = i * 2 + 2 <= snap.passedSteps;
+          const linkLive = snap.nodeIndex === i + 1 && !snap.failed;
+          return (
+            <div key={id} className="contents">
+              <NodeTile
+                id={id}
+                ordinal={ORDINALS[i]}
+                label={labels[id]}
+                state={state}
+                color={snap.color}
+                caption={state === 'current' || state === 'failed' ? caption : null}
+                flash={i === 0 && apiFlash}
+              />
+              {i < NODE_IDS.length - 1 ? (
+                <Connector passed={linkPassed} live={linkLive} color={snap.color} />
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
-      <p className="border-t border-line-2 px-4 py-2.5 text-micro leading-[1.7] text-ink-2">{T.flow_step_note}</p>
-    </section>
+      {/* ── 5 คำอธิบาย ─────────────────────────────────────────────────── */}
+      <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--sfm-hairline)' }}>
+        {/* เลขกำกับผูกกับเลขที่อยู่เหนือแต่ละโหนด อ่านคู่กันได้ทันที */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {NODE_IDS.map((id, i) => (
+            <span key={id} className="flex items-baseline gap-1.5 text-[11.5px]">
+              <span
+                className="font-mono text-[9.5px] tracking-[0.16em]"
+                style={{ color: 'var(--sfm-grey)' }}
+              >
+                {ORDINALS[i]}
+              </span>
+              <span style={{ color: 'var(--sfm-muted)' }}>{labels[id]}</span>
+            </span>
+          ))}
+        </div>
+
+        {/* คู่มือสี — จำเป็นเพราะบนจอมีหลายสีพร้อมกัน ถ้าไม่บอกผู้ใช้ต้องเดาเองว่า
+            เขียวคือ "เสร็จแล้ว" หรือ "กำลังทำงานปกติ" ซึ่งตีความได้ทั้งสองทาง */}
+        <div
+          className="mt-2.5 flex flex-wrap gap-x-3.5 gap-y-1.5 border-t pt-2.5"
+          style={{ borderColor: 'var(--sfm-hairline)' }}
+        >
+          {[
+            { color: COLOR.green, label: T.flow_legend_done },
+            { color: COLOR.blue, label: T.flow_legend_active },
+            { color: COLOR.orange, label: T.flow_legend_ringing },
+            { color: COLOR.red, label: T.flow_legend_failed },
+            { color: COLOR.grey, label: T.flow_legend_pending },
+          ].map((item) => (
+            <span key={item.label} className="flex items-center gap-1.5">
+              <span
+                className="block rounded-full"
+                style={{ width: 8, height: 8, background: item.color }}
+              />
+              {/* sans ไม่ใช่ mono ด้วยเหตุผลเดียวกับชื่อโหนด — คำอธิบายทั้งหมดเป็นภาษาไทย */}
+              <span className="text-[10.5px]" style={{ color: 'var(--sfm-muted)' }}>
+                {item.label}
+              </span>
+            </span>
+          ))}
+        </div>
+      </div>
+    </article>
   );
 }
 
-type LayoutProps = {
-  state: FlowState;
-  substep: number;
-  packets: number;
-  tone: Tone;
-  T: ReturnType<typeof useApp>['T'];
-  /** งานล่าสุด — Timeline ใช้เวลาจริงของงานนี้เป็นจุดอ้างอิงแถวแรก */
-  latest: HistoryItem | null;
-  /** จำนวนงานสถานะ queued — โชว์เป็น badge "รอคิว N" เหนือโหนด API ตามภาพ */
-  queued: number;
-};
+/* ── แถบความคืบหน้า ──────────────────────────────────────────────────────── */
 
-function nodeLive(state: FlowState, substep: number, id: NodeId) {
-  if (state === 'idle') return false;
-  if (state === 'success' || state === 'ringing') return true;
-  return substep >= NODE_STEP[id];
+/**
+ * 8 ช่อง ช่องละ 1 ขั้น — ช่องที่ผ่านแล้วสูง 6px สีเขียว ช่องปัจจุบันสูง 10px
+ * เป็นสีสถานะและหายใจเข้าออก ที่เหลือ 6px เทา แถวสูง 10px คงที่จึงไม่มีอะไรขยับ
+ *
+ * ที่ต้องให้ช่องปัจจุบันสูงกว่าเพื่อน เพราะถ้าสีเดียวความสูงเท่ากันหมด แถบจะบอกได้
+ * แค่ "ไปถึงไหนแล้ว" แต่บอกไม่ได้ว่ากำลังทำอะไรอยู่
+ */
+function ProgressBar({
+  snap,
+  steps,
+  T,
+}: {
+  snap: Snapshot;
+  steps: readonly string[];
+  T: ReturnType<typeof useApp>['T'];
+}) {
+  const currentIndex = snap.nodeIndex === null ? -1 : snap.passedSteps;
+  const aria =
+    snap.passedSteps >= steps.length
+      ? T.flow_all_steps_done
+      : T.flow_step_aria(Math.min(snap.passedSteps + 1, 8), steps[Math.min(snap.passedSteps, 7)]);
+
+  return (
+    <div className="flex h-[10px] items-center gap-[4px]" role="img" aria-label={aria}>
+      {steps.map((step, i) => {
+        const passed = i < snap.passedSteps;
+        const current = i === currentIndex;
+        return (
+          <span
+            key={step}
+            title={step}
+            className={cn('flex-1 rounded-full', current && 'sfm-seg-current')}
+            style={{
+              height: current ? 10 : 6,
+              background: current ? snap.color : passed ? COLOR.green : COLOR.grey,
+              opacity: current || passed ? 1 : 0.42,
+              transition: 'height 260ms ease, background-color 260ms ease, opacity 260ms ease',
+            }}
+          />
+        );
+      })}
+    </div>
+  );
 }
 
-/** จุดวิ่งบนเส้น — animation-delay ใช้ arbitrary property ของ Tailwind (ไม่ใช้ inline style) */
-const DELAY = ['[animation-delay:0ms]', '[animation-delay:240ms]', '[animation-delay:480ms]', '[animation-delay:720ms]'];
+/* ── โหนดและเส้นเชื่อม ───────────────────────────────────────────────────── */
 
-function Packets({ count, tone }: { count: number; tone: Tone }) {
+const TILE = 54;
+/** ช่องว่างบน/ล่างโหนดสูงคงที่ กันการ์ดกระตุกตอน badge หรือ caption โผล่/หาย */
+const SLOT_TOP = 22;
+const CAPTION_SLOT = 32;
+
+function NodeTile({
+  id,
+  ordinal,
+  label,
+  state,
+  color,
+  caption,
+  flash,
+}: {
+  id: NodeId;
+  ordinal: string;
+  label: string;
+  state: NodeState;
+  color: string;
+  caption: string | null;
+  flash: boolean;
+}) {
+  const Icon = NODE_ICONS[id];
+  // คำขอใหม่เพิ่งเข้ามา — ให้โหนด API สว่างขึ้นชั่วครู่แม้จะผ่านขั้นนี้ไปแล้ว
+  const live = state === 'current' || state === 'failed' || flash;
+
+  const accent = state === 'failed' ? COLOR.red : flash ? COLOR.blue : color;
+  const stroke =
+    state === 'current' || flash
+      ? accent
+      : state === 'failed'
+        ? COLOR.red
+        : state === 'passed'
+          ? COLOR.green
+          : COLOR.grey;
+  const tint =
+    state === 'current' || flash
+      ? `color-mix(in srgb, ${accent} 12%, var(--sfm-surface))`
+      : state === 'failed'
+        ? `color-mix(in srgb, ${COLOR.red} 12%, var(--sfm-surface))`
+        : state === 'passed'
+          ? `color-mix(in srgb, ${COLOR.green} 8%, var(--sfm-surface))`
+          : 'var(--sfm-surface-sunk)';
+
+  const ringing = state === 'current' && id === 'phone';
+
   return (
-    <span className="pointer-events-none absolute inset-0 overflow-hidden">
-      {Array.from({ length: count }).map((_, i) => (
-        <span
-          key={i}
-          className={cn('absolute top-1/2 size-1.5 -translate-y-1/2 rounded-full', toneFill[tone], 'animate-packet', DELAY[i])}
-        />
-      ))}
+    // คอลัมน์กว้างกว่าตัวโหนด (54px) เพื่อให้ชื่อกับ caption มีที่อยู่ในกระแสปกติ
+    // ไม่ต้องวางลอยแบบ absolute ซึ่งล้นออกนอกคอลัมน์แล้วโดนตัด
+    <div className="flex w-[92px] min-w-[56px] flex-col items-center">
+      {/* ช่องบน — badge ✓ / ! หรือเลขกำกับเมื่อไม่มีทั้งสองอย่าง */}
+      <div className="flex items-end justify-center" style={{ height: SLOT_TOP }}>
+        {state === 'passed' ? (
+          <Badge color={COLOR.green}>
+            <CheckIcon />
+          </Badge>
+        ) : state === 'failed' ? (
+          <Badge color={COLOR.red}>
+            <BangIcon />
+          </Badge>
+        ) : (
+          <span
+            className="font-mono text-[10px] tracking-[0.16em]"
+            style={{ color: state === 'current' ? accent : COLOR.grey }}
+          >
+            {ordinal}
+          </span>
+        )}
+      </div>
+
+      <div
+        className={cn(
+          'relative mt-1.5 flex items-center justify-center',
+          live && 'sfm-ring',
+          ringing && 'sfm-vibrate',
+        )}
+        style={
+          {
+            width: TILE,
+            height: TILE,
+            borderRadius: 16,
+            border: `1.5px solid ${stroke}`,
+            background: tint,
+            color: stroke,
+            '--sfm-state': accent,
+            transition: 'border-color 280ms ease, background-color 280ms ease, color 280ms ease',
+          } as CSSProperties
+        }
+      >
+        <Icon aria-hidden />
+      </div>
+
+      <div className="mt-2 w-full px-0.5 text-center">
+        {/* ชื่อโหนดใช้ font-sans ไม่ใช่ mono — Space Mono ไม่มีตัวอักษรไทย
+            "เสาสัญญาณ 4G" จะ fallback ไปฟอนต์อื่นทั้งที่ "API Gateway" ยังเป็น mono
+            กลายเป็นสองฟอนต์ปนกันในแถวเดียว และตัวไทยที่ fallback มายังตัดบรรทัดเพี้ยนด้วย
+            (label ไทยยาวกว่า EN — ปล่อยให้ตัดบรรทัดได้ ห้าม nowrap) */}
+        <div className="text-[10.5px] leading-[1.35]" style={{ color: 'var(--sfm-muted)' }}>
+          {label}
+        </div>
+        {/* ช่อง caption สูงคงที่ กันการ์ดกระตุกตอนข้อความโผล่/หาย */}
+        <div style={{ minHeight: CAPTION_SLOT }}>
+          {caption ? (
+            <div
+              className="sfm-fade mt-0.5 text-[11.5px] leading-[1.35]"
+              style={{ color: state === 'failed' ? COLOR.red : color }}
+            >
+              {caption}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Badge({ color, children }: { color: string; children: ReactNode }) {
+  return (
+    <span
+      className="sfm-fade flex items-center justify-center rounded-full"
+      style={{ width: 18, height: 18, background: color, color: 'var(--sfm-surface)' }}
+      aria-hidden
+    >
+      {children}
     </span>
   );
 }
 
-/* ── A. Linear ─────────────────────────────────────────────
-   แทร็ก min-w-max ในกล่อง overflow-x-auto → จอ 360px เลื่อนดูครบทุกโหนด */
-function LinearLayout({ state, substep, packets, tone, T, queued }: LayoutProps) {
-  const labels: Record<NodeId, string> = {
-    api: T.flow_node_api,
-    pi: T.flow_node_pi,
-    antenna: T.flow_node_antenna,
-    phone: T.flow_node_phone,
-  };
-  /** โหนดที่กำลังทำงานอยู่ตอนนี้ — ตามภาพจะมีพื้นสีอ่อนเน้นไว้ */
-  const currentIdx =
-    state === 'idle' ? -1 : state === 'success' || state === 'ringing' ? 3 : Math.min(3, Math.floor(substep / 2));
-
+function Connector({ passed, live, color }: { passed: boolean; live: boolean; color: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 overflow-x-auto overscroll-x-contain px-3.5 pt-3 pb-4">
-      <div className="mx-auto flex min-w-max items-center justify-center">
-        {NODES.map((id, i) => {
-          const live = nodeLive(state, substep, id);
-          const isCurrent = i === currentIdx;
-          const lineLive = i < 3 && (state === 'success' || state === 'ringing' || substep >= LINE_STEP[i]);
-          const flowing = i < 3 && state === 'calling' && substep >= LINE_STEP[i];
-          return (
-            <div key={id} className="flex items-center">
-              <div className="flex w-[92px] flex-col items-center gap-2">
-                {/* badge ลอยเหนือโหนดแรกตามภาพ — ใช้ความสูงคงที่กันการ์ดขยับตอน badge หาย/โผล่ */}
-                <span className="flex min-h-[38px] flex-col items-center gap-1">
-                  {i === 0 && state !== 'idle' ? (
-                    <span className="flex items-center gap-1 rounded-full border border-brand bg-surface px-2 py-0.5 font-mono text-micro whitespace-nowrap text-brand">
-                      <span className="size-1.5 rounded-full bg-brand" />
-                      {T.flow_badge_working}
-                    </span>
-                  ) : null}
-                  {i === 0 && queued > 0 ? (
-                    <span className="flex items-center gap-1 rounded-full border border-warn bg-surface px-2 py-0.5 font-mono text-micro whitespace-nowrap text-warn">
-                      <span className="size-1.5 rounded-full bg-warn" />
-                      {T.flow_badge_queued(queued)}
-                    </span>
-                  ) : null}
-                </span>
-
-                <span
-                  className={cn(
-                    'relative grid size-[54px] place-items-center rounded-2xl border-[1.5px] transition-colors',
-                    live ? cn(toneBorder[tone], toneText[tone]) : 'border-line text-ink-2',
-                    // โหนดที่กำลังทำงานมีพื้นสีอ่อน ที่เหลือพื้นเดียวกับการ์ด (ตามภาพ)
-                    isCurrent ? toneBg[tone] : 'bg-surface',
-                    id === 'phone' && state === 'ringing' && 'animate-vibrate',
-                  )}
-                >
-                  {(id === 'antenna' && (state === 'calling' || state === 'ringing')) ||
-                  (id === 'phone' && state === 'ringing') ? (
-                    <span className="absolute inset-0 animate-wave-out rounded-2xl bg-current opacity-15" />
-                  ) : null}
-                  <NodeIcon id={id} className="relative size-6" />
-                  {id === 'phone' && state === 'success' ? (
-                    <span className="absolute -end-2 -top-2 grid size-[17px] animate-pop place-items-center rounded-full border border-ok bg-surface font-mono text-micro font-bold text-ok">
-                      ✓
-                    </span>
-                  ) : null}
-                </span>
-                {/* label ไทยยาวกว่า EN — ปล่อยให้ตัดบรรทัดได้ ห้าม nowrap */}
-                <span
-                  className={cn(
-                    'text-center text-micro font-medium transition-colors',
-                    isCurrent ? toneText[tone] : live ? toneText[tone] : 'text-ink-2',
-                  )}
-                >
-                  {labels[id]}
-                </span>
-              </div>
-
-              {i < 3 ? (
-                <div className="relative mx-1.5 mb-[22px] h-5 min-w-[34px] flex-1 basis-[62px]">
-                  {/* เส้นเชื่อมเป็นเส้นประตามภาพ ไม่ใช่เส้นทึบ */}
-                  <svg viewBox="0 0 130 20" preserveAspectRatio="none" className="absolute inset-0 h-5 w-full">
-                    <line
-                      x1="0"
-                      y1="10"
-                      x2="130"
-                      y2="10"
-                      strokeWidth="2"
-                      strokeDasharray="7 5"
-                      className={lineLive ? cn('stroke-current', toneText[tone]) : 'stroke-line'}
-                    />
-                  </svg>
-                  {flowing ? <Packets count={i === 0 ? packets : 3} tone={tone} /> : null}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+    // max-w กันเส้นยืดจนสุดขอบการ์ดบนจอกว้าง — ถ้าปล่อย flex-1 อิสระ โหนดจะกระจาย
+    // ห่างกันเป็นร้อย px จนอ่านไม่ออกว่าเป็นเส้นทางเดียวกัน (การ์ดนี้กว้างเต็มหน้า dashboard)
+    <div
+      className="relative min-w-[16px] max-w-[104px] flex-1"
+      style={{ height: TILE, marginTop: SLOT_TOP + 6 }}
+      aria-hidden
+    >
+      <div
+        className="absolute top-1/2 right-1 left-1 -mt-px"
+        style={{
+          height: 2,
+          borderRadius: 2,
+          background: passed
+            ? COLOR.green
+            : `repeating-linear-gradient(to right, ${COLOR.grey} 0 4px, transparent 4px 8px)`,
+          opacity: passed ? 1 : 0.55,
+          transition: 'background 280ms ease, opacity 280ms ease',
+        }}
+      />
+      {live ? (
+        <div
+          className="absolute top-1/2 right-1 left-1"
+          style={{ '--sfm-state': color } as CSSProperties}
+        >
+          <span className="sfm-travel" />
+          <span className="sfm-travel" />
+          <span className="sfm-travel" />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/* ── B. Circular ───────────────────────────────────────────
-   4 โหนดรอบวงกลม r=92 เส้นเชื่อมเป็น arc โก่งเข้าศูนย์กลาง */
-const CX = 160;
-const CY = 142;
-const R = 92;
-const polar = (deg: number) => ({
-  x: CX + R * Math.cos((deg * Math.PI) / 180),
-  y: CY + R * Math.sin((deg * Math.PI) / 180),
-});
-const CIRC: Record<NodeId, { x: number; y: number }> = {
-  api: polar(180),
-  pi: polar(270),
-  antenna: polar(0),
-  phone: polar(90),
+/* ── ไอคอน ───────────────────────────────────────────────────────────────── */
+
+const iconBase: SVGProps<SVGSVGElement> = {
+  viewBox: '0 0 24 24',
+  width: 24,
+  height: 24,
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
 };
 
-function arcPath(a: { x: number; y: number }, b: { x: number; y: number }) {
-  const mx = (a.x + b.x) / 2;
-  const my = (a.y + b.y) / 2;
-  const dx = CX - mx;
-  const dy = CY - my;
-  const len = Math.hypot(dx, dy) || 1;
-  const r = (n: number) => Math.round(n * 10) / 10;
-  return `M${r(a.x)},${r(a.y)} Q${r(mx + (dx / len) * 26)},${r(my + (dy / len) * 26)} ${r(b.x)},${r(b.y)}`;
-}
-
-function CircularLayout({ state, substep, tone, T }: LayoutProps) {
-  const arcs = [arcPath(CIRC.api, CIRC.pi), arcPath(CIRC.pi, CIRC.antenna), arcPath(CIRC.antenna, CIRC.phone)];
-  const pos: Record<NodeId, string> = {
-    api: 'start-[41px] top-[115px]',
-    pi: 'start-[133px] top-[23px]',
-    antenna: 'start-[225px] top-[115px]',
-    phone: 'start-[133px] top-[207px]',
-  };
-  const stateLabel: Record<FlowState, string> = {
-    idle: T.flow_state_idle,
-    calling: T.flow_state_calling,
-    ringing: T.flow_state_ringing,
-    success: T.flow_state_success,
-    failed: T.flow_state_failed,
-  };
+/** API Gateway — payload ลอดผ่านวงเล็บปีกกา */
+function ApiIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <div className="flex flex-col items-center gap-3 overflow-x-auto px-3.5 pt-4 pb-3.5">
-      <div className="relative size-[320px] shrink-0 basis-[270px]">
-        <svg viewBox="0 0 320 270" className="absolute inset-0 size-full">
-          <circle cx={CX} cy={CY} r={R} fill="none" strokeWidth="1" strokeDasharray="4 6" className="stroke-line" />
-          {arcs.map((d, i) => {
-            const lit = state === 'success' || state === 'ringing' || substep >= LINE_STEP[i];
-            return (
-              <path
-                key={d}
-                d={d}
-                fill="none"
-                strokeWidth={lit ? 2 : 1.5}
-                className={lit ? cn('stroke-current', toneText[tone]) : 'stroke-line'}
-              />
-            );
-          })}
-        </svg>
-        {NODES.map((id) => {
-          const live = nodeLive(state, substep, id);
-          return (
-            <span
-              key={id}
-              className={cn(
-                'absolute grid size-[54px] place-items-center rounded-2xl border-[1.5px] bg-surface transition-colors',
-                pos[id],
-                live ? cn(toneBorder[tone], toneText[tone]) : 'border-line text-ink-2',
-              )}
-            >
-              <NodeIcon id={id} className="size-6" />
-            </span>
-          );
-        })}
-        <span className="absolute start-[100px] top-[128px] grid w-[120px] place-items-center">
-          <span
-            className={cn(
-              'rounded-control border bg-surface px-2.5 py-1 text-center text-micro',
-              toneBorder[tone],
-              toneText[tone],
-            )}
-          >
-            {stateLabel[state]}
-          </span>
-        </span>
-      </div>
-      <Legend T={T} />
-    </div>
+    <svg {...iconBase} {...props}>
+      <path d="M8.5 6 4 12l4.5 6M15.5 6l4.5 6-4.5 6" />
+      <path d="M13.4 5.2 10.6 18.8" />
+    </svg>
   );
 }
 
-/* ── C. Camera ─────────────────────────────────────────────
-   โฟกัสโหนดเดียวไล่ทีละขั้น + progress bar ด้านล่าง */
-function CameraLayout({ state, substep, packets, tone, T }: LayoutProps) {
-  const idx =
-    state === 'idle' ? 0 : state === 'success' || state === 'ringing' ? 3 : Math.min(3, Math.floor(substep / 2));
-  const id = NODES[idx];
-  const labels: Record<NodeId, string> = {
-    api: T.flow_node_api,
-    pi: T.flow_node_pi,
-    antenna: T.flow_node_antenna,
-    phone: T.flow_node_phone,
-  };
-  // ข้อความบรรทัดล่างเป็น mono technical ตามดีไซน์ — ค่า requests มาจากคิวจริง
-  const sub =
-    state === 'idle'
-      ? 'standby'
-      : state === 'success'
-        ? '✓ answered'
-        : id === 'api'
-          ? `${packets} in queue`
-          : id === 'pi'
-            ? 'encoding audio…'
-            : id === 'antenna'
-              ? 'transmitting…'
-              : 'ringing…';
-
+/** Raspberry Pi — บอร์ดที่มีชิปกับ header pin */
+function PiIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <div className="flex flex-col items-center gap-3.5 px-4 pt-4 pb-3.5">
-      <div
-        className={cn(
-          'relative h-[220px] w-full max-w-[360px] overflow-hidden rounded-card border-[1.5px] bg-surface transition-colors',
-          toneBorder[tone],
-        )}
-      >
-        <div className="absolute inset-x-0 top-0 z-[3] flex items-center justify-between px-3.5 pt-2.5 pb-2">
-          <span className="flex items-center gap-1.5">
-            <span className={cn('size-1.5 rounded-full', toneFill[tone], state !== 'idle' && 'animate-soft-pulse')} />
-            <span className="font-mono text-micro tracking-[0.16em] text-ink-2 uppercase">viewport</span>
-          </span>
-          <span className="font-mono text-micro text-ink-2">{idx + 1} / 4</span>
-        </div>
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-          <span
-            className={cn(
-              'relative grid size-[90px] place-items-center rounded-[22px] border-[1.5px]',
-              toneBorder[tone],
-              toneBg[tone],
-              toneText[tone],
-            )}
-          >
-            <NodeIcon id={id} className="relative size-10 animate-slide-in" />
-          </span>
-          <span className="text-lead font-semibold">{labels[id]}</span>
-          <span className={cn('animate-fade-up font-mono text-caption', toneText[tone])}>{sub}</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-2.5">
-        {NODES.map((n, i) => (
-          <span key={n} className="flex flex-col items-center gap-1.5">
-            <span
-              className={cn(
-                'grid size-[34px] place-items-center rounded-xl border-[1.5px] font-mono text-micro font-bold',
-                i === idx ? cn(toneBorder[tone], toneBg[tone], toneText[tone]) : 'border-line bg-surface text-ink-2',
-              )}
-            >
-              {i + 1}
-            </span>
-            <span
-              className={cn('h-1.5 rounded-full transition-all', i === idx ? cn('w-6', toneFill[tone]) : 'w-1.5 bg-line')}
-            />
-          </span>
-        ))}
-      </div>
-    </div>
+    <svg {...iconBase} {...props}>
+      <rect x="3" y="5.5" width="18" height="13" rx="2" />
+      <rect x="9" y="10.5" width="6" height="5" rx="1" />
+      <path d="M6 8.5h1.5M9.5 8.5H11M13 8.5h1.5M16.5 8.5H18" />
+    </svg>
   );
 }
 
-/* ── D. Step Flow ──────────────────────────────────────────
-   การ์ด 4 ใบ + ชิปสถานะ done/active/ringing/error */
-function StepFlowLayout({ state, substep, packets, tone, T }: LayoutProps) {
-  const meta: Record<NodeId, { label: string; sub: string }> = {
-    api: { label: T.flow_node_api, sub: 'POST /notify' },
-    pi: { label: T.flow_node_pi, sub: 'gTTS → mp3' },
-    antenna: { label: T.flow_node_antenna, sub: 'AT+ATD' },
-    phone: { label: T.flow_node_phone, sub: 'answer' },
-  };
-  const chipOf = (id: NodeId) => {
-    if (state === 'idle') return { text: 'standby', cls: 'bg-surface-2 text-ink-2' };
-    if (state === 'failed' && id !== 'phone') return { text: 'error', cls: 'bg-bad-soft text-bad' };
-    if (state === 'ringing' && id === 'phone') return { text: 'ringing', cls: 'bg-warn-soft text-warn' };
-    if (state === 'calling' && substep === NODE_STEP[id]) return { text: 'active', cls: 'bg-brand-soft text-brand' };
-    return nodeLive(state, substep, id)
-      ? { text: 'done', cls: 'bg-ok-soft text-ok' }
-      : { text: 'waiting', cls: 'bg-surface-2 text-ink-2' };
-  };
-
+/** เสาสัญญาณ 4G — เสาที่ปล่อยคลื่นออก 2 ชั้น */
+function TowerIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <div className="overflow-x-auto px-3.5 pt-10 pb-4">
-      <div className="mx-auto flex min-w-max items-stretch gap-1">
-        {NODES.map((id, i) => {
-          const chip = chipOf(id);
-          const live = nodeLive(state, substep, id);
-          const lifted = chip.text === 'active' || chip.text === 'ringing';
-          const flowing = i < 3 && state === 'calling' && substep >= LINE_STEP[i];
-          return (
-            <div key={id} className="flex items-stretch">
-              <div
-                className={cn(
-                  'flex w-[132px] flex-col items-center gap-1.5 rounded-card border-[1.5px] px-2.5 py-3 transition-all',
-                  live ? toneBorder[tone] : 'border-line',
-                  lifted ? cn('-translate-y-1.5 scale-[1.03]', toneBg[tone]) : 'bg-surface',
-                )}
-              >
-                <span
-                  className={cn(
-                    'grid size-11 place-items-center rounded-xl border bg-surface',
-                    live ? cn(toneBorder[tone], toneText[tone]) : 'border-line text-ink-2',
-                  )}
-                >
-                  <NodeIcon id={id} className="size-[22px]" />
-                </span>
-                <span className={cn('text-center text-micro font-semibold', live ? toneText[tone] : 'text-ink-2')}>
-                  {meta[id].label}
-                </span>
-                <span className="font-mono text-micro text-ink-2">{meta[id].sub}</span>
-                <span className={cn('rounded-full px-2.5 py-0.5 font-mono text-micro', chip.cls)}>{chip.text}</span>
-              </div>
-              {i < 3 ? (
-                <div className="relative mx-0.5 h-3 w-[26px] shrink-0 self-center">
-                  <svg viewBox="0 0 26 12" className="absolute inset-0">
-                    <line
-                      x1="0"
-                      y1="6"
-                      x2="19"
-                      y2="6"
-                      strokeWidth="1.5"
-                      className={live ? cn('stroke-current', toneText[tone]) : 'stroke-line'}
-                    />
-                    <polygon
-                      points="18,3 25,6 18,9"
-                      className={live ? cn('fill-current', toneText[tone]) : 'fill-line'}
-                    />
-                  </svg>
-                  {flowing ? <Packets count={i === 0 ? packets : 3} tone={tone} /> : null}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <svg {...iconBase} {...props}>
+      <path d="M12 9.5V20M9 20h6" />
+      <path d="M8.8 8.4a4.4 4.4 0 0 1 6.4 0" />
+      <path d="M5.9 5.6a8.6 8.6 0 0 1 12.2 0" />
+      <circle cx="12" cy="7.6" r="1.15" fill="currentColor" stroke="none" />
+    </svg>
   );
 }
 
-/* ── E. Radar ──────────────────────────────────────────────
-   จอสแกนพื้นกรมท่า — สีเข้มพวกนี้ hardcode โดยเจตนาตามดีไซน์ (จอเรดาร์ต้องเข้มทั้ง 2 ธีม) */
-const RX = 160;
-const RY = 145;
-const RR = 105;
-const radarAt = (deg: number) => ({
-  x: Math.round((RX + RR * Math.cos((deg * Math.PI) / 180)) * 10) / 10,
-  y: Math.round((RY + RR * Math.sin((deg * Math.PI) / 180)) * 10) / 10,
-});
-const RADAR_POS = [radarAt(190), radarAt(240), radarAt(300), radarAt(350)];
-const SHORT = ['API', 'RPi', '4G', 'SIP'];
-
-function RadarLayout({ state, substep, tone, T }: LayoutProps) {
-  const inward = (p: { x: number; y: number }) => {
-    const dx = RX - p.x;
-    const dy = RY - p.y;
-    const l = Math.hypot(dx, dy) || 1;
-    return { x: Math.round(p.x + (dx / l) * 22), y: Math.round(p.y + (dy / l) * 22) };
-  };
-  const sweeping = state === 'calling' || state === 'ringing';
-
+/** โทรศัพท์ปลายทาง */
+function PhoneIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <div className="flex flex-col items-center gap-3 overflow-x-auto px-3.5 pt-4 pb-3.5">
-      <div className="relative h-[290px] w-[320px] shrink-0">
-        <svg viewBox="0 0 320 290" className="absolute inset-0 size-full">
-          <circle cx={RX} cy={RY} r="115" fill="#0f172a" />
-          {[36, 65].map((r) => (
-            <circle
-              key={r}
-              cx={RX}
-              cy={RY}
-              r={r}
-              fill="none"
-              strokeWidth="1"
-              stroke={state === 'idle' ? '#1e293b' : 'currentColor'}
-              className={toneText[tone]}
-              opacity="0.45"
-            />
-          ))}
-          <circle cx={RX} cy={RY} r="96" fill="none" strokeWidth="1" strokeDasharray="4 5" stroke="#1e293b" />
-          <line x1="45" y1={RY} x2="275" y2={RY} stroke="#1e293b" strokeWidth="0.5" />
-          <line x1={RX} y1="30" x2={RX} y2="260" stroke="#1e293b" strokeWidth="0.5" />
-
-          {sweeping ? (
-            <g className="origin-[160px_145px] animate-sweep">
-              <path
-                d="M160,145 L270,145 A110,110 0 0,1 215,49.7 Z"
-                className={cn('fill-current', toneText[tone])}
-                opacity="0.2"
-              />
-              <line
-                x1={RX}
-                y1={RY}
-                x2="270"
-                y2={RY}
-                strokeWidth="1"
-                className={cn('stroke-current', toneText[tone])}
-                opacity="0.75"
-              />
-            </g>
-          ) : null}
-
-          {RADAR_POS.slice(0, 3).map((p, i) => {
-            const lit = state === 'success' || state === 'ringing' || substep >= LINE_STEP[i];
-            if (!lit) return null;
-            const q = RADAR_POS[i + 1];
-            return (
-              <path
-                key={i}
-                d={`M${p.x},${p.y} L${q.x},${q.y}`}
-                fill="none"
-                strokeWidth="1.5"
-                strokeDasharray="6 4"
-                className={cn('animate-dash stroke-current', toneText[tone])}
-                opacity="0.9"
-              />
-            );
-          })}
-
-          {RADAR_POS.map((p, i) => {
-            const live = nodeLive(state, substep, NODES[i]);
-            return (
-              <g key={i}>
-                {live ? (
-                  <circle cx={p.x} cy={p.y} r="11" className={cn('fill-current', toneText[tone])} opacity="0.16" />
-                ) : null}
-                <circle cx={p.x} cy={p.y} r="4" className={live ? cn('fill-current', toneText[tone]) : 'fill-[#334155]'} />
-              </g>
-            );
-          })}
-          <circle cx={RX} cy={RY} r="3" className={state === 'idle' ? 'fill-[#334155]' : cn('fill-current', toneText[tone])} />
-
-          {/* ป้ายชื่อโหนดวาดเป็น <text> ใน svg แทน <span> ที่ต้นฉบับใช้
-              เพราะต้นฉบับเขียน `left-[${lp.x}px]` ซึ่ง Tailwind สร้างคลาสให้ไม่ได้
-              (JIT สแกนซอร์สแบบ static ไม่รู้จักค่าที่คำนวณตอน runtime) ป้ายจะไม่ขยับเลย
-              พิกัดมาจากเรขาคณิต ใช้ attribute ของ svg ตรงๆ ถูกต้องกว่าและไม่ต้องมี inline style */}
-          {RADAR_POS.map((p, i) => {
-            const lp = inward(p);
-            const live = nodeLive(state, substep, NODES[i]);
-            return (
-              <text
-                key={`label-${i}`}
-                x={lp.x}
-                y={lp.y}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                className={cn('font-mono text-[11px] font-medium', live ? toneText[tone] : 'text-[#94a3b8]')}
-                fill="currentColor"
-              >
-                {SHORT[i]}
-              </text>
-            );
-          })}
-
-          <text
-            x={RX}
-            y={RY + 26}
-            textAnchor="middle"
-            className={cn('font-mono text-[11px]', state === 'idle' ? 'text-[#94a3b8]' : toneText[tone])}
-            fill="currentColor"
-          >
-            {state === 'calling'
-              ? `TX_${substep}`
-              : state === 'ringing'
-                ? 'RINGING'
-                : state === 'success'
-                  ? 'CONNECTED'
-                  : 'OFFLINE'}
-          </text>
-        </svg>
-      </div>
-      <Legend T={T} short />
-    </div>
+    <svg {...iconBase} {...props}>
+      <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+      <path d="M10.5 18.5h3" />
+      <path d="M9.5 6h5" opacity="0.55" />
+    </svg>
   );
 }
 
-/* ── F. Timeline ───────────────────────────────────────────
-   8 เหตุการณ์เรียงตามลำดับ — layout นี้ทนข้อความไทยยาวได้ดีที่สุด
+const NODE_ICONS: Record<NodeId, (props: SVGProps<SVGSVGElement>) => ReactElement> = {
+  api: ApiIcon,
+  pi: PiIcon,
+  tower: TowerIcon,
+  phone: PhoneIcon,
+};
 
-   ต้นฉบับใส่ timestamp ปลอมไว้ทุกแถว (00:00.00, 00:00.05, …) พร้อมรายละเอียดที่
-   แต่งขึ้น (RSRP −85 dBm, PCM 8kHz, RTP/UDP) — ตัดออกทั้งหมด
-   หน้าจอ monitoring ที่โชว์เวลาปลอมอันตรายกว่าไม่โชว์เวลา
-   แถวแรกใช้ created_at จริงของงานล่าสุด ที่เหลือขึ้น "—" จนกว่าจะมี GET /history/{job_id} */
-function TimelineLayout({ state, substep, packets, T, latest }: LayoutProps) {
-  const startedAt = latest ? new Date(latest.created_at).toLocaleTimeString() : null;
-
-  const rows: { node?: NodeId; label: string; detail: string; time: string | null; step: number }[] = [
-    { node: 'api', label: T.flow_node_api, detail: `POST /notify · ${packets}`, time: startedAt, step: 0 },
-    { label: 'queued', detail: 'รอ worker หยิบงาน', time: null, step: 1 },
-    { node: 'pi', label: T.flow_node_pi, detail: 'gTTS → mp3', time: null, step: 2 },
-    { label: 'dial', detail: 'ATD ผ่าน serial', time: null, step: 3 },
-    { node: 'antenna', label: T.flow_node_antenna, detail: 'ส่งออกเครือข่าย', time: null, step: 4 },
-    { label: 'relay', detail: 'ปลายทางเริ่มดัง', time: null, step: 5 },
-    { label: 'ringing', detail: 'รอปลายทางรับสาย', time: null, step: 6 },
-    {
-      node: 'phone',
-      label: T.flow_node_phone,
-      detail: state === 'success' ? 'รับสาย — เล่นข้อความ' : 'ยังไม่รับ',
-      time: null,
-      step: 7,
-    },
-  ];
-
-  const rowTone = (step: number) => {
-    if (state === 'idle') return 'idle' as const;
-    if (state === 'failed') return step <= 3 ? ('done' as const) : step === 4 ? ('error' as const) : ('idle' as const);
-    if (state === 'ringing') return step < 6 ? ('done' as const) : step === 6 ? ('ringing' as const) : ('idle' as const);
-    if (state === 'success') return 'done' as const;
-    return substep === step ? ('active' as const) : substep > step ? ('done' as const) : ('idle' as const);
-  };
-
-  const cls = {
-    idle: { ink: 'text-ink-2', dot: 'border-line bg-surface-2 text-ink-2', line: 'bg-line', row: '' },
-    active: { ink: 'text-brand', dot: 'border-brand bg-brand text-brand-ink', line: 'bg-brand', row: 'border-brand bg-brand-soft' },
-    done: { ink: 'text-ok', dot: 'border-ok bg-ok text-white', line: 'bg-ok', row: '' },
-    error: { ink: 'text-bad', dot: 'border-bad bg-bad text-white', line: 'bg-bad', row: 'border-bad bg-bad-soft' },
-    ringing: { ink: 'text-warn', dot: 'border-warn bg-warn text-white', line: 'bg-warn', row: 'border-warn bg-warn-soft animate-vibrate' },
-  } as const;
-
+function GearIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <div className="flex flex-col items-center gap-2 px-4 pt-3.5 pb-4">
-      <div className="flex w-full max-w-[460px] flex-col gap-0.5">
-        {rows.map((r, i) => {
-          const q = rowTone(r.step);
-          const c = cls[q];
-          return (
-            <div
-              key={r.label + r.step}
-              className={cn(
-                'flex items-start gap-3 rounded-xl border border-transparent px-2.5 py-1.5 transition-colors',
-                c.row,
-              )}
-            >
-              <span className="flex w-5 shrink-0 flex-col items-center self-stretch">
-                <span
-                  className={cn(
-                    'grid shrink-0 place-items-center rounded-full border-[1.5px]',
-                    r.node ? 'size-5' : 'mt-1 size-[11px]',
-                    c.dot,
-                  )}
-                >
-                  {r.node ? <NodeIcon id={r.node} className="size-[11px]" /> : null}
-                </span>
-                {i < rows.length - 1 ? <span className={cn('min-h-2.5 w-px flex-1 transition-colors', c.line)} /> : null}
-              </span>
-              <span className="flex min-w-0 flex-1 items-start justify-between gap-2">
-                <span className="flex min-w-0 flex-col">
-                  <span className={cn('text-caption font-semibold transition-colors', q === 'done' ? 'text-ink' : c.ink)}>
-                    {r.label}
-                  </span>
-                  <span className="font-mono text-micro text-ink-2">{r.detail}</span>
-                </span>
-                <span className="mt-px shrink-0 font-mono text-micro text-ink-2">{r.time ?? '—'}</span>
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-micro text-ink-2">{T.flow_time_unknown}</p>
-    </div>
+    <svg {...iconBase} width={16} height={16} strokeWidth={1.7} {...props}>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 2.6v2.6M12 18.8v2.6M21.4 12h-2.6M5.2 12H2.6M18.6 5.4l-1.9 1.9M7.3 16.7l-1.9 1.9M18.6 18.6l-1.9-1.9M7.3 7.3 5.4 5.4" />
+    </svg>
   );
 }
 
-/**
- * legend ท้ายการ์ด — จุดของโหนดที่กำลังทำงานอยู่ใช้สีตามสถานะ ที่เหลือเป็นสี brand
- * (ในภาพ API/RPi/4G เป็นน้ำเงิน แต่ SIP เป็นส้มเพราะตอนนั้นสถานะคือ "กำลังดังเรียก")
- * ถ้าไม่ส่ง state เข้ามาจะเป็นสี brand ทั้งหมด — ใช้กับ layout ที่ไม่ต้องเน้น
- */
-function Legend({
-  T,
-  short = false,
-  state,
-  substep,
-  tone,
-}: {
-  T: LayoutProps['T'];
-  short?: boolean;
-  state?: FlowState;
-  substep?: number;
-  tone?: Tone;
-}) {
-  const items: { id: NodeId; label: string }[] = [
-    { id: 'api', label: short ? 'API' : T.flow_node_api },
-    { id: 'pi', label: short ? 'RPi 4B' : T.flow_node_pi },
-    { id: 'antenna', label: short ? '4G LTE' : T.flow_node_antenna },
-    { id: 'phone', label: short ? 'SIP' : T.flow_node_phone },
-  ];
-  const currentIdx =
-    state == null || substep == null || state === 'idle'
-      ? -1
-      : state === 'success' || state === 'ringing'
-        ? 3
-        : Math.min(3, Math.floor(substep / 2));
-
+function CheckIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      {items.map((n, i) => (
-        <span key={n.id} className="flex items-center gap-1.5">
-          <span className={cn('size-1.5 rounded-full', i === currentIdx && tone ? toneFill[tone] : 'bg-brand')} />
-          <span className="font-mono text-micro font-medium text-ink-2">{n.label}</span>
-        </span>
-      ))}
-    </div>
+    <svg {...iconBase} width={11} height={11} strokeWidth={2.8} {...props}>
+      <path d="M4.5 12.5 9.5 17.5 19.5 6.5" />
+    </svg>
   );
 }
 
-function NodeIcon({ id, className }: { id: NodeId; className?: string }) {
-  const common = {
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.75,
-    strokeLinecap: 'round' as const,
-  };
-  if (id === 'api')
-    return (
-      <svg {...common} className={className}>
-        <path d="M8.5 8.5 5 12l3.5 3.5" />
-        <path d="M15.5 8.5 19 12l-3.5 3.5" />
-        <path d="M13.4 5.5 10.6 18.5" />
-      </svg>
-    );
-  if (id === 'pi')
-    return (
-      <svg {...common} className={className}>
-        <rect x="7" y="7" width="10" height="10" rx="1.5" />
-        <path d="M7 9H5M7 12H5M7 15H5M17 9h2M17 12h2M17 15h2M9 7V5M12 7V5M15 7V5M9 17v2M12 17v2M15 17v2" />
-      </svg>
-    );
-  if (id === 'antenna')
-    return (
-      <svg {...common} className={className}>
-        <path d="M12 20V11" />
-        <path d="M12 11l-3.5-3.5" />
-        <path d="M12 11l3.5-3.5" />
-        <path d="M7.8 6.2a6.5 6.5 0 0 0 8.4 8.4" />
-        <path d="M5.2 3.6a10 10 0 0 0 13.2 13.2" />
-      </svg>
-    );
+function BangIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg {...common} className={className}>
-      <rect x="5" y="2" width="14" height="20" rx="2.5" />
-      <line x1="9" y1="5" x2="15" y2="5" strokeWidth="1.5" />
+    <svg {...iconBase} width={11} height={11} strokeWidth={2.8} {...props}>
+      <path d="M12 4.5v9.5" />
+      <path d="M12 19h.01" />
     </svg>
   );
 }

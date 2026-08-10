@@ -23,8 +23,10 @@ import { listApiKeys } from '../api/apiKeys';
 import { getHistory } from '../api/history';
 import { getQueueStatus } from '../api/queue';
 import { getGsmDetail } from '../api/system';
+import { Alert } from '../components/Alert';
 import { Btn, Card, CardHead, Divider, Dot, PageHeader, Pill, StatTile, type Tone } from '../components/primitives';
 import { useApp } from '../context/AppContext';
+import { operatorName } from '../lib/operator';
 import { PipelineNow } from '../widgets/PipelineNow';
 import { SignalFlowMonitor } from '../widgets/SignalFlowMonitor';
 import type { ApiKey, GsmDetail, HistoryItem } from '../types';
@@ -32,12 +34,11 @@ import type { ApiKey, GsmDetail, HistoryItem } from '../types';
 const REFRESH_MS = 5_000;
 
 /** สถานะที่ถือว่าจบแบบสำเร็จ / แบบล้มเหลว — ใช้ยิงนับแยกฝั่ง server ผ่าน total_count */
-const OK_STATUSES = ['connected', 'sms_fallback_sent'] as const;
+const OK_STATUSES = ['connected'] as const;
 const BAD_STATUSES = ['failed'] as const;
 
 function statusTone(status: string): Tone {
   if (status === 'connected') return 'ok';
-  if (status === 'sms_fallback_sent') return 'accent';
   if (status === 'failed') return 'bad';
   if (status === 'queued' || status === 'in_progress') return 'muted';
   return 'warn';
@@ -149,28 +150,37 @@ export function DashboardPage() {
         }
       />
 
+      {gsm && !gsm.connected ? <Alert tone="bad" title={T.gsm_offline_note} /> : null}
+
       <div className="grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-3">
         <StatTile
           label={T.dash_signal_4g}
-          value={dbm != null ? `${dbm} dBm` : T.gsm_signal_unknown}
+          // แสดงค่าดิบ x/31 ตรงตามที่ AT+CSQ ตอบมา (ชุดเดียวกับหน้าระบบ) ส่วน dBm ที่คำนวณต่อ
+          // ย้ายไปอยู่บรรทัดล่างแทน — เทียบ "15/31" ง่ายกว่าเลขติดลบสำหรับคนที่ไม่ได้ดูสเปกวิทยุ
+          value={gsm?.signal_quality != null ? `${gsm.signal_quality}/31` : T.gsm_signal_unknown}
           foot={
-            <span className="flex h-3.5 items-end gap-0.5">
-              {[0, 1, 2, 3].map((i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    'w-1.5 rounded-sm',
-                    i < bars ? 'bg-brand' : 'bg-line',
-                    i === 0 && 'h-[5px]',
-                    i === 1 && 'h-[8px]',
-                    i === 2 && 'h-[11px]',
-                    i === 3 && 'h-[14px]',
-                  )}
-                />
-              ))}
-              <span className="ms-1.5">
-                {gsm?.operator ?? T.gsm_no_operator}
+            /* ขีดสัญญาณกับชื่อผู้ให้บริการแยกเป็นคนละก้อน + flex-wrap
+               เดิมอยู่ก้อนเดียวกันแบบไม่ตัดบรรทัด ชื่อผู้ให้บริการยาวๆ เลยดันการ์ดกว้างเกิน */
+            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+              <span className="flex h-3.5 shrink-0 items-end gap-0.5">
+                {[0, 1, 2, 3].map((i) => (
+                  <span
+                    key={i}
+                    className={cn(
+                      'w-1.5 rounded-sm',
+                      i < bars ? 'bg-brand' : 'bg-line',
+                      i === 0 && 'h-[5px]',
+                      i === 1 && 'h-[8px]',
+                      i === 2 && 'h-[11px]',
+                      i === 3 && 'h-[14px]',
+                    )}
+                  />
+                ))}
+              </span>
+              <span className="min-w-0 break-words">
+                {operatorName(gsm?.operator) ?? T.gsm_no_operator}
                 {gsm?.network_mode ? ` · ${gsm.network_mode}` : ''}
+                {dbm != null ? ` · ${dbm} dBm` : ''}
               </span>
             </span>
           }
@@ -320,7 +330,7 @@ function DetailCell({ label, value, tone }: { label: string; value: string; tone
   return (
     <div
       className={cn(
-        'flex-1 basis-[132px] rounded-xl border border-line border-s-[3px] bg-surface px-2.5 py-2',
+        'min-w-0 flex-1 basis-[132px] rounded-xl border border-line border-s-[3px] bg-surface px-2.5 py-2',
         tone === 'ok' && 'border-s-ok',
         tone === 'warn' && 'border-s-warn',
         tone === 'bad' && 'border-s-bad',
@@ -329,7 +339,8 @@ function DetailCell({ label, value, tone }: { label: string; value: string; tone
       )}
     >
       <p className="text-micro font-semibold">{label}</p>
-      <p className="font-mono text-micro text-ink-2">{value}</p>
+      {/* ค่าที่มาจาก backend เช่น last_result อาจยาวและไม่มีช่องว่างให้ตัดบรรทัด */}
+      <p className="font-mono text-micro break-words text-ink-2">{value}</p>
     </div>
   );
 }

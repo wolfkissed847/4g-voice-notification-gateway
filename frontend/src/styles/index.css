@@ -10,3 +10,5 @@
 /* ปรับโทนทับ theme.css — ลบบรรทัดนี้เพื่อกลับไปใช้สีของดีไซเนอร์ตรงๆ */
 @import './theme-tuning.css';
 @import './tw-theme.css';
+/* token + keyframes เฉพาะการ์ด Signal Flow Monitor (ต้องอยู่หลัง theme เพราะอ้างค่าจากมัน) */
+@import './signal-flow.css';

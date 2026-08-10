@@ -15,10 +15,11 @@
  */
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { AlertTriangle, Eye, EyeOff, Moon, RefreshCw, Sun } from 'lucide-react';
+import { Eye, EyeOff, Moon, RefreshCw, Sun } from 'lucide-react';
 
 import { login } from '../api/auth';
 import { ApiError, setToken } from '../api/client';
+import { Alert } from '../components/Alert';
 import { Btn, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
 
@@ -70,12 +71,7 @@ export function LoginPage() {
         >
           <h1 className="text-lead font-semibold">{T.login_submit}</h1>
 
-          {err ? (
-            <div className="flex items-start gap-2 rounded-control border border-bad bg-bad-soft px-3 py-2.5">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-bad" />
-              <p className="text-caption leading-[1.7] text-bad">{err}</p>
-            </div>
-          ) : null}
+          {err ? <Alert tone="bad">{err}</Alert> : null}
 
           <label className="flex flex-col gap-1.5">
             <span className="text-caption text-ink-2">{T.login_username}</span>

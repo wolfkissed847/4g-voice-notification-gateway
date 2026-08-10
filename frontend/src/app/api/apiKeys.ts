@@ -23,7 +23,7 @@ export function updateApiKey(id: number, patch: ApiKeyUpdate): Promise<ApiKey> {
   return apiRequest<ApiKey>(`/api-keys/${id}`, { method: "PUT", body: patch });
 }
 
-/** revoke = ปิดถาวร เปิดกลับไม่ได้ (อุปกรณ์ที่ฝัง key นี้ไว้ต้องแฟลช key ใหม่) */
-export function revokeApiKey(id: number): Promise<void> {
+/** ลบอุปกรณ์ออกจากฐานข้อมูลจริง เอากลับไม่ได้ — ประวัติการโทรเดิมยังอยู่ครบ */
+export function deleteApiKey(id: number): Promise<void> {
   return apiRequest<void>(`/api-keys/${id}`, { method: "DELETE" });
 }

@@ -47,6 +47,7 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, query, auth = true } = options;
+
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth) {

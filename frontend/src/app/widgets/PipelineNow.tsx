@@ -25,7 +25,7 @@ import type { QueueStatusItem } from '../types';
 const REFRESH_MS = 5000;
 
 /** สถานะที่ถือว่า "จบแล้ว" ใช้นับยอดของวันนี้ */
-const DONE_STATUSES = ['connected', 'sms_fallback_sent', 'failed'] as const;
+const DONE_STATUSES = ['connected', 'failed'] as const;
 
 type Tile = { label: string; sub: string; count: number; tone: 'muted' | 'accent' | 'warn' };
 

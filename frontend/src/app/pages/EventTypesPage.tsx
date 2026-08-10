@@ -178,8 +178,10 @@ export function EventTypesPage() {
         </div>
       ) : (
         <div className="bg-surface rounded-card border border-line overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="overflow-x-auto overscroll-x-contain">
+            {/* min-w เท่ากับตารางหน้าอื่น (คิว/ประวัติ) — เดิมมีแค่ w-full ตารางเลยถูกบีบ
+                จน 5 คอลัมน์เบียดกันอ่านไม่ออกบนมือถือ แทนที่จะเลื่อนดูแนวนอนได้ */}
+            <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="border-b border-line bg-surface-2">
                   {[T.col_code, T.col_name, T.filter_group, T.col_active, T.col_actions].map((h) => (

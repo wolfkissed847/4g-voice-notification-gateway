@@ -8,7 +8,7 @@
  *
  *   1. โมดูล 4G      — /system/gsm (จริงทั้งหมด)
  *   2. Raspberry Pi  — /system/pi (ดีไซน์ไม่มีการ์ดนี้ แต่เรามีข้อมูลจริงและมีประโยชน์)
- *   3. ค่าการโทร     — /config (retry/timeout/SMS) = ที่ดีไซน์วางไว้ในแท็บ retry ของหน้าอุปกรณ์
+ *   3. ค่าการโทร     — /config (retry/timeout) = ที่ดีไซน์วางไว้ในแท็บ retry ของหน้าอุปกรณ์
  *                      แต่ของเราเป็นค่ากลางทั้งระบบ จึงต้องอยู่หน้านี้
  *   4. รันไทม์+ธีม    — /system/info + ปุ่มสลับธีม
  *
@@ -17,12 +17,14 @@
  */
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Moon, Sun } from 'lucide-react';
 
 import { getConfig, updateConfig } from '../api/config';
 import { listEventTypes, sendTestNotify } from '../api/eventTypes';
 import { getGsmDetail, getPiDetail, getSystemInfo } from '../api/system';
 import { Btn, Card, Divider, Field, PageHeader, Pill, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
+import { operatorName } from '../lib/operator';
 import type { AppConfig, GsmDetail, PiDetail, SystemInfo } from '../types';
 
 export function SystemPage() {
@@ -33,14 +35,28 @@ export function SystemPage() {
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // config เป็นฟอร์มที่แก้ได้ ดึงครั้งเดียวพอ — poll ทับระหว่างพิมพ์จะเด้งค่าที่ยังไม่ได้กด "บันทึก" ทิ้ง
   useEffect(() => {
-    void (async () => {
-      const [g, p, i, c] = await Promise.all([getGsmDetail(), getPiDetail(), getSystemInfo(), getConfig()]);
+    void getConfig().then(setCfg);
+  }, []);
+
+  // gsm/pi/info เป็นค่าอ่านอย่างเดียว poll ได้อิสระ — เดิมดึงครั้งเดียวตอน mount ทำให้หน้านี้
+  // "ค้าง" ไม่อัปเดตเลยจนกว่าจะ reload เอง ใช้จังหวะเดียวกับ DashboardPage (5 วิ)
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const [g, p, i] = await Promise.all([getGsmDetail(), getPiDetail(), getSystemInfo()]);
+      if (cancelled) return;
       setGsm(g);
       setPi(p);
       setInfo(i);
-      setCfg(c);
-    })();
+    };
+    void load();
+    const id = setInterval(() => void load(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   const saveConfig = async () => {
@@ -77,7 +93,7 @@ export function SystemPage() {
           ถ้าบีบเท่าการ์ดอื่นช่องกรอกจะแคบจนพิมพ์เลข 3 หลักไม่เห็น */}
       <p className="font-mono text-micro tracking-[0.12em] text-ink-2 uppercase">{T.sys_section_hw}</p>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-3.5">
-        <Card className="flex flex-col gap-3 p-4">
+        <Card className="flex min-w-0 flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lead font-bold">{T.sys_module_4g}</h2>
             <Pill tone={gsm?.connected ? 'ok' : 'bad'}>
@@ -85,9 +101,9 @@ export function SystemPage() {
             </Pill>
           </div>
           {/* ค่าทั้งหมดมาจาก AT command จริงที่ worker เช็คไว้ตอน idle (AT+CSQ, AT+COPS?) */}
-          <dl className="font-mono text-caption leading-[2] text-ink-2">
+          <dl className="font-mono text-caption leading-[2] break-words text-ink-2">
             <div>
-              {T.gsm_operator_label} <b className="text-ink">{gsm?.operator ?? T.gsm_no_operator}</b>
+              {T.gsm_operator_label} <b className="text-ink">{operatorName(gsm?.operator) ?? T.gsm_no_operator}</b>
             </div>
             <div>
               {T.gsm_mode_label} <b className="text-ink">{gsm?.network_mode ?? T.gsm_signal_unknown}</b>
@@ -110,9 +126,9 @@ export function SystemPage() {
           </div>
         </Card>
 
-        <Card className="flex flex-col gap-3 p-4">
+        <Card className="flex min-w-0 flex-col gap-3 p-4">
           <h2 className="text-lead font-bold">{T.sys_pi_title}</h2>
-          <dl className="font-mono text-caption leading-[2] text-ink-2">
+          <dl className="font-mono text-caption leading-[2] break-words text-ink-2">
             <div>
               {T.pi_cpu_label} <b className="text-ink">{pi?.cpu_percent ?? '—'}%</b>
             </div>
@@ -131,9 +147,9 @@ export function SystemPage() {
           </dl>
         </Card>
 
-        <Card className="flex flex-col gap-3 p-4">
+        <Card className="flex min-w-0 flex-col gap-3 p-4">
           <h2 className="text-lead font-bold">{T.sys_runtime}</h2>
-          <dl className="font-mono text-caption leading-[2] text-ink-2">
+          <dl className="font-mono text-caption leading-[2] break-words text-ink-2">
             <div>
               {T.system_info_version} <b className="text-ink">{info?.app_version ?? '—'}</b>
             </div>
@@ -154,8 +170,14 @@ export function SystemPage() {
           <Divider />
           <div className="flex flex-wrap items-center gap-2.5 text-caption">
             <span className="flex-1">{T.sys_theme_label}</span>
-            <Btn className="rounded-full py-2" onClick={toggleDark}>
-              {dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
+            {/* ไอคอนแทนข้อความ ชุดเดียวกับปุ่มบนหัวเว็บ — มีคำว่า "ธีม" กำกับอยู่ซ้ายมืออยู่แล้ว */}
+            <Btn
+              className="grid size-9 place-items-center rounded-full p-0"
+              onClick={toggleDark}
+              aria-label={dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
+              title={dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
+            >
+              {dark ? <Sun size={15} /> : <Moon size={15} />}
             </Btn>
           </div>
         </Card>
@@ -199,15 +221,6 @@ export function SystemPage() {
                   />
                 </Field>
               </div>
-
-              <label className="flex items-center gap-2.5 text-caption">
-                <input
-                  type="checkbox"
-                  checked={cfg.sms_fallback_enabled}
-                  onChange={(e) => set('sms_fallback_enabled', e.target.checked)}
-                />
-                {T.sms_toggle}
-              </label>
 
               <p className="text-caption leading-[1.8] text-ink-2">{T.sys_call_config_note}</p>
               <Btn variant="primary" className="self-start" onClick={() => void saveConfig()} disabled={saving}>

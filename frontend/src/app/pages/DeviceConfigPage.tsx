@@ -22,7 +22,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 
 import { cn } from '@/app/components/ui/utils';
-import { listApiKeys, revokeApiKey, updateApiKey } from '../api/apiKeys';
+import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
 import { getConfig } from '../api/config';
 import { listEventTypes, sendTestNotify } from '../api/eventTypes';
 import { listContacts, listGroups } from '../api/groups';
@@ -44,7 +44,7 @@ export function DeviceConfigPage() {
 
   const [name, setName] = useState('');
   const [picked, setPicked] = useState<number[]>([]);
-  const [pendingRevoke, setPendingRevoke] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -94,8 +94,8 @@ export function DeviceConfigPage() {
     toast.success(T.toast_created);
   };
 
-  const revoke = async () => {
-    await revokeApiKey(deviceId);
+  const remove = async () => {
+    await deleteApiKey(deviceId);
     toast.success(T.toast_deleted);
     navigate('/devices', { replace: true });
   };
@@ -169,11 +169,11 @@ export function DeviceConfigPage() {
             </Btn>
             <Btn onClick={() => void testCall()}>{T.device_test_call}</Btn>
             <Btn
-              variant={pendingRevoke ? 'danger' : 'dashed'}
-              className={pendingRevoke ? '' : 'ms-auto text-warn'}
-              onClick={() => (pendingRevoke ? void revoke() : setPendingRevoke(true))}
+              variant={pendingDelete ? 'danger' : 'dashed'}
+              className={pendingDelete ? '' : 'ms-auto text-warn'}
+              onClick={() => (pendingDelete ? void remove() : setPendingDelete(true))}
             >
-              {pendingRevoke ? `${T.device_remove_confirm} “${device.name}”` : T.device_remove}
+              {pendingDelete ? `${T.device_remove_confirm} “${device.name}”` : T.device_remove}
             </Btn>
           </div>
         </Card>
@@ -211,7 +211,6 @@ export function DeviceConfigPage() {
                           <>
                             <br />→ {T.retry_summary(config.call_retry_count, config.call_retry_delay_seconds)}
                             <br />→ {T.escalate_summary}
-                            <br />→ {config.sms_fallback_enabled ? T.sms_summary : T.sms_summary_off}
                           </>
                         ) : null}
                       </p>

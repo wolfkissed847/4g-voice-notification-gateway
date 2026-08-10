@@ -78,12 +78,19 @@ export function Dot({ tone = 'muted', pulse = false }: { tone?: Tone; pulse?: bo
   return <span className={cn('size-2 shrink-0 rounded-full', toneDot[tone], pulse && 'animate-soft-pulse')} />;
 }
 
+/** min-w-0 บนตัวการ์ด: เป็น grid item เสมอ ถ้าไม่ใส่ ข้อความยาวใน foot (เช่นชื่อผู้ให้บริการ)
+ *  จะดันคอลัมน์กว้างเกินจนทั้งหน้าเลื่อนแนวนอนได้บนมือถือ */
 export function StatTile({ label, value, foot }: { label: string; value: ReactNode; foot?: ReactNode }) {
   return (
-    <div className={cn(card, 'p-4')}>
+    <div
+      className={cn(
+        card,
+        'animate-fade-up min-w-0 p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-card',
+      )}
+    >
       <p className="text-caption text-ink-2">{label}</p>
-      <p className="mt-1 font-mono text-h2 font-bold">{value}</p>
-      {foot ? <div className="mt-2 font-mono text-micro text-ink-2">{foot}</div> : null}
+      <p className="mt-1 font-mono text-h2 font-bold break-words">{value}</p>
+      {foot ? <div className="mt-2 font-mono text-micro break-words text-ink-2">{foot}</div> : null}
     </div>
   );
 }

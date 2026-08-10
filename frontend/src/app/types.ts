@@ -13,7 +13,6 @@ export type CallStatus =
   | "busy"
   | "retrying"
   | "escalated"
-  | "sms_fallback_sent"
   | "failed";
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -33,9 +32,22 @@ export interface QueueStatusItem {
   created_at: string;
 }
 
+/** ขั้นตอนย่อยที่ worker กำลังทำอยู่ — ละเอียดกว่า CallStatus ที่เก็บใน DB */
+export type CallStep =
+  | "preparing_audio"
+  | "uploading_audio"
+  | "dialing"
+  | "playing"
+  | "waiting_retry";
+
 export interface QueueStatusResponse {
   total_pending: number;
   items: QueueStatusItem[];
+  /** null = worker ว่างงาน */
+  current_job_id: number | null;
+  current_step: CallStep | null;
+  /** ความคืบหน้าภายในขั้นตอนปัจจุบัน 0.0-1.0 (null = ขั้นนี้วัดไม่ได้) */
+  current_progress: number | null;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -44,7 +56,6 @@ export interface AppConfig {
   call_retry_count: number;
   call_retry_delay_seconds: number;
   call_ring_timeout_seconds: number;
-  sms_fallback_enabled: boolean;
 }
 
 export type AppConfigUpdate = Partial<AppConfig>;
@@ -136,6 +147,8 @@ export interface HistoryItem {
   updated_at: string;
   last_result: string | null;
   last_phone_masked: string | null;
+  /** รายละเอียดผลลัพธ์ล่าสุด เช่น error message ตอนล้มเหลว (null = ไม่มี/ยังไม่เคยลองเลย) */
+  last_detail: string | null;
 }
 
 export interface HistoryResponse {

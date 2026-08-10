@@ -19,6 +19,7 @@ import { cn } from '@/app/components/ui/utils';
 import { API_BASE_URL } from '../api/client';
 import { Card, CardHead, CodePanel, PageHeader, Pill, apiGridCls, type Tone } from '../components/primitives';
 import { useApp } from '../context/AppContext';
+import { copyText } from '../lib/clipboard';
 
 const CURL_CODE = `curl -X POST http://your-pi.local:8000/notify \\
   -H "Content-Type: application/json" \\
@@ -144,8 +145,10 @@ export function ApiGuidePage() {
     esp32: { code: ESP32_CODE, label: 'esp32 / arduino' },
   };
 
-  const copy = (key: string, text: string) => {
-    void navigator.clipboard?.writeText(text);
+  // navigator.clipboard ใช้ไม่ได้ตอนเปิดผ่าน http://<ip ของ Pi>:8000 (ไม่ใช่ secure context)
+  // copyText มี fallback ให้ และคืน false ถ้าคัดลอกไม่ได้จริง — จะได้ไม่ขึ้น "คัดลอกแล้ว" หลอกตา
+  const copy = async (key: string, text: string) => {
+    if (!(await copyText(text))) return;
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 1500);
   };

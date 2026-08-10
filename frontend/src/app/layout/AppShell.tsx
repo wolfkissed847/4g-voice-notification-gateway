@@ -13,7 +13,9 @@
  *
  * แทนที่ DashboardLayout เดิม (sidebar + bottom tabs) ด้วย top nav เดียวตามดีไซน์
  */
-import { NavLink, Outlet, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import { ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { clearToken } from '../api/client';
@@ -23,11 +25,16 @@ import { usePolling } from '../lib/usePolling';
 import { Dot } from '../components/primitives';
 
 export function AppShell() {
+  const location = useLocation();
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
       <Header />
       <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 pt-6 pb-16 md:px-5">
-        <Outlet />
+        {/* key={pathname} บังคับให้ React มองเป็น element ใหม่ตอนเปลี่ยนหน้า
+            animate-fade-up (keyframe เดิมใน tw-theme.css) เลยเล่นซ้ำทุกครั้งที่สลับแท็บ */}
+        <div key={location.pathname} className="animate-fade-up">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
@@ -39,6 +46,11 @@ const chipCls =
 function Header() {
   const { T, dark, toggleDark, lang, toggleLang } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // ปิดเมนูทันทีที่เปลี่ยนหน้า ไม่งั้นรายการจะค้างบังเนื้อหาที่เพิ่งกดเข้าไปดู
+  useEffect(() => setMenuOpen(false), [location.pathname]);
 
   // 30 วิพอสำหรับป้ายสถานะ — ถี่กว่านี้เปลือง log ของ container บน Pi เปล่าๆ
   const { data: info } = usePolling(getSystemInfo, 30_000);
@@ -59,6 +71,9 @@ function Header() {
     navigate('/login', { replace: true });
   };
 
+  // ชื่อหน้าปัจจุบันสำหรับปุ่มเมนูบนมือถือ — startsWith เพื่อให้ /devices/12 ยังนับเป็นแท็บ "อุปกรณ์"
+  const current = tabs.find((t) => location.pathname.startsWith(t.path)) ?? tabs[0];
+
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-3 px-4 py-3 md:px-5">
@@ -77,7 +92,57 @@ function Header() {
             flex-wrap ไม่ใช่ overflow-x-auto: ภาพจอแคบแสดงแท็บขึ้นบรรทัดใหม่ (2 แถว)
             การเลื่อนแนวนอนซ่อนแท็บที่เลยขอบจอ ผู้ใช้ไม่รู้ว่ามีอยู่ — ยิ่งเรามี 8 แท็บ
             ยิ่งต้องเห็นครบ ดีกว่าให้เดาว่าต้องปัดหา */}
-        <nav className="order-3 flex w-full flex-wrap gap-1">
+        {/* ── มือถือ: ปุ่มเดียวบอกหน้าปัจจุบัน กดแล้วกางรายการเต็มแนวตั้ง ──────────
+            เดิมปล่อยให้ pill 8 อัน flex-wrap เองทุกขนาดจอ บนจอ 360px กลายเป็น 3 แถว
+            สูงเกือบ 120px กินพื้นที่เหนือเนื้อหาจริงไปมาก และความยาวป้ายไทยไม่เท่ากัน
+            ทำให้แต่ละแถวจบไม่ตรงกัน ดูรกกว่าเป็นระเบียบ
+
+            ยังเห็นครบทั้ง 8 หน้าเหมือนเดิมตอนกางออก — ต่างจากการเลื่อนแนวนอน
+            ที่ซ่อนแท็บไว้นอกจอโดยผู้ใช้ไม่รู้ว่ามีอยู่ */}
+        <div className="order-3 w-full md:hidden">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            className="flex w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-3.5 py-2 text-caption font-semibold text-ink transition-colors"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="font-mono text-micro text-ink-2">
+                {String(tabs.indexOf(current) + 1).padStart(2, '0')}
+              </span>
+              <span className="truncate">{current.label}</span>
+            </span>
+            <ChevronDown
+              size={16}
+              className={cn('shrink-0 text-ink-2 transition-transform', menuOpen && 'rotate-180')}
+            />
+          </button>
+
+          {menuOpen ? (
+            <div className="animate-fade-up mt-1 flex flex-col overflow-hidden rounded-control border border-line bg-surface">
+              {tabs.map((tab, i) => (
+                <NavLink
+                  key={tab.path}
+                  to={tab.path}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2.5 border-b border-line-2 px-3.5 py-2.5 text-caption text-ink last:border-b-0',
+                      isActive ? 'bg-brand-soft font-semibold' : 'font-medium',
+                    )
+                  }
+                >
+                  <span className="font-mono text-micro text-ink-2">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  {tab.label}
+                </NavLink>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* ── จอกว้าง: pill เรียงเหมือนเดิมตามภาพ mockup ────────────────────── */}
+        <nav className="order-3 hidden w-full flex-wrap gap-1 md:flex">
           {tabs.map((tab) => (
             <NavLink
               key={tab.path}
@@ -104,21 +169,51 @@ function Header() {
         <div className="flex flex-wrap items-center gap-2">
           {/* เดิมซ่อนป้ายนี้ต่ำกว่า 640px (hidden sm:flex) แต่ภาพจอ 530px ยังแสดงอยู่
               และนี่คือป้ายที่บอกว่าระบบพร้อมโทรหรือไม่ — ไม่ควรเป็นอย่างแรกที่หายไปบนมือถือ */}
-          <span className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 font-mono text-micro whitespace-nowrap text-ink-2">
+          {/* ป้ายนี้บอกว่าระบบพร้อมโทรหรือไม่ — ทำเป็นลิงก์ไปหน้าระบบ เพราะพอเห็นว่า "ไม่พร้อม"
+              คำถามถัดไปคือ "แล้วเพราะอะไร" ซึ่งคำตอบ (สัญญาณ/ผู้ให้บริการ/พอร์ต) อยู่หน้านั้นพอดี */}
+          {/* เหลือแค่จุดสี — กว้างคงที่ 30px เท่ากับปุ่มไอคอนอื่น ไม่ขยับตอนสลับภาษา
+              ข้อความเต็ม ("ออนไลน์"/"ออฟไลน์") ยังอยู่ใน title + aria-label ให้ทั้ง tooltip
+              ตอนชี้เมาส์และ screen reader — คนที่มองไม่เห็นสีจึงยังรู้สถานะได้
+              ตอนออฟไลน์ขอบเป็นสีแดงด้วย ไม่ได้พึ่งจุดสีอย่างเดียวในการเตือน */}
+          <NavLink
+            to="/system"
+            title={info?.gsm_connected ? T.module_ready : T.module_not_ready}
+            aria-label={info?.gsm_connected ? T.module_ready : T.module_not_ready}
+            className={cn(
+              chipCls,
+              'grid size-[30px] place-items-center px-0',
+              !info?.gsm_connected && 'border-bad hover:border-bad',
+            )}
+          >
             <Dot tone={info?.gsm_connected ? 'ok' : 'bad'} pulse={info?.gsm_connected} />
-            {info?.gsm_connected ? T.module_ready : T.module_not_ready}
-          </span>
+          </NavLink>
 
           <button type="button" onClick={toggleLang} className={chipCls}>
             {lang === 'th' ? 'EN' : 'ไทย'}
           </button>
 
-          <button type="button" onClick={toggleDark} className={chipCls}>
-            {dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
+          {/* ไอคอนแทนข้อความ — ข้อความไทย "สลับเป็นสว่าง/มืด" ยาวจนเบียดปุ่มอื่นตกบรรทัดบนจอแคบ
+              aria-label + title ยังคงข้อความเต็มไว้ให้ทั้ง screen reader และ tooltip ตอนชี้เมาส์ */}
+          <button
+            type="button"
+            onClick={toggleDark}
+            className={cn(chipCls, 'grid size-[30px] place-items-center px-0')}
+            aria-label={dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
+            title={dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
+          >
+            {dark ? <Sun size={14} /> : <Moon size={14} />}
           </button>
 
-          <button type="button" onClick={logout} className={chipCls}>
-            {T.sign_out_short}
+          {/* ไอคอนแทนข้อความด้วยเหตุผลเดียวกับปุ่มธีม — "ออก" กับ "Sign out" ยาวไม่เท่ากัน
+              พอสลับภาษาปุ่มจะหดขยายแล้วดันปุ่มอื่นขยับตามทั้งแถว */}
+          <button
+            type="button"
+            onClick={logout}
+            className={cn(chipCls, 'grid size-[30px] place-items-center px-0 hover:border-bad hover:text-bad')}
+            aria-label={T.nav_logout}
+            title={T.nav_logout}
+          >
+            <LogOut size={14} />
           </button>
         </div>
       </div>

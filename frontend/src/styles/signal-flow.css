@@ -1,0 +1,177 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Signal Flow Monitor — token + keyframes
+ * พอร์ตจาก figma/Signal Flow Monitor Design/src/index.css
+ *
+ * ── ทำไมต้องมีชุดตัวแปร --sfm-* แยกออกมา ────────────────────────────────
+ * ดีไซน์ใหม่ระบายสีด้วยค่าที่คำนวณตอน runtime (color-mix ผสมสีสถานะกับพื้นการ์ด
+ * เป็นพื้นอ่อน 12% และส่ง "สีปัจจุบัน" เข้า @keyframes ผ่าน --sfm-state)
+ * ซึ่ง utility class ของ Tailwind ทำแทนไม่ได้ เพราะสีที่ใช้เปลี่ยนไปตามสถานะทุกวินาที
+ *
+ * แต่ไม่ได้ประกาศค่าสีใหม่ซ้ำ — ทุกตัวชี้กลับไปที่ token กลางของโปรเจค
+ * ธีมสว่าง/มืดจึงตามระบบเดิมอัตโนมัติ ไม่ต้องมี .dark ซ้อนในไฟล์นี้
+ * และถ้าดีไซเนอร์เปลี่ยนสีใน theme.css การ์ดนี้เปลี่ยนตามทันที
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --sfm-surface: rgb(var(--surface));
+  --sfm-surface-sunk: rgb(var(--surface-2));
+  --sfm-border: rgb(var(--line));
+  --sfm-hairline: rgb(var(--line-2));
+  --sfm-shadow: var(--shadow-card);
+  --sfm-radius: var(--radius);
+
+  --sfm-ink: rgb(var(--ink));
+  --sfm-muted: rgb(var(--ink-2));
+
+  /* เทาของ "ขั้นที่ยังไม่ถึง" — ใช้ค่าตรงจากดีไซน์ ไม่ใช่ color-mix
+     เพราะ Lightning CSS จะใส่ fallback ให้เป็น rgb(var(--ink)) เผื่อเบราว์เซอร์เก่า
+     ซึ่งคือ "สีตัวอักษรเต็มความเข้ม" = ขั้นที่ยังไม่ถึงกลายเป็นสีทึบเข้มกว่าขั้นที่ผ่านแล้ว
+     สลับความหมายกันคนละทางเลย token ตัวนี้จึงต้องเป็นค่าคงที่ที่ปลอดภัยเสมอ */
+  --sfm-grey: #b0aca1;
+
+  --sfm-blue: var(--accent);
+  --sfm-orange: var(--warn);
+  --sfm-green: var(--ok);
+  --sfm-red: var(--bad);
+}
+
+.dark,
+[data-theme='dark'] {
+  --sfm-grey: #55514a;
+}
+
+/* ── วงแหวนกระจายจากโหนดที่กำลังทำงาน (และจุดสถานะบนหัวการ์ด) ──────────────
+   2 วงเหลื่อมเวลากัน 1 วิ จึงเห็นคลื่นต่อเนื่องไม่ขาดจังหวะ
+   สีมาจาก --sfm-state ที่ผู้เรียกตั้งไว้ตอน render (เปลี่ยนตามสถานะ) */
+.sfm-ring::before,
+.sfm-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1.5px solid var(--sfm-state);
+  opacity: 0;
+  animation: sfm-ring 2s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  pointer-events: none;
+}
+.sfm-ring::after {
+  animation-delay: 1s;
+}
+@keyframes sfm-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+
+/* ── ช่องปัจจุบันบนแถบ 8 ขั้น หายใจเข้าออก ──────────────────────────────── */
+.sfm-seg-current {
+  animation: sfm-seg 1.5s ease-in-out infinite;
+}
+@keyframes sfm-seg {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.42;
+  }
+}
+
+/* ── จุดข้อมูลวิ่งบนเส้นที่กำลังส่ง ──────────────────────────────────────── */
+.sfm-travel {
+  position: absolute;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 999px;
+  background: var(--sfm-state);
+  animation: sfm-travel 1.35s linear infinite;
+}
+.sfm-travel:nth-child(2) {
+  animation-delay: 0.45s;
+}
+.sfm-travel:nth-child(3) {
+  animation-delay: 0.9s;
+}
+@keyframes sfm-travel {
+  0% {
+    left: 0;
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    left: calc(100% - 5px);
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+/* ── โหนดโทรศัพท์สั่นตอนปลายสายกำลังดัง ─────────────────────────────────── */
+.sfm-vibrate {
+  animation: sfm-vibrate 0.6s ease-in-out infinite;
+}
+@keyframes sfm-vibrate {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  20% {
+    transform: translateX(-1.5px) rotate(-2.5deg);
+  }
+  40% {
+    transform: translateX(1.5px) rotate(2.5deg);
+  }
+  60% {
+    transform: translateX(-1px) rotate(-1.5deg);
+  }
+  80% {
+    transform: translateX(1px) rotate(1.5deg);
+  }
+}
+
+/* ── badge ✓/! และ caption โผล่ในช่องที่กันที่ไว้แล้ว (การ์ดจึงไม่กระตุก) ── */
+.sfm-fade {
+  animation: sfm-fade 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes sfm-fade {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* เคารพการตั้งค่าระบบของผู้ใช้ที่ขอลดการเคลื่อนไหว — การ์ดนี้มีของขยับ 5 อย่าง
+   พร้อมกัน ซึ่งเป็นปริมาณที่กระตุ้นอาการเวียนหัวได้จริงถ้าผู้ใช้ไวต่อการเคลื่อนไหว
+   ปิดแล้วยังอ่านสถานะได้ครบ เพราะความหมายอยู่ที่สีกับตำแหน่ง ไม่ได้อยู่ที่การขยับ */
+@media (prefers-reduced-motion: reduce) {
+  .sfm-ring::before,
+  .sfm-ring::after,
+  .sfm-seg-current,
+  .sfm-travel,
+  .sfm-vibrate,
+  .sfm-fade {
+    animation: none !important;
+  }
+  .sfm-travel {
+    left: 50%;
+    opacity: 1;
+  }
+}

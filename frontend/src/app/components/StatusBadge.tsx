@@ -19,7 +19,6 @@ const STATUS_TONE: Record<CallStatus, Tone> = {
   escalated: 'warn',
   in_progress: 'accent',
   queued: 'muted',
-  sms_fallback_sent: 'accent',
 };
 
 export function StatusBadge({ status }: { status: CallStatus }) {
@@ -31,7 +30,6 @@ export function StatusBadge({ status }: { status: CallStatus }) {
     escalated: T.badge_escalated,
     in_progress: T.badge_calling,
     queued: T.badge_queued,
-    sms_fallback_sent: T.badge_sms,
     no_answer: T.badge_no_answer,
     busy: T.badge_busy,
   };
@@ -39,5 +37,5 @@ export function StatusBadge({ status }: { status: CallStatus }) {
 }
 
 export const STATUS_OPTS: CallStatus[] = [
-  'queued', 'in_progress', 'connected', 'no_answer', 'busy', 'retrying', 'escalated', 'sms_fallback_sent', 'failed',
+  'queued', 'in_progress', 'connected', 'no_answer', 'busy', 'retrying', 'escalated', 'failed',
 ];
