@@ -1,15 +1,42 @@
 """Pydantic schemas สำหรับ request/response ของ API"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+# ── เพดานความยาวข้อความที่ยอมให้เข้าคิว ────────────────────────────────────────
+# ข้อความยิ่งยาว ไฟล์เสียงยิ่งใหญ่ และการอัปโหลดเข้าโมดูล 4G ส่งได้แค่ 256 ไบต์/50 มิลลิวินาที
+# (≈5 KB/วินาที ดู gsm_module._try_cftranrx) ข้อความ 500 ตัวอักษรใช้เวลารวมราวครึ่งนาที
+# ซึ่งเป็นเพดานที่สมเหตุสมผลของ "ข้อความแจ้งเตือนที่คนฟังทางโทรศัพท์รู้เรื่อง" อยู่แล้ว
+#
+# ถ้าไม่จำกัด อุปกรณ์ที่ถือ key อยู่ (หรือ key ที่หลุดออกไป) ยิงข้อความยาวหลักหมื่นตัวอักษร
+# เข้ามาเพียงครั้งเดียวก็ยึดสายที่มีอยู่เส้นเดียวไว้ได้เป็นสิบนาที — งานแจ้งเตือนจริงที่ตามมา
+# ทั้งหมดต้องรอคิวอยู่ข้างหลัง ซึ่งขัดกับเหตุผลที่ระบบนี้มีอยู่
+MAX_MESSAGE_CHARS = 500
+MAX_VARIABLE_VALUE_CHARS = 200
+MAX_VARIABLES = 20
 
 
 class NotifyRequest(BaseModel):
-    event_type_code: str = Field(..., description="รหัส event type เช่น power_outage, server_down")
+    event_type_code: str = Field(..., min_length=1, max_length=64,
+                                 description="รหัส event type เช่น power_outage, server_down")
     message: str | None = Field(
-        None, description="ข้อความที่จะแปลงเป็นเสียงพูด — ถ้าไม่ส่งจะสร้างจาก message_template + variables"
+        None, max_length=MAX_MESSAGE_CHARS,
+        description="ข้อความที่จะแปลงเป็นเสียงพูด — ถ้าไม่ส่งจะสร้างจาก message_template + variables"
     )
     variables: dict[str, str] = Field(
-        default_factory=dict, description="ตัวแปรสำหรับแทนที่ {key} ใน message_template"
+        default_factory=dict, max_length=MAX_VARIABLES,
+        description="ตัวแปรสำหรับแทนที่ {key} ใน message_template"
     )
+
+    @field_validator("variables")
+    @classmethod
+    def _cap_variable_values(cls, v: dict[str, str]) -> dict[str, str]:
+        """ตัวแปรแต่ละตัวก็ต้องมีเพดาน ไม่งั้นเลี่ยงเพดานข้อความได้ด้วยการยัดค่ายาวๆ ใส่ตัวแปรแทน"""
+        for key, value in v.items():
+            if len(value) > MAX_VARIABLE_VALUE_CHARS:
+                raise ValueError(
+                    f"ค่าของตัวแปร '{key}' ยาวเกิน {MAX_VARIABLE_VALUE_CHARS} ตัวอักษร"
+                )
+        return v
 
 
 class TestNotifyRequest(NotifyRequest):
@@ -47,8 +74,8 @@ class GroupResponse(BaseModel):
 
 
 class ContactCreateRequest(BaseModel):
-    phone_number: str
-    name: str | None = None
+    phone_number: str = Field(..., min_length=8, max_length=24)
+    name: str | None = Field(None, max_length=120)
 
 
 class ContactUpdateRequest(BaseModel):
@@ -69,17 +96,17 @@ class ContactReorderRequest(BaseModel):
 
 
 class EventTypeCreateRequest(BaseModel):
-    code: str = Field(..., description="รหัสไม่ซ้ำ เช่น power_outage")
-    display_name: str
-    message_template: str
+    code: str = Field(..., min_length=1, max_length=64, description="รหัสไม่ซ้ำ เช่น power_outage")
+    display_name: str = Field(..., min_length=1, max_length=120)
+    message_template: str = Field(..., min_length=1, max_length=MAX_MESSAGE_CHARS)
     # ไม่บังคับแล้ว — กลุ่มผู้รับจริงเลือกที่หน้าตั้งค่าอุปกรณ์ (ต่ออุปกรณ์ต่อเหตุการณ์)
     # ค่านี้เหลือไว้เป็นกลุ่มสำรองสำหรับการทดสอบจาก dashboard ที่ไม่ได้ยิงผ่านอุปกรณ์
     group_id: int | None = None
 
 
 class EventTypeUpdateRequest(BaseModel):
-    display_name: str | None = None
-    message_template: str | None = None
+    display_name: str | None = Field(None, min_length=1, max_length=120)
+    message_template: str | None = Field(None, min_length=1, max_length=MAX_MESSAGE_CHARS)
     group_id: int | None = None
     is_active: bool | None = None
 

@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "changeme-generate-a-long-random-string"
     jwt_expire_minutes: int = 60 * 12  # 12 ชั่วโมง
 
+    # หน้าเอกสาร API อัตโนมัติของ FastAPI (/docs, /redoc, /openapi.json)
+    #
+    # ปิดเป็นค่าเริ่มต้นเพราะระบบนี้เปิดออกอินเทอร์เน็ตผ่านโดเมนสาธารณะ และหน้านั้นไม่มีการ
+    # ยืนยันตัวตนใดๆ กั้นอยู่ ใครเปิดก็เห็นรายชื่อ endpoint ทั้งหมด รูปแบบข้อมูลที่ต้องส่ง
+    # และชื่อฟิลด์ครบถ้วน ซึ่งเป็นแผนที่ให้คนที่จะลองโจมตีฟรีๆ
+    # ผู้ดูแลที่ต้องการใช้จริงตั้ง ENABLE_API_DOCS=true ใน .env ได้ (แนะนำให้เปิดเฉพาะตอน dev)
+    enable_api_docs: bool = False
+
     # CORS — origin ของ Vite dashboard (dev: `npm run dev` รันที่ http://localhost:5173 โดย default)
     dashboard_origin: str = "http://localhost:5173"
 

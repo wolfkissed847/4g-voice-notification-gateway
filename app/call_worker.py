@@ -57,7 +57,16 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
         CONNECTED -> stream audio -> DONE
         NO_ANSWER/BUSY -> retry (ถ้ายังไม่ครบรอบ) -> escalate (เบอร์ถัดไป) -> ครบทุกเบอร์แล้ว -> FAILED
     """
-    if job.event_type_id is not None and job.event_type is not None:
+    # ── หาเบอร์จากกลุ่มที่ถูกตัดสินใจไว้แล้วตอนรับคำขอ (call_jobs.group_id) ────────
+    # ห้ามกลับไปอ่าน event_type.group_id เป็นตัวหลักอีก นั่นคือ "กลุ่มเริ่มต้นของเหตุการณ์"
+    # ซึ่งเป็นคนละค่ากับ "กลุ่มของคู่ (อุปกรณ์ + เหตุการณ์)" ที่ผู้ใช้ตั้งไว้จริงในหน้าอุปกรณ์
+    # เดิมอ่านผิดตัว ผลคือกลุ่มรายอุปกรณ์ไม่เคยถูกใช้ และเหตุการณ์ที่ไม่ได้ตั้งกลุ่มเริ่มต้น
+    # จะได้ลิสต์เบอร์ว่างแล้วปิดงานเป็น failed ทันทีโดยไม่ได้โทรสักครั้ง
+    if job.group_id is not None:
+        contacts = get_ordered_phone_numbers(db, job.group_id)
+    elif job.event_type_id is not None and job.event_type is not None:
+        # งานเก่าที่เข้าคิวไว้ก่อนมีคอลัมน์ group_id — ถอยไปใช้กลุ่มเริ่มต้นของเหตุการณ์ตามเดิม
+        logger.warning("Job %s: ไม่มี group_id (งานเก่า) ถอยไปใช้กลุ่มเริ่มต้นของเหตุการณ์", job.id)
         contacts = get_ordered_phone_numbers(db, job.event_type.group_id)
     else:
         logger.warning(

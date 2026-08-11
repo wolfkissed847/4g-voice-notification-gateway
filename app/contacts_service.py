@@ -2,6 +2,8 @@
 Contacts Service — CRUD ของ Group/Contact (escalation chain)
 แทนที่การ hardcode เบอร์โทรใน .env ทั้งหมด — call_worker ต้องเรียกผ่านที่นี่เท่านั้น
 """
+import re
+
 from sqlalchemy.orm import Session
 
 from app.database import Contact, EventType, Group
@@ -51,6 +53,34 @@ def delete_group(db: Session, group_id: int) -> bool:
     return True
 
 
+class InvalidPhoneNumberError(Exception):
+    """เบอร์โทรผิดรูปแบบ — ห้ามปล่อยให้ลงฐานข้อมูล"""
+
+
+# อนุญาตเฉพาะเครื่องหมาย + นำหน้า (เบอร์แบบสากล) และตัวเลข 8-15 หลัก
+_PHONE_OK = re.compile(r"^\+?\d{8,15}$")
+
+
+def normalize_phone_number(raw: str) -> str:
+    """
+    ตัดตัวคั่นที่คนพิมพ์ติดมา (ช่องว่าง ขีด วงเล็บ) แล้วตรวจว่าเหลือแต่ตัวเลขจริง
+
+    ── ทำไมต้องตรวจตรงนี้ ────────────────────────────────────────────────────
+    เบอร์ในตารางนี้ถูกเอาไปต่อท้ายคำสั่ง AT ตรงๆ เป็น `ATD<เบอร์>;` ที่ app/gsm_module.py
+    ถ้าปล่อยให้มีอักขระขึ้นบรรทัดใหม่ปนเข้าไปได้ ข้อความหนึ่งบรรทัดจะกลายเป็นสองคำสั่ง
+    เช่น เบอร์ที่มีอักขระขึ้นบรรทัดใหม่คั่นแล้วตามด้วย ATD ของเบอร์อื่น จะสั่งโมดูลโทรออกไปยังเบอร์ที่ไม่ได้ตั้งใจ
+    นอกจากเรื่องความปลอดภัยแล้ว เบอร์ที่มีขีดหรือช่องว่าง (081-234-5678) ก็โทรไม่ออกอยู่ดี
+    เพราะโมดูลไม่รู้จักอักขระพวกนี้ — ตรวจตั้งแต่ตอนบันทึกจึงได้ทั้งสองอย่างในที่เดียว
+    """
+    cleaned = re.sub(r"[\s\-().]", "", (raw or "").strip())
+    if not _PHONE_OK.match(cleaned):
+        raise InvalidPhoneNumberError(
+            f"เบอร์โทร '{raw}' ไม่ถูกต้อง — ต้องเป็นตัวเลข 8-15 หลัก "
+            "(ใส่ + นำหน้าได้สำหรับเบอร์ต่างประเทศ) ห้ามมีตัวอักษรหรือขึ้นบรรทัดใหม่"
+        )
+    return cleaned
+
+
 def list_contacts(db: Session, group_id: int) -> list[Contact]:
     return (
         db.query(Contact)
@@ -66,7 +96,10 @@ def create_contact(db: Session, group_id: int, phone_number: str, name: str | No
         .filter(Contact.group_id == group_id)
         .count()
     )
-    contact = Contact(group_id=group_id, phone_number=phone_number, name=name, order_index=max_index)
+    contact = Contact(
+        group_id=group_id, phone_number=normalize_phone_number(phone_number),
+        name=name, order_index=max_index,
+    )
     db.add(contact)
     db.commit()
     db.refresh(contact)
@@ -84,7 +117,7 @@ def update_contact(
     if contact is None:
         return None
     if phone_number is not None:
-        contact.phone_number = phone_number
+        contact.phone_number = normalize_phone_number(phone_number)
     if name is not None:
         contact.name = name
     db.commit()

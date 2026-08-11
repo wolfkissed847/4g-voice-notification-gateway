@@ -218,6 +218,17 @@ class CallJob(Base):
     event_type_id = Column(Integer, ForeignKey("event_types.id", ondelete="SET NULL"), nullable=True)
     event_type_code = Column(String, nullable=True)
     event_type_name = Column(String, nullable=True)
+    # กลุ่มผู้รับที่ "ตัดสินใจแล้ว" ตอนรับคำขอ — worker ต้องใช้ค่านี้เท่านั้นในการหาเบอร์
+    #
+    # ที่ต้องมีคอลัมน์นี้: กลุ่มจริงมาจากคู่ (อุปกรณ์ + เหตุการณ์) ซึ่งคำนวณได้เฉพาะตอนรับคำขอ
+    # เพราะตอนนั้นเท่านั้นที่รู้ว่าอุปกรณ์ไหนยิงเข้ามา เดิมไม่ได้เก็บไว้ worker จึงไปอ่าน
+    # event_types.group_id เอาเองซึ่งเป็น "กลุ่มเริ่มต้นของเหตุการณ์" คนละค่ากัน ผลคือ
+    # กลุ่มรายอุปกรณ์ไม่เคยถูกใช้จริง และเหตุการณ์ที่ไม่ได้ตั้งกลุ่มเริ่มต้นจะหาเบอร์ไม่เจอ
+    # แล้วปิดงานเป็น failed ทันทีโดยไม่โทรเลยสักครั้ง
+    #
+    # SET NULL ด้วยเหตุผลเดียวกับ api_key_id/event_type_id — ลบกลุ่มแล้วประวัติต้องไม่หาย
+    # (ชื่อกลุ่ม ณ ตอนนั้นถูกเก็บไว้ใน priority_group อยู่แล้ว)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True, index=True)
     priority_group = Column(String, nullable=False)  # snapshot ชื่อ group ตอนสั่งโทร (สำหรับแสดงผลใน history)
     # อุปกรณ์ที่เป็นต้นเหตุ — api_key_id ไว้ filter/นับการใช้งานรายอุปกรณ์
     # ส่วน source_device เป็น snapshot ชื่อ ณ ตอนนั้น ด้วยเหตุผลเดียวกับ priority_group
@@ -235,6 +246,7 @@ class CallJob(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     event_type = relationship("EventType")
+    group = relationship("Group")
 
 
 class CallLog(Base):

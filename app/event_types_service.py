@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 from app.database import EventType
 
 
+# ตัวคั่นระหว่าง "ไม่ได้ส่ง field นี้มา" กับ "ส่งมาเป็น null เพื่อสั่งล้างค่า"
+# ใช้ None เป็น default ไม่ได้ เพราะ None คือค่าที่ผู้ใช้ต้องการตั้งจริง (= ไม่มีกลุ่มเริ่มต้น)
+_UNSET = object()
+
+
 class DuplicateEventTypeCodeError(Exception):
     """code ซ้ำกับ event type ที่มีอยู่แล้ว"""
 
@@ -46,7 +51,7 @@ def update_event_type(
     event_type_id: int,
     display_name: str | None = None,
     message_template: str | None = None,
-    group_id: int | None = None,
+    group_id=_UNSET,
     is_active: bool | None = None,
 ) -> EventType | None:
     event_type = get_event_type(db, event_type_id)
@@ -56,7 +61,8 @@ def update_event_type(
         event_type.display_name = display_name
     if message_template is not None:
         event_type.message_template = message_template
-    if group_id is not None:
+    if group_id is not _UNSET:
+        # ส่ง group_id=null มา = สั่งล้างกลุ่มเริ่มต้นทิ้ง ซึ่งต้องทำได้ตั้งแต่กลุ่มกลายเป็น optional
         event_type.group_id = group_id
     if is_active is not None:
         event_type.is_active = str(is_active).lower()
@@ -94,4 +100,11 @@ def render_message(
         missing_key = exc.args[0]
         raise MissingTemplateVariableError(
             f"ข้อความ template ต้องการตัวแปร '{{{missing_key}}}' แต่ไม่ได้ส่งมาใน variables"
+        ) from exc
+    except (IndexError, ValueError) as exc:
+        # {} ว่าง หรือวงเล็บปีกกาไม่สมดุล เช่น "อุณหภูมิ {temp" — เดิมหลุดออกไปเป็น 500
+        # ทั้งที่เป็นความผิดของแม่แบบข้อความที่ผู้ดูแลพิมพ์เอง ต้องบอกให้รู้ว่าพิมพ์ผิดตรงไหน
+        raise MissingTemplateVariableError(
+            "แม่แบบข้อความเขียนไม่ถูกต้อง — ตัวแปรต้องเขียนเป็น {ชื่อตัวแปร} เช่น {device} "
+            f"และวงเล็บปีกกาต้องครบคู่ (รายละเอียด: {exc})"
         ) from exc

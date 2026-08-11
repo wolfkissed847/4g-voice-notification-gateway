@@ -22,6 +22,7 @@ import app.api_key_service as api_key_service
 import app.contacts_service as contacts_service
 import app.event_types_service as event_types_service
 import app.worker_state as worker_state
+import app.login_guard as login_guard
 from app.auth import create_access_token, get_current_user, verify_password
 from app.call_worker import run_worker_loop
 from app.config import settings
@@ -80,7 +81,13 @@ app = FastAPI(
     # บั๊มทุกครั้งที่แก้อะไรที่ผู้ใช้เห็นผล — ดูคู่กับ app_git_sha ที่มาจาก git โดยตรง
     # 0.4.0: ปุ่มรีสตาร์ทโมดูล, ค่าการโทรบันทึกอัตโนมัติ, มิเตอร์ Pi, สำรอง DB อัตโนมัติ,
     #        แก้ DB หายตอน deploy, แก้ธีมกระพริบ, การ์ดติดตามสัญญาณในหน้าคิว
-    version="0.4.0",
+    # 0.4.1: แก้กลุ่มผู้รับรายอุปกรณ์ไม่ถูกใช้จริง (งานถูกปิดเป็น failed โดยไม่โทร),
+    #        ตรวจรูปแบบเบอร์โทร, จำกัดความยาวข้อความ, กันเดารหัสผ่าน, ปิดหน้าเอกสาร API
+    version="0.4.1",
+    # ปิดหน้าเอกสารอัตโนมัติเมื่อไม่ได้เปิดสวิตช์ไว้ (ดู config.enable_api_docs)
+    docs_url="/docs" if settings.enable_api_docs else None,
+    redoc_url="/redoc" if settings.enable_api_docs else None,
+    openapi_url="/openapi.json" if settings.enable_api_docs else None,
 )
 
 app.add_middleware(
@@ -103,8 +110,31 @@ def verify_api_key(x_api_key: str = Header(...), db: Session = Depends(get_db)):
     return api_key
 
 
+_DEFAULT_JWT_SECRET = "changeme-generate-a-long-random-string"
+
+
+def _warn_insecure_settings() -> None:
+    """
+    ตะโกนออก log ถ้าความลับยังเป็นค่าตัวอย่างจาก .env.example
+
+    ที่ต้องมีเพราะความผิดพลาดแบบนี้ไม่ทำให้อะไรพัง ระบบเดินได้ปกติทุกอย่าง จึงไม่มีวัน
+    ถูกจับได้จากการใช้งาน — jwt secret ที่เป็นค่า default แปลว่าใครก็ปลอม token
+    เข้ามาเป็นผู้ดูแลได้โดยไม่ต้องรู้รหัสผ่านเลย เพราะค่านั้นอยู่ใน repo สาธารณะ
+    """
+    if settings.jwt_secret_key == _DEFAULT_JWT_SECRET or len(settings.jwt_secret_key) < 32:
+        logger.error(
+            "JWT_SECRET_KEY ยังเป็นค่าตัวอย่างหรือสั้นเกินไป — ใครก็ปลอม token เข้าระบบได้ "
+            "สร้างค่าใหม่ด้วย: python -c \"import secrets;print(secrets.token_urlsafe(48))\" แล้วใส่ใน .env"
+        )
+    if not settings.admin_password_hash:
+        logger.error("ยังไม่ได้ตั้ง ADMIN_PASSWORD_HASH ใน .env — เข้าสู่ระบบไม่ได้เลย (สร้างด้วย scripts/hash_password.py)")
+    if settings.enable_api_docs:
+        logger.warning("ENABLE_API_DOCS=true — /docs เปิดให้ทุกคนดูได้ ควรปิดบนเครื่องที่ออกอินเทอร์เน็ต")
+
+
 @app.on_event("startup")
 def on_startup():
+    _warn_insecure_settings()
     init_db()  # alembic upgrade head — สร้าง schema ให้ครบ/อัปเกรดให้ตรงกับโค้ดก่อนรับ request แรก
 
     drift = detect_schema_drift()
@@ -187,6 +217,7 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> C
         message=message,
         event_type_id=event_type.id,
         priority_group=group.name,
+        group_id=group.id,
         api_key_id=api_key.id if api_key is not None else None,
         source_device=device_name,
         event_type_code=event_type.code,
@@ -208,9 +239,23 @@ def notify(
 # ---------- Dashboard Auth (single-user) ----------
 
 @app.post("/auth/login", response_model=LoginResponse)
-def login(request: LoginRequest):
+def login(request: LoginRequest, http_request: Request):
+    key = login_guard.client_key(http_request)
+
+    wait = login_guard.seconds_until_allowed(key)
+    if wait:
+        # 429 ไม่ใช่ 401 โดยตั้งใจ — ต้องแยกให้ออกว่า "รหัสผิด" กับ "ลองถี่เกินไป"
+        # ไม่งั้นผู้ดูแลตัวจริงที่พิมพ์ผิดหลายรอบจะงงว่าทำไมรหัสที่ถูกก็ยังเข้าไม่ได้
+        raise HTTPException(
+            status_code=429,
+            detail=f"ลองเข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารออีก {wait // 60 + 1} นาทีแล้วลองใหม่",
+        )
+
     if request.username != settings.admin_username or not verify_password(request.password):
+        login_guard.record_failure(key)
         raise HTTPException(status_code=401, detail="username หรือ password ไม่ถูกต้อง")
+
+    login_guard.record_success(key)
     token = create_access_token(username=request.username)
     return LoginResponse(access_token=token)
 
@@ -396,9 +441,12 @@ def create_contact(
     group_id: int, request: ContactCreateRequest,
     db: Session = Depends(get_db), _user: str = Depends(get_current_user),
 ):
-    contact = contacts_service.create_contact(
-        db, group_id=group_id, phone_number=request.phone_number, name=request.name
-    )
+    try:
+        contact = contacts_service.create_contact(
+            db, group_id=group_id, phone_number=request.phone_number, name=request.name
+        )
+    except contacts_service.InvalidPhoneNumberError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _contact_to_response(contact)
 
 
@@ -407,9 +455,12 @@ def update_contact(
     contact_id: int, request: ContactUpdateRequest,
     db: Session = Depends(get_db), _user: str = Depends(get_current_user),
 ):
-    contact = contacts_service.update_contact(
-        db, contact_id, phone_number=request.phone_number, name=request.name
-    )
+    try:
+        contact = contacts_service.update_contact(
+            db, contact_id, phone_number=request.phone_number, name=request.name
+        )
+    except contacts_service.InvalidPhoneNumberError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if contact is None:
         raise HTTPException(status_code=404, detail="ไม่พบเบอร์ติดต่อนี้")
     return _contact_to_response(contact)
@@ -609,7 +660,10 @@ def get_history(
     if event_type_id:
         query = query.filter(CallJob.event_type_id == event_type_id)
     if group_id:
-        query = query.filter(CallJob.event_type.has(group_id=group_id))
+        # กรองจากกลุ่มที่งานนั้นโทรไปจริง ไม่ใช่กลุ่มเริ่มต้นของประเภทเหตุการณ์
+        # (เดิมใช้ event_type.has(...) ซึ่งกรองไม่เจออะไรเลยเมื่อเหตุการณ์ไม่ได้ตั้งกลุ่มเริ่มต้น
+        #  และเจอผิดกลุ่มเมื่ออุปกรณ์ผูกกลุ่มของตัวเองไว้)
+        query = query.filter(CallJob.group_id == group_id)
     if date_from:
         query = query.filter(CallJob.created_at >= date_from)
     if date_to:
