@@ -6,6 +6,7 @@ Alembic environment — ผูกเข้ากับ config/model ของแ
 - render_as_batch=True จำเป็นสำหรับ SQLite เพราะ SQLite ไม่รองรับ ALTER COLUMN/DROP COLUMN ตรงๆ
   Alembic จะสร้างตารางใหม่ + copy ข้อมูล + rename ให้เอง (batch mode)
 """
+import logging
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -42,6 +43,46 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _drop_leftover_batch_tables(connection) -> None:
+    """
+    ลบตารางชั่วคราวที่ค้างจาก batch migration รอบก่อนที่ล้มกลางคัน
+
+    ── ทำไมต้องมี ────────────────────────────────────────────────────────────
+    batch mode ของ Alembic เปลี่ยนโครงตาราง SQLite ด้วยการสร้างตารางชื่อ `_alembic_tmp_<ชื่อ>`
+    ขึ้นมาก่อน แล้วค่อยก็อปข้อมูลและ rename ทับ ถ้าจังหวะนั้นล้ม (ไฟดับ, container ถูกฆ่า,
+    คำสั่งใด SQL พัง) ตารางชั่วคราวจะค้างอยู่ในไฟล์ฐานข้อมูล
+
+    ผลคือ migration รอบถัดไป**ทุกรอบ**จะล้มด้วย "table _alembic_tmp_xxx already exists"
+    และเนื่องจาก init_db() ถูกเรียกตอนแอปสตาร์ต แอปจะสตาร์ตไม่ขึ้นเลยแม้แต่ครั้งเดียว
+    กลายเป็น container วนรีสตาร์ตไม่จบ ทั้งที่ข้อมูลจริงยังอยู่ครบ — เคยเกิดกับโปรเจกต์นี้มาแล้ว
+    และเป็นอาการที่หาสาเหตุยากมากเพราะข้อความ error ไม่ได้บอกว่าให้ไปลบอะไร
+
+    ปลอดภัยที่จะลบทิ้งเสมอ: ตารางพวกนี้เป็นของชั่วคราวล้วนๆ ที่ Alembic สร้างเองแล้วตั้งใจ
+    จะลบเองอยู่แล้ว ถ้ามันยังอยู่ตอน "เริ่ม" รอบใหม่ แปลว่าเป็นเศษจากรอบที่ตายไปแล้วแน่นอน
+    ข้อมูลจริงอยู่ในตารางชื่อจริงเสมอ ไม่เคยอยู่ในตารางชื่อนี้เมื่อไม่มี migration กำลังรันอยู่
+    """
+    # ⚠️ ต้องสั่งผ่าน driver ตรงๆ ด้วยเหตุผลเดียวกับ PRAGMA ข้างบน
+    # ถ้าสั่งผ่าน connection.execute() ของ SQLAlchemy มันจะเปิด transaction ค้างไว้ตั้งแต่
+    # คำสั่งแรก แล้วตอนจบบล็อกจะถูก rollback ทิ้งพร้อมกับ migration ทั้งหมดที่รันตามมา
+    # ผลคือ "รันผ่านไม่มี error แต่ schema ไม่เปลี่ยนและเลขเวอร์ชันไม่ขยับ"
+    # (ผมพลาดตรงนี้มาแล้วตอนเขียนฟังก์ชันนี้ครั้งแรก — อาการคือ migration ตัวแรกถูกรันซ้ำ
+    #  แล้วล้มด้วย "table api_keys already exists" ซึ่งอ่านแล้วไม่มีทางเดาสาเหตุถูกเลย)
+    raw = connection.connection.dbapi_connection
+    leftovers = [
+        row[0]
+        for row in raw.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '_alembic_tmp_%'"
+        ).fetchall()
+    ]
+    for name in leftovers:
+        logging.getLogger("alembic.env").warning(
+            "พบตารางค้างจาก migration รอบก่อนที่ล้มกลางคัน: %s — ลบทิ้งก่อนเริ่มรอบใหม่", name
+        )
+        raw.execute(f'DROP TABLE "{name}"')
+    if leftovers:
+        raw.commit()
+
+
 def run_migrations_online() -> None:
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -65,6 +106,7 @@ def run_migrations_online() -> None:
         # แต่ schema ไม่เปลี่ยนอะไรเลยและเลขเวอร์ชันไม่ขยับ (หลอกมาก ใช้เวลาหาอยู่นาน)
         if connection.dialect.name == "sqlite":
             connection.connection.dbapi_connection.execute("PRAGMA foreign_keys=OFF")
+            _drop_leftover_batch_tables(connection)
 
         context.configure(
             connection=connection,

@@ -56,6 +56,58 @@ cols = {c["name"] for c in sa.inspect(engine).get_columns("call_jobs")}
 check("call_jobs มีคอลัมน์ group_id", "group_id" in cols)
 
 # ---------------------------------------------------------------------------
+section("0.1 migration ทนต่อเศษตารางที่ค้างจากรอบที่ล้มกลางคัน")
+# ---------------------------------------------------------------------------
+# เคสนี้เคยทำให้แอปสตาร์ตไม่ขึ้นเลยและ container วนรีสตาร์ตไม่จบ:
+# batch migration ที่ตายกลางคันทิ้งตาราง _alembic_tmp_<ชื่อ> ไว้ แล้ว migration
+# รอบถัดไปทุกรอบจะล้มด้วย "table _alembic_tmp_xxx already exists"
+import shutil as _shutil
+import tempfile as _tempfile
+
+_MIG_TMP = _tempfile.mkdtemp(prefix="gw-mig-")
+try:
+    _url = "sqlite:///" + os.path.join(_MIG_TMP, "mig.db").replace("\\", "/")
+    _eng = sa.create_engine(_url)
+    from alembic import command as _cmd
+    from alembic.config import Config as _Cfg
+
+    _cfg = _Cfg()
+    _cfg.set_main_option("script_location", os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "migrations"))
+    _cfg.set_main_option("sqlalchemy.url", _url)
+
+    _prev = os.environ["DATABASE_URL"]
+    os.environ["DATABASE_URL"] = _url          # env.py อ่าน URL จาก settings
+    import importlib
+
+    import app.config as _conf
+    importlib.reload(_conf)
+
+    _cmd.upgrade(_cfg, "eee2373d7984")
+    with _eng.begin() as _c:
+        _c.execute(sa.text("CREATE TABLE _alembic_tmp_call_jobs (id INTEGER)"))
+        _c.execute(sa.text("INSERT INTO groups (id, name) VALUES (1, 'ทีมช่าง')"))
+        _c.execute(sa.text(
+            "INSERT INTO call_jobs (id, message, priority_group, contact_index,"
+            " retry_count, status, created_at)"
+            " VALUES (1, 'm', 'ทีมช่าง', 0, 0, 'CONNECTED', '2026-08-01')"))
+    _cmd.upgrade(_cfg, "head")
+    with _eng.begin() as _c:
+        _rev = _c.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
+        _row = _c.execute(sa.text("SELECT group_id FROM call_jobs WHERE id = 1")).scalar()
+        _left = _c.execute(sa.text(
+            "SELECT count(*) FROM sqlite_master WHERE name LIKE '_alembic_tmp_%'")).scalar()
+    _eng.dispose()
+    check("migration ผ่านแม้มีเศษตารางค้าง", _rev == "a1b2c3d4e5f6", f"revision={_rev}")
+    check("ลบเศษตารางทิ้งให้เอง", _left == 0)
+    check("ประวัติเก่าไม่หายและถูกเติม group_id ย้อนหลัง", _row == 1, f"group_id={_row}")
+    os.environ["DATABASE_URL"] = _prev
+    importlib.reload(_conf)
+finally:
+    _shutil.rmtree(_MIG_TMP, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
 section("1. กลุ่มผู้รับรายอุปกรณ์ถูกใช้จริงตอนโทร  (บั๊กร้ายแรง)")
 # ---------------------------------------------------------------------------
 import app.api_key_service as ks
