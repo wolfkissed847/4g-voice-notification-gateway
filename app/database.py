@@ -18,9 +18,27 @@ from app.config import settings
 
 logger = logging.getLogger("database")
 
+# ── ขนาด connection pool ──────────────────────────────────────────────────────
+# ค่าเริ่มต้นของ SQLAlchemy คือ pool_size=5 + overflow 10 = เปิดพร้อมกันได้ 15 connection
+# และถ้าเต็ม คำขอที่ 16 จะ "รอเงียบๆ 30 วินาที" แล้วค่อยโยน TimeoutError ออกมาเป็น 500
+#
+# วัดจริงด้วย tests/concurrency_sweep.py แล้วพบว่า ที่ 50 คำขอพร้อมกันแบบยิงต่อเนื่อง
+# เริ่มมีคำขอตกเป็น 500 และที่ 80 คำขอพร้อมกันตกไป 346 จาก 1,600 ครั้ง (22%)
+# โดยบางคำขอค้างอยู่เกิน 60 วินาทีก่อนจะได้คำตอบ
+#
+# สำหรับระบบแจ้งเตือนเหตุฉุกเฉิน การค้าง 30 วินาทีแล้วค่อยตอบ error แย่กว่าการตอบ error
+# ทันที เพราะอุปกรณ์ปลายทางส่วนใหญ่ตั้ง timeout ไว้สั้นกว่านั้น มันจะเลิกรอไปก่อน
+# แล้วเข้าใจว่าส่งไม่สำเร็จทั้งที่งานอาจเข้าคิวไปแล้ว — กลายเป็นยิงซ้ำโดยไม่จำเป็น
+#
+# จึงขยายจำนวน connection ให้รับ burst ได้จริง และลดเวลารอลงเหลือ 10 วินาที
+# หมายเหตุ: การเพิ่มตัวเลขนี้ไม่ได้ทำให้ SQLite เขียนเร็วขึ้น (การเขียนถูก serialize อยู่ดี)
+# แต่ทำให้คำขอไปรอที่ระดับฐานข้อมูลซึ่งมี busy_timeout ของตัวเอง แทนที่จะตายคาที่ประตู pool
+_SQLITE_POOL = {"pool_size": 20, "max_overflow": 30, "pool_timeout": 10}
+
 engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    **(_SQLITE_POOL if "sqlite" in settings.database_url else {}),
 )
 
 
