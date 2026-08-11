@@ -260,9 +260,22 @@ def run_worker_loop(poll_interval: float = 1.0, config_check_interval: float = 1
 
     worker_state.mark_started()
     gsm = GSMModule()
-    gsm.connect()
-    worker_state.set_gsm_connected(True, gsm.port)
-    logger.info("Call worker เริ่มทำงาน โดยเชื่อมต่อโมดูลที่ %s", gsm.port)
+
+    # ── ต่อโมดูลไม่ได้ตอนสตาร์ต ต้องไม่ทำให้ worker ตาย ────────────────────────
+    # เดิมเรียก gsm.connect() ลอยๆ ถ้าโมดูลยังไม่ได้เสียบ (หรือ Pi บูตเร็วกว่าที่ USB
+    # จะ enumerate เสร็จ) มันจะโยน SerialException ออกมาแล้ว thread นี้ตายถาวร
+    # ผลคือถึงจะเสียบโมดูลกลับเข้าไปทีหลัง ระบบก็ไม่มีวันโทรได้อีกเลยจนกว่าจะ restart
+    # ทั้ง container — ซึ่งขัดกับที่ loop ข้างล่างออกแบบมาให้ลองต่อใหม่เองทุกวินาทีอยู่แล้ว
+    try:
+        gsm.connect()
+        worker_state.set_gsm_connected(True, gsm.port)
+        logger.info("Call worker เริ่มทำงาน โดยเชื่อมต่อโมดูลที่ %s", gsm.port)
+    except Exception:
+        worker_state.set_gsm_connected(False)
+        logger.warning(
+            "ยังต่อโมดูลที่ %s ไม่ได้ตอนเริ่มทำงาน — เข้า loop ปกติแล้วจะลองต่อใหม่ทุกรอบ "
+            "(หน้าเว็บและ API ใช้งานได้ตามปกติระหว่างนี้)", gsm.port,
+        )
 
     try:
         while True:

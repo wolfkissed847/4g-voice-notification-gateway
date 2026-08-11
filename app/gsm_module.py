@@ -5,6 +5,7 @@ GSM Module Wrapper — ควบคุม SIMCOM A7670E ผ่าน AT Command 
 อ้างอิง: A76XX Series_AT Command Manual V1.09 + A7600 Series_Audio_Application_Note_V1.00
 (ไฟล์ V1.03 ของ audio note ที่เคยอ้างถึงก่อนหน้านี้ Scope ผิดรุ่น — ใช้ V1.00 ตัวนี้แทน)
 """
+import glob
 import logging
 import re
 import time
@@ -56,8 +57,45 @@ class GSMModule:
         self.baudrate = baudrate or settings.gsm_baudrate
         self.ser: serial.Serial | None = None
 
+    def _autodetect_port(self) -> str | None:
+        """
+        ไล่ถามทุก /dev/ttyUSB* ว่าตัวไหนตอบคำสั่ง AT — คืน path ตัวแรกที่ตอบ
+
+        ที่ต้องมีเพราะเลขท้าย ttyUSB ไม่ใช่ค่าคงที่ มันคือ "ลำดับที่เคอร์เนลเจออุปกรณ์"
+        ถอดเสียบใหม่ เสียบคนละพอร์ต หรือโมดูลรีเซ็ตตัวเองหลังไฟตก แล้วเลขเปลี่ยนได้หมด
+        โมดูล SIMCOM หนึ่งตัวยังสร้างหลายพอร์ตพร้อมกัน (diag/nmea/at/modem) ซึ่งมีพอร์ตเดียว
+        ที่รับคำสั่ง AT จริง การไล่ถามจึงตรงกว่าการจำเลขไว้ล่วงหน้า
+
+        ถามเฉพาะตอนพอร์ตที่ตั้งไว้ใน .env ใช้ไม่ได้เท่านั้น ปกติจึงไม่มีค่าใช้จ่ายอะไรเพิ่ม
+        """
+        candidates = sorted(glob.glob("/dev/ttyUSB*"))
+        if not candidates:
+            return None
+        for path in candidates:
+            if path == self.port:
+                continue  # ลองไปแล้วก่อนเรียกฟังก์ชันนี้
+            try:
+                with serial.Serial(path, self.baudrate, timeout=1) as probe:
+                    probe.reset_input_buffer()
+                    probe.write(b"AT\r\n")
+                    time.sleep(0.4)
+                    if b"OK" in probe.read(probe.in_waiting or 64):
+                        logger.warning("โมดูลย้ายไปอยู่ที่ %s แล้ว (ตั้งไว้ว่า %s)", path, self.port)
+                        return path
+            except Exception:
+                continue  # พอร์ตนี้ไม่ใช่ ลองตัวถัดไป
+        return None
+
     def connect(self):
-        self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+        try:
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+        except serial.SerialException:
+            # พอร์ตที่ตั้งไว้ใช้ไม่ได้ — ลองหาว่าโมดูลย้ายไปอยู่พอร์ตไหนแทน
+            found = self._autodetect_port()
+            if found is None:
+                raise
+            self.port = found
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
         time.sleep(1)
         # เคลียร์ byte ค้างเก่าในบัฟเฟอร์ก่อนเริ่ม — ถ้าโมดูลเพิ่ง reset/power-cycle มา อาจมี
         # boot banner (manufacturer/model/IMEI ฯลฯ) ค้างอยู่ใน OS buffer ที่ Python ยังไม่ได้อ่าน
