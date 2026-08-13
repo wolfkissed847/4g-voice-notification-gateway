@@ -9,8 +9,6 @@ export function createEventType(data: {
   code: string;
   display_name: string;
   message_template: string;
-  /** null = ไม่ระบุกลุ่มเริ่มต้น (กลุ่มจริงตั้งรายอุปกรณ์ที่หน้าอุปกรณ์ & key) */
-  group_id?: number | null;
 }): Promise<EventType> {
   return apiRequest<EventType>("/event-types", { method: "POST", body: data });
 }
@@ -20,7 +18,6 @@ export function updateEventType(
   data: {
     display_name?: string;
     message_template?: string;
-    group_id?: number | null;
     is_active?: boolean;
   }
 ): Promise<EventType> {
@@ -35,9 +32,9 @@ export function sendTestNotify(data: {
   event_type_code: string;
   message?: string;
   variables?: Record<string, string>;
-  /** จำลองเป็นอุปกรณ์ตัวนี้ — จำเป็นตั้งแต่กลุ่มผู้รับผูกที่คู่ (อุปกรณ์ + เหตุการณ์)
-   *  ไม่ส่งมา ระบบไม่มีทางรู้ว่าต้องโทรหากลุ่มไหน */
-  device_id?: number;
+  /** จำลองเป็นอุปกรณ์ตัวนี้ — บังคับ เพราะผู้รับสายถูกตัดสินที่คู่ (อุปกรณ์ + เหตุการณ์)
+   *  ไม่มีอุปกรณ์ = ไม่มีทางรู้ว่าต้องโทรหาใคร และไม่มีค่าเริ่มต้นให้ถอยไปใช้แล้ว */
+  device_id: number;
 }): Promise<NotifyResponse> {
   return apiRequest<NotifyResponse>("/test/notify", { method: "POST", body: data });
 }

@@ -8,6 +8,7 @@ FastAPI Entrypoint — รับ Request แจ้งเตือนจากร
 รัน: uvicorn app.main:app --host 0.0.0.0 --port 8000
 """
 import datetime
+import json
 import logging
 import os
 import threading
@@ -38,7 +39,7 @@ from app.schemas import (
     GroupCreateRequest, GroupResponse, GroupUpdateRequest,
     HistoryItem, HistoryResponse,
     LoginRequest, LoginResponse,
-    NotifyRequest, NotifyResponse,
+    NotifyRequest, NotifyResponse, PickedContactRef,
     GsmDetailResponse, GsmRestartResponse, PiDetailResponse,
     QueueStatusItem, QueueStatusResponse,
     SystemInfoResponse, TestNotifyRequest,
@@ -83,7 +84,7 @@ app = FastAPI(
     #        แก้ DB หายตอน deploy, แก้ธีมกระพริบ, การ์ดติดตามสัญญาณในหน้าคิว
     # 0.4.1: แก้กลุ่มผู้รับรายอุปกรณ์ไม่ถูกใช้จริง (งานถูกปิดเป็น failed โดยไม่โทร),
     #        ตรวจรูปแบบเบอร์โทร, จำกัดความยาวข้อความ, กันเดารหัสผ่าน, ปิดหน้าเอกสาร API
-    version="0.4.1",
+    version="0.5.0",
     # ปิดหน้าเอกสารอัตโนมัติเมื่อไม่ได้เปิดสวิตช์ไว้ (ดู config.enable_api_docs)
     docs_url="/docs" if settings.enable_api_docs else None,
     redoc_url="/redoc" if settings.enable_api_docs else None,
@@ -155,10 +156,13 @@ def on_startup():
 
 # ---------- Public: ระบบ/บอร์ดภายนอกยิงแจ้งเตือนเข้ามา (API key) ----------
 
-def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> CallJob:
+def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key) -> CallJob:
     """
     ใช้ร่วมกันโดย /notify (API key = อุปกรณ์จริง) และ /test/notify (JWT = กดทดสอบจาก dashboard)
-    api_key=None หมายถึงมาจาก dashboard ซึ่งข้ามการตรวจสิทธิ์เพราะคนกดคือผู้ดูแลระบบเอง
+
+    api_key บังคับทั้งสองทาง: ผู้รับสายถูกตัดสินที่คู่ (อุปกรณ์ + เหตุการณ์) จุดเดียว
+    ไม่รู้ว่าเป็นอุปกรณ์ไหนก็ไม่มีทางรู้ว่าต้องโทรหาใคร ผลพลอยได้คือปุ่มทดสอบเดินเส้นทาง
+    เดียวกับของจริงทุกขั้น รวมถึงการตรวจสิทธิ์ — ไม่มีทางที่ "ทดสอบผ่านแต่ของจริงไม่ผ่าน"
     """
     event_type = event_types_service.get_event_type_by_code(db, request.event_type_code)
     if event_type is None:
@@ -169,18 +173,16 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> C
     # อุปกรณ์ยิงได้เฉพาะการแจ้งเตือนที่ผูกไว้กับ key ของตัวเองเท่านั้น
     # ตอบ 403 (ไม่ใช่ 404) เพราะ key ถูกต้องจริง แค่ไม่มีสิทธิ์ — และไม่ปิดบังว่ามี event type นี้อยู่
     # เนื่องจากผู้ที่ถือ key เป็นอุปกรณ์ของเราเองที่ config ไว้ ไม่ใช่บุคคลภายนอกที่ไม่รู้จัก
-    device_name = None
-    if api_key is not None:
-        allowed_ids = {e.id for e in api_key.allowed_event_types}
-        if event_type.id not in allowed_ids:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    f"อุปกรณ์ '{api_key.name}' ไม่ได้รับอนุญาตให้ยิง event type "
-                    f"'{request.event_type_code}' — เพิ่มสิทธิ์ได้ที่หน้า API Keys ใน dashboard"
-                ),
-            )
-        device_name = api_key.name
+    allowed_ids = {e.id for e in api_key.allowed_event_types}
+    if event_type.id not in allowed_ids:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"อุปกรณ์ '{api_key.name}' ไม่ได้รับอนุญาตให้ยิง event type "
+                f"'{request.event_type_code}' — เพิ่มสิทธิ์ได้ที่หน้า API Keys ใน dashboard"
+            ),
+        )
+    device_name = api_key.name
 
     if request.message:
         message = request.message
@@ -192,33 +194,27 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key=None) -> C
         except event_types_service.MissingTemplateVariableError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # ── กลุ่มที่จะโทรหา: ของอุปกรณ์ตัวนี้ก่อน แล้วค่อยถอยไปกลุ่มเริ่มต้นของเหตุการณ์ ──
-    # อุปกรณ์คนละตัวใช้เหตุการณ์เดียวกันแต่โทรหาคนละกลุ่มได้ (ปั๊มตึก A แจ้งช่างตึก A)
-    # ถ้าไม่ได้ตั้งไว้เลยทั้งสองที่ = ยังตั้งค่าไม่ครบ ต้องบอกให้ชัดว่าต้องไปตั้งตรงไหน
-    group = None
-    if api_key is not None:
-        link_group_id = api_key_service.group_for(api_key, event_type.id)
-        if link_group_id is not None:
-            group = contacts_service.get_group(db, link_group_id)
-    if group is None:
-        group = event_type.group
-    if group is None:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"เหตุการณ์ '{event_type.code}' ยังไม่รู้ว่าต้องโทรหากลุ่มไหน — "
-                "เลือกกลุ่มข้างเหตุการณ์นี้ที่หน้าตั้งค่าอุปกรณ์ "
-                "(หรือตั้งกลุ่มเริ่มต้นให้เหตุการณ์นี้ ถ้าต้องการกดทดสอบจากหน้าประเภทเหตุการณ์ได้ด้วย)"
-            ),
-        )
+    # ── ผู้รับสาย: ตัดสินที่คู่ (อุปกรณ์ + เหตุการณ์) จุดเดียว ────────────────
+    # อุปกรณ์คนละตัวใช้เหตุการณ์เดียวกันแต่โทรหาคนละคนได้ (ปั๊มตึก A แจ้งช่างตึก A)
+    # และเลือกได้ละเอียดถึงรายเบอร์ ไม่ต้องแตกกลุ่มใหม่ทุกครั้งที่ผู้รับต่างกันนิดเดียว
+    #
+    # ไม่มีค่าเริ่มต้นให้ถอยไปใช้แล้ว — ประเภทเหตุการณ์ไม่รู้จักกลุ่มอีกต่อไป
+    # ตั้งค่าไม่ครบจึงถูกปฏิเสธตั้งแต่ตรงนี้พร้อมบอกว่าต้องไปตั้งตรงไหน ดีกว่าปล่อยให้
+    # เข้าคิวไปตายตอน worker หยิบ ซึ่งฝั่งที่ยิงเข้ามาจะไม่มีทางรู้เลยจาก HTTP response
+    try:
+        recipients, label, group_id = api_key_service.resolve_recipients(db, api_key, event_type.id)
+    except api_key_service.RecipientsNotConfiguredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return enqueue_job(
         db,
         message=message,
         event_type_id=event_type.id,
-        priority_group=group.name,
-        group_id=group.id,
-        api_key_id=api_key.id if api_key is not None else None,
+        priority_group=label,
+        group_id=group_id,
+        # ensure_ascii=False เพื่อให้ชื่อภาษาไทยใน DB อ่านออกตอนเปิดดูด้วย sqlite3 ตรงๆ
+        recipients=json.dumps(recipients, ensure_ascii=False),
+        api_key_id=api_key.id,
         source_device=device_name,
         event_type_code=event_type.code,
         event_type_name=event_type.display_name,
@@ -486,8 +482,7 @@ def reorder_contacts(
 def _event_type_to_response(event_type) -> EventTypeResponse:
     return EventTypeResponse(
         id=event_type.id, code=event_type.code, display_name=event_type.display_name,
-        message_template=event_type.message_template, group_id=event_type.group_id,
-        group_name=event_type.group.name if event_type.group else None,
+        message_template=event_type.message_template,
         is_active=event_type.is_active == "true",
     )
 
@@ -504,7 +499,7 @@ def create_event_type(
     try:
         event_type = event_types_service.create_event_type(
             db, code=request.code, display_name=request.display_name,
-            message_template=request.message_template, group_id=request.group_id,
+            message_template=request.message_template,
         )
     except event_types_service.DuplicateEventTypeCodeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -546,6 +541,17 @@ def _api_key_to_response(api_key) -> ApiKeyResponse:
                 display_name=e.display_name,
                 group_id=(link.group_id if (link := _event_link(api_key, e.id)) else None),
                 group_name=(link.group.name if link and link.group else None),
+                contacts=[
+                    PickedContactRef(
+                        id=pc.contact.id,
+                        name=pc.contact.name,
+                        phone_number=pc.contact.phone_number,
+                        group_id=pc.contact.group_id,
+                        group_name=pc.contact.group.name,
+                    )
+                    for pc in (link.contacts if link else [])
+                    if pc.contact is not None
+                ],
             )
             for e in api_key.allowed_event_types
         ],
@@ -566,7 +572,9 @@ def create_api_key(
         api_key, plaintext = api_key_service.create_api_key(
             db, name=request.name, event_type_ids=request.event_type_ids
         )
-    except api_key_service.UnknownEventTypeError as exc:
+    except (api_key_service.UnknownEventTypeError, api_key_service.UnknownContactError) as exc:
+        # เบอร์/เหตุการณ์ที่อ้างถึงไม่มีอยู่จริง = ข้อมูลที่ส่งมาผิด ไม่ใช่ระบบพัง
+        # (เกิดได้จริงเมื่อเปิดหน้าตั้งค่าค้างไว้ แล้วมีคนลบเบอร์นั้นทิ้งจากอีกแท็บก่อนกดบันทึก)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     base = _api_key_to_response(api_key)
     return ApiKeyCreateResponse(**base.model_dump(), plaintext_key=plaintext)
@@ -588,7 +596,9 @@ def update_api_key(
             event_type_ids=request.event_type_ids,
             event_links=[l.model_dump() for l in request.event_links] if request.event_links is not None else None,
         )
-    except api_key_service.UnknownEventTypeError as exc:
+    except (api_key_service.UnknownEventTypeError, api_key_service.UnknownContactError) as exc:
+        # เบอร์/เหตุการณ์ที่อ้างถึงไม่มีอยู่จริง = ข้อมูลที่ส่งมาผิด ไม่ใช่ระบบพัง
+        # (เกิดได้จริงเมื่อเปิดหน้าตั้งค่าค้างไว้ แล้วมีคนลบเบอร์นั้นทิ้งจากอีกแท็บก่อนกดบันทึก)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if api_key is None:
         raise HTTPException(status_code=404, detail="ไม่พบ API key นี้")
@@ -625,15 +635,13 @@ def test_notify(
     """
     เข้าคิวจริงเหมือน /notify ทุกประการ ใช้กดทดสอบจากหน้าเว็บโดยไม่ต้องยิง API จากอุปกรณ์จริง
 
-    ส่ง device_id มาด้วยจะจำลองเป็นอุปกรณ์ตัวนั้นทั้งหมด — ใช้กลุ่มผู้รับที่ผูกไว้กับอุปกรณ์นั้น
-    ตรวจสิทธิ์ตามที่อุปกรณ์นั้นมี และชื่ออุปกรณ์ถูกพูดในสายจริง
-    ทดสอบแล้วจึงตรงกับสิ่งที่จะเกิดขึ้นจริงตอนอุปกรณ์ยิงเข้ามาเอง ไม่ใช่ทดสอบคนละเส้นทาง
+    จำลองเป็นอุปกรณ์ที่ระบุทั้งหมด — ใช้ผู้รับที่ผูกไว้กับอุปกรณ์นั้น ตรวจสิทธิ์ตามที่อุปกรณ์นั้นมี
+    และชื่ออุปกรณ์ถูกพูดในสายจริง ทดสอบแล้วจึงตรงกับสิ่งที่จะเกิดขึ้นจริงตอนอุปกรณ์ยิงเข้ามาเอง
+    ไม่ใช่ทดสอบคนละเส้นทางแล้วมาเจอปัญหาเอาตอนของจริง
     """
-    device = None
-    if request.device_id is not None:
-        device = db.query(ApiKey).filter(ApiKey.id == request.device_id).first()
-        if device is None:
-            raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์ที่ระบุ")
+    device = db.query(ApiKey).filter(ApiKey.id == request.device_id).first()
+    if device is None:
+        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์ที่ระบุ")
     job = _resolve_and_enqueue(db, request, api_key=device)
     return NotifyResponse(job_id=job.id, status=job.status.value)
 

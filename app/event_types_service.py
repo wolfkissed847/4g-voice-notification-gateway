@@ -1,19 +1,17 @@
 """
 Event Types Service — CRUD ของประเภทเหตุการณ์ที่ /notify รับเข้ามา (event_type_code)
 
-ประเภทเหตุการณ์เป็น "คลังข้อความกลาง" ที่อุปกรณ์หลายตัวหยิบไปใช้ร่วมกันได้
-กลุ่มผู้รับจริงไม่ได้ผูกอยู่ที่นี่ แต่ผูกกับคู่ (อุปกรณ์ + เหตุการณ์) ในตาราง api_key_event_types
-ปั๊มตึก A กับปั๊มตึก B จึงใช้เหตุการณ์ "ปั๊มหยุดทำงาน" ตัวเดียวกันแต่โทรหาคนละกลุ่มได้
-ส่วน group_id ที่อยู่ในตารางนี้เป็นเพียงกลุ่มสำรองสำหรับการกดทดสอบจาก dashboard เท่านั้น
+ประเภทเหตุการณ์เป็น "คลังคำพูดกลาง" ล้วนๆ — รหัส + ชื่อ + ข้อความที่จะพูด เท่านั้น
+ไม่รู้จักกลุ่มหรือเบอร์ใดๆ ทั้งสิ้น สร้างทิ้งไว้เฉยๆ โดยยังไม่ผูกกับอะไรเลยก็ได้
+
+ผู้รับสายถูกตัดสินที่คู่ (อุปกรณ์ + เหตุการณ์) จุดเดียวในตาราง api_key_event_types
+ปั๊มตึก A กับปั๊มตึก B จึงใช้เหตุการณ์ "ปั๊มหยุดทำงาน" ตัวเดียวกันแต่โทรหาคนละคนได้
+เดิมที่นี่มี group_id เป็น "กลุ่มเริ่มต้น" อีกชั้น ตัดทิ้งแล้วเพราะทำให้คำถามว่า
+"ยิงเหตุการณ์นี้แล้วใครได้รับสาย" ต้องไล่ดูสองที่เสมอ และคำตอบขึ้นกับว่าที่ไหนถูกตั้งไว้ก่อน
 """
 from sqlalchemy.orm import Session
 
 from app.database import EventType
-
-
-# ตัวคั่นระหว่าง "ไม่ได้ส่ง field นี้มา" กับ "ส่งมาเป็น null เพื่อสั่งล้างค่า"
-# ใช้ None เป็น default ไม่ได้ เพราะ None คือค่าที่ผู้ใช้ต้องการตั้งจริง (= ไม่มีกลุ่มเริ่มต้น)
-_UNSET = object()
 
 
 class DuplicateEventTypeCodeError(Exception):
@@ -37,12 +35,12 @@ def get_event_type_by_code(db: Session, code: str) -> EventType | None:
 
 
 def create_event_type(
-    db: Session, code: str, display_name: str, message_template: str, group_id: int | None = None
+    db: Session, code: str, display_name: str, message_template: str
 ) -> EventType:
     if get_event_type_by_code(db, code) is not None:
         raise DuplicateEventTypeCodeError(f"event type code '{code}' มีอยู่แล้ว")
     event_type = EventType(
-        code=code, display_name=display_name, message_template=message_template, group_id=group_id
+        code=code, display_name=display_name, message_template=message_template
     )
     db.add(event_type)
     db.commit()
@@ -55,7 +53,6 @@ def update_event_type(
     event_type_id: int,
     display_name: str | None = None,
     message_template: str | None = None,
-    group_id=_UNSET,
     is_active: bool | None = None,
 ) -> EventType | None:
     event_type = get_event_type(db, event_type_id)
@@ -65,9 +62,6 @@ def update_event_type(
         event_type.display_name = display_name
     if message_template is not None:
         event_type.message_template = message_template
-    if group_id is not _UNSET:
-        # ส่ง group_id=null มา = สั่งล้างกลุ่มเริ่มต้นทิ้ง ซึ่งต้องทำได้ตั้งแต่กลุ่มกลายเป็น optional
-        event_type.group_id = group_id
     if is_active is not None:
         event_type.is_active = str(is_active).lower()
     db.commit()

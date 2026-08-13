@@ -1,18 +1,17 @@
 /**
- * DeviceConfigPage — พอร์ตจาก figma/handoff/components/DeviceConfigPage.tsx
+ * DeviceConfigPage — จุดเดียวในระบบที่ตอบว่า "อุปกรณ์ตัวนี้ยิงอะไรได้ แล้วใครได้รับสาย"
  *
- * ── นี่คือหน้าที่ปรับ IA มากที่สุดในชุด ────────────────────────────────────
- * ดีไซน์ตั้งสมมติฐานว่า config ทุกอย่างอยู่ "ที่ตัวอุปกรณ์" — 3 แท็บคือ
- * เงื่อนไข (value > 80 ค้าง 10 วิ) / เบอร์+เสียง / retry+ช่วงห้ามโทร
+ * ── ทำไมผู้รับมาอยู่ตรงนี้ ──────────────────────────────────────────────────
+ * เดิมผู้รับถูกตั้งได้จากสองที่: กลุ่มเริ่มต้นที่ตัวประเภทเหตุการณ์ กับกลุ่มรายอุปกรณ์ที่นี่
+ * คำตอบว่าใครจะได้รับสายจึงขึ้นกับว่าที่ไหนถูกตั้งไว้ก่อน ต้องไล่ดูสองจุดถึงจะรู้
+ * ตอนนี้ประเภทเหตุการณ์เป็นแค่ "คำพูด" และผู้รับถูกตัดสินที่คู่ (อุปกรณ์ + เหตุการณ์) ที่นี่ที่เดียว
  *
- * backend เราวาง config ไว้ที่ event type + กลุ่มผู้รับ ซึ่งแชร์กันได้ (ตัดสินใจไว้ใน
- * DEPLOYMENT_MODELS.md): อุปกรณ์ 20 ตัวใช้กลุ่ม "ทีมช่าง" ร่วมกัน เบอร์เปลี่ยนแก้ที่เดียว
- * ถ้าย้ายมาเก็บต่ออุปกรณ์จะต้องแก้ 20 ที่ จึงเก็บโครงเดิมไว้แล้วเปลี่ยนหน้านี้เป็น:
- *
- *   - แก้ชื่ออุปกรณ์ (ชื่อนี้ถูกพูดในสายแทน {device})
- *   - ติ๊กว่าอุปกรณ์นี้ยิง event type ไหนได้ (สิทธิ์ — ของจริงใน backend)
- *   - กล่องสรุปภาษาคน สร้างจากข้อมูลจริง (กลุ่ม + เบอร์เรียงลำดับ + retry จาก /config)
- *   - payload จริงที่บอร์ดต้องส่ง
+ * ── เลือกได้สองแบบ ─────────────────────────────────────────────────────────
+ *   ทั้งกลุ่ม     — โทรทุกคนในกลุ่มตามลำดับของกลุ่ม เปลี่ยนสมาชิกกลุ่มแล้วมีผลกับทุกอุปกรณ์
+ *                   ที่ชี้มาที่กลุ่มนี้ทันที (เบอร์เปลี่ยนแก้ที่เดียว ไม่ต้องไล่แก้ทุกอุปกรณ์)
+ *   เลือกเบอร์เอง — เจาะเฉพาะคนที่เกี่ยว พร้อมจัดลำดับไล่สายของคู่นี้เอง
+ *                   มีไว้เพราะ 'ทีมช่าง' มี 5 คน แต่ 'ปั๊มตึก A ดับ' ควรโทรหาแค่ 2 คนที่ดูแลตึกนั้น
+ *                   ทางออกเดิมคือแตกกลุ่มใหม่ทุกครั้ง จนได้กลุ่มซ้ำซ้อนที่สมาชิกเหลื่อมกัน
  *
  * ส่วนที่ดีไซน์มีแต่ backend ยังไม่มี (เงื่อนไข rule engine, quiet hours, cooldown,
  * เสียงชาย/หญิง, จำนวนรอบพูด) ไม่ได้ทำเป็นช่องหลอกไว้ — ดู DEPLOYMENT_MODELS.md ข้อ 16-21
@@ -23,7 +22,7 @@ import { toast } from 'sonner';
 
 import { cn } from '@/app/components/ui/utils';
 import { copyText } from '../lib/clipboard';
-import { API_BASE_URL } from '../api/client';
+import { API_BASE_URL, ApiError } from '../api/client';
 import { listApiKeys, deleteApiKey, revealApiKey, updateApiKey } from '../api/apiKeys';
 import { getConfig } from '../api/config';
 import { listEventTypes, sendTestNotify } from '../api/eventTypes';
@@ -31,6 +30,15 @@ import { listContacts, listGroups } from '../api/groups';
 import { Btn, Card, Field, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
 import type { ApiKey, AppConfig, Contact, EventType, Group } from '../types';
+
+/**
+ * ผู้รับของคู่ (อุปกรณ์ + เหตุการณ์) — เป็น union ไม่ใช่สองฟิลด์ที่อยู่ด้วยกันได้
+ * ตั้งใจให้ "มีสองค่าพร้อมกัน" เป็นสถานะที่เขียนออกมาไม่ได้ตั้งแต่ระดับ type
+ * เพราะนั่นคือความกำกวมที่การรื้อรอบนี้ตั้งใจกำจัด (backend ก็บังคับซ้ำอีกชั้น)
+ */
+type LinkTarget =
+  | { mode: 'group'; groupId: number | null }
+  | { mode: 'contacts'; contactIds: number[] };
 
 export function DeviceConfigPage() {
   const { T } = useApp();
@@ -45,10 +53,7 @@ export function DeviceConfigPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   const [name, setName] = useState('');
-  // เก็บเป็น map "เหตุการณ์ -> กลุ่มที่จะโทร" ไม่ใช่แค่รายการ id ที่ติ๊ก
-  // เพราะตอนนี้กลุ่มผูกอยู่ที่คู่ (อุปกรณ์ + เหตุการณ์) ไม่ได้ผูกที่ตัวเหตุการณ์แล้ว
-  // อุปกรณ์คนละตัวใช้เหตุการณ์เดียวกันแต่โทรหาคนละกลุ่มได้
-  const [links, setLinks] = useState<Record<number, number | null>>({});
+  const [links, setLinks] = useState<Record<number, LinkTarget>>({});
   const [fullKey, setFullKey] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -69,39 +74,78 @@ export function DeviceConfigPage() {
       setConfig(cfg);
       if (found) {
         setName(found.name);
-        setLinks(Object.fromEntries(found.allowed_event_types.map((e) => [e.id, e.group_id])));
+        setLinks(Object.fromEntries(found.allowed_event_types.map((e): [number, LinkTarget] => [
+          e.id,
+          e.contacts.length > 0
+            ? { mode: 'contacts', contactIds: e.contacts.map((c) => c.id) }
+            : { mode: 'group', groupId: e.group_id },
+        ])));
         // key เต็มดึงแยกจาก list — ดู revealApiKey ว่าทำไมไม่แนบมากับ list
         void revealApiKey(found.id).then((r) => setFullKey(r.key)).catch(() => setFullKey(null));
       }
-      // ดึงเบอร์ของทุกกลุ่มไว้ประกอบกล่องสรุป — จำนวนกลุ่มน้อย เรียกพร้อมกันได้
+      // ดึงเบอร์ของทุกกลุ่มไว้ประกอบตัวเลือกและกล่องสรุป — จำนวนกลุ่มน้อย เรียกพร้อมกันได้
       const lists = await Promise.all(grps.map(async (g) => [g.id, await listContacts(g.id)] as const));
       setContactsByGroup(Object.fromEntries(lists));
     })();
   }, [deviceId]);
 
   const picked = Object.keys(links).map(Number);
+  const allContacts: Contact[] = Object.values(contactsByGroup).flat();
+  const contactById = (cid: number) => allContacts.find((c) => c.id === cid);
+  const groupName = (gid: number) => groups.find((g) => g.id === gid)?.name ?? '';
 
-  const toggle = (etId: number) =>
+  const toggleEvent = (etId: number) =>
     setLinks((prev) => {
       const next = { ...prev };
       if (etId in next) delete next[etId];
-      // ติ๊กใหม่ = ยังไม่เลือกกลุ่ม (null) ผู้ใช้ต้องเลือกเอง ไม่เดาให้
-      else next[etId] = null;
+      // ติ๊กใหม่ = ยังไม่เลือกผู้รับ ผู้ใช้ต้องเลือกเอง ไม่เดาให้ว่าควรโทรหาใคร
+      else next[etId] = { mode: 'group', groupId: null };
       return next;
     });
 
-  const setLinkGroup = (etId: number, groupId: number | null) =>
-    setLinks((prev) => ({ ...prev, [etId]: groupId }));
+  const setTarget = (etId: number, target: LinkTarget) =>
+    setLinks((prev) => ({ ...prev, [etId]: target }));
+
+  const toggleContact = (etId: number, contactId: number) =>
+    setLinks((prev) => {
+      const cur = prev[etId];
+      const ids = cur?.mode === 'contacts' ? cur.contactIds : [];
+      return {
+        ...prev,
+        [etId]: {
+          mode: 'contacts',
+          // ติ๊กใหม่ต่อท้ายเสมอ — ลำดับที่ติ๊กคือลำดับไล่สาย ซึ่งเดาง่ายกว่าการแทรกตรงกลาง
+          contactIds: ids.includes(contactId) ? ids.filter((i) => i !== contactId) : [...ids, contactId],
+        },
+      };
+    });
+
+  const moveContact = (etId: number, index: number, delta: number) =>
+    setLinks((prev) => {
+      const cur = prev[etId];
+      if (cur?.mode !== 'contacts') return prev;
+      const to = index + delta;
+      if (to < 0 || to >= cur.contactIds.length) return prev;
+      const ids = [...cur.contactIds];
+      [ids[index], ids[to]] = [ids[to], ids[index]];
+      return { ...prev, [etId]: { mode: 'contacts', contactIds: ids } };
+    });
 
   const save = async () => {
     setSaving(true);
     try {
       const updated = await updateApiKey(deviceId, {
         name: name.trim(),
-        event_links: Object.entries(links).map(([id, gid]) => ({ event_type_id: Number(id), group_id: gid })),
+        event_links: Object.entries(links).map(([etId, t]) => ({
+          event_type_id: Number(etId),
+          group_id: t.mode === 'group' ? t.groupId : null,
+          contact_ids: t.mode === 'contacts' ? t.contactIds : null,
+        })),
       });
       setDevice(updated);
       toast.success(T.toast_updated);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : T.error_generic);
     } finally {
       setSaving(false);
     }
@@ -113,8 +157,14 @@ export function DeviceConfigPage() {
       toast.error(T.allowed_events_none);
       return;
     }
-    await sendTestNotify({ event_type_code: first.code, device_id: deviceId });
-    toast.success(T.toast_created);
+    try {
+      const res = await sendTestNotify({ event_type_code: first.code, device_id: deviceId });
+      toast.success(T.test_sent_ok(res.job_id));
+    } catch (e) {
+      // ตั้งค่าไม่ครบจะได้ 400 พร้อมข้อความบอกว่าต้องไปตั้งตรงไหน — ต้องเอามาโชว์
+      // ไม่ใช่ปล่อยเงียบแล้วผู้ใช้นั่งรอสายที่ไม่มีวันมา
+      toast.error(e instanceof ApiError ? e.message : T.error_generic);
+    }
   };
 
   const remove = async () => {
@@ -128,6 +178,19 @@ export function DeviceConfigPage() {
   }
 
   const pickedTypes = eventTypes.filter((e) => picked.includes(e.id));
+
+  /** เบอร์ที่จะถูกโทรจริงของเหตุการณ์นี้ ตามลำดับ — ใช้ทั้งกล่องสรุปและการเตือนว่าตั้งค่าไม่ครบ */
+  const resolveRecipients = (etId: number): { label: string; rows: Contact[] } => {
+    const t = links[etId];
+    if (t?.mode === 'contacts') {
+      const rows = t.contactIds.map(contactById).filter((c): c is Contact => !!c);
+      return { label: T.dev_target_contacts, rows };
+    }
+    if (t?.mode === 'group' && t.groupId != null) {
+      return { label: groupName(t.groupId), rows: contactsByGroup[t.groupId] ?? [] };
+    }
+    return { label: '', rows: [] };
+  };
 
   // navigator.clipboard ใช้ไม่ได้ตอนเปิดผ่าน http:// ที่ไม่ใช่ localhost (ไม่ใช่ secure context)
   // copyText มี fallback ให้ และคืน false ถ้าคัดลอกไม่ได้จริง — จะได้ไม่ขึ้น "คัดลอกแล้ว" หลอกตา
@@ -145,7 +208,6 @@ export function DeviceConfigPage() {
 
   // ⚠️ ต้องเป็น \\ ไม่ใช่ \ — ใน template literal ของ JS เครื่องหมาย \ ท้ายบรรทัดคือ
   // "ต่อบรรทัด" (กลืน newline ทิ้ง) ผลคือคำสั่งทั้งหมดถูกยุบเหลือบรรทัดเดียวยาวเหยียด
-  // ต้องเลื่อนแนวนอนอ่าน และก็อปไปวางแล้วก็ยังใช้ได้ แต่ดูไม่ออกว่ามีกี่บรรทัด
   // เราต้องการ backslash จริงๆ ในผลลัพธ์ (เป็นตัวต่อบรรทัดของ shell) จึงต้อง escape เป็น \\
   const curlCode = `curl -X POST ${API_BASE_URL}/notify \\
   -H "X-API-Key: ${keyForCode}" \\
@@ -190,9 +252,7 @@ export function DeviceConfigPage() {
       </div>
 
       {/* 2 คอลัมน์ตายตัวบนจอกว้าง ไม่ใช่ auto-fit — auto-fit ตัดสินจำนวนคอลัมน์จากความกว้าง
-          ที่เหลือ ทำให้การ์ดฝั่งขวาบางจอได้ 1 คอลัมน์บางจอได้ 2 แล้วความสูงไม่สัมพันธ์กัน
-          ฝั่งซ้าย (ฟอร์มที่ต้องกรอก) กว้างกว่าเพราะมีช่องกรอกและรายการเหตุการณ์ยาวๆ
-          ฝั่งขวาเป็นข้อมูลอ่านอย่างเดียว จึงแคบกว่าได้โดยไม่เสียการอ่าน */}
+          ที่เหลือ ทำให้การ์ดฝั่งขวาบางจอได้ 1 คอลัมน์บางจอได้ 2 แล้วความสูงไม่สัมพันธ์กัน */}
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Card className="flex min-w-0 flex-col gap-4 p-4">
           <section className="flex flex-col gap-3">
@@ -207,62 +267,21 @@ export function DeviceConfigPage() {
             {eventTypes.length === 0 ? (
               <p className="text-caption leading-[1.8] text-warn">{T.allowed_events_empty_hint}</p>
             ) : (
-              /* แถวละเหตุการณ์ ไม่ใช่ชิปติ๊ก — เพราะแต่ละอันต้องเลือกกลุ่มผู้รับของตัวเอง
-                 ซึ่งเป็นข้อมูลที่ใส่ในชิปกลมๆ ไม่ได้ ติ๊กแล้วช่องเลือกกลุ่มจะโผล่ในแถวเดียวกัน */
-              <div className="flex flex-col gap-1.5">
-                {eventTypes.map((e) => {
-                  const on = e.id in links;
-                  return (
-                    <div
-                      key={e.id}
-                      className={cn(
-                        'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control border px-3 py-2.5 transition-colors',
-                        on ? 'border-brand bg-brand-soft/40' : 'border-line bg-surface',
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggle(e.id)}
-                        className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
-                      >
-                        <span
-                          className={cn(
-                            'grid size-4 shrink-0 place-items-center rounded-[4px] border text-[10px] font-bold',
-                            on ? 'border-brand bg-brand text-brand-ink' : 'border-line',
-                          )}
-                        >
-                          {on ? '✓' : ''}
-                        </span>
-                        <span className="min-w-0">
-                          <span className={cn('text-caption', on && 'font-semibold')}>{e.display_name}</span>
-                          <span className="ms-1.5 font-mono text-micro text-ink-2">{e.code}</span>
-                        </span>
-                      </button>
-
-                      {on ? (
-                        <label className="flex shrink-0 items-center gap-1.5">
-                          <span className="text-micro text-ink-2">{T.dev_call_group}</span>
-                          <select
-                            value={links[e.id] ?? ''}
-                            onChange={(ev) => setLinkGroup(e.id, ev.target.value ? Number(ev.target.value) : null)}
-                            className={cn(
-                              inputCls,
-                              'w-auto min-w-[150px] py-1.5 text-caption [color-scheme:light] dark:[color-scheme:dark]',
-                              links[e.id] == null && 'border-warn',
-                            )}
-                          >
-                            <option value="">{T.dev_call_group_none}</option>
-                            {groups.map((g) => (
-                              <option key={g.id} value={g.id}>
-                                {g.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
-                    </div>
-                  );
-                })}
+              <div className="flex flex-col gap-2">
+                {eventTypes.map((e) => (
+                  <EventTargetRow
+                    key={e.id}
+                    eventType={e}
+                    target={links[e.id]}
+                    groups={groups}
+                    contactsByGroup={contactsByGroup}
+                    onToggleEvent={() => toggleEvent(e.id)}
+                    onSetTarget={(t) => setTarget(e.id, t)}
+                    onToggleContact={(cid) => toggleContact(e.id, cid)}
+                    onMoveContact={(index, delta) => moveContact(e.id, index, delta)}
+                    contactById={contactById}
+                  />
+                ))}
               </div>
             )}
             {picked.length === 0 ? (
@@ -296,32 +315,31 @@ export function DeviceConfigPage() {
             ) : (
               <div className="flex flex-col gap-3.5">
                 {pickedTypes.map((et) => {
-                  // กลุ่มมาจากที่ผูกไว้กับอุปกรณ์ตัวนี้ ไม่ใช่กลุ่มเริ่มต้นของ event type
-                  const gid = links[et.id];
-                  const group = gid == null ? undefined : groups.find((g) => g.id === gid);
-                  const contacts: Contact[] = gid == null ? [] : (contactsByGroup[gid] ?? []);
+                  const { label, rows } = resolveRecipients(et.id);
                   return (
                     <div key={et.id} className="flex min-w-0 flex-col gap-1">
                       {/* leading สูงเพราะเป็นประโยคไทยหลายบรรทัด */}
                       <p className="text-caption leading-[2] text-ink-2">
                         ถ้ายิง <b className="font-mono text-ink">{et.code}</b>
-                        <br />→ โทรกลุ่ม{' '}
-                        {group ? (
-                          <b className="text-ink">{group.name}</b>
+                        <br />→{' '}
+                        {label ? (
+                          <>
+                            {T.dev_will_call} <b className="text-ink">{label}</b>
+                          </>
                         ) : (
-                          <b className="text-warn">{T.dev_call_group_missing}</b>
+                          <b className="text-warn">{T.dev_target_missing}</b>
                         )}
-                        {contacts.map((c) => (
+                        {rows.map((c, i) => (
                           <span key={c.id}>
                             <br />
-                            &nbsp;&nbsp;{c.order_index + 1}. <b className="font-mono text-ink">{c.phone_number}</b>
+                            &nbsp;&nbsp;{i + 1}. <b className="font-mono text-ink">{c.phone_number}</b>
                             {c.name ? ` (${c.name})` : ''}
                           </span>
                         ))}
-                        {contacts.length === 0 ? (
+                        {label && rows.length === 0 ? (
                           <>
                             <br />
-                            <span className="text-warn">— ยังไม่มีเบอร์ในกลุ่มนี้</span>
+                            <span className="text-warn">— {T.dev_group_empty}</span>
                           </>
                         ) : null}
                         {config ? (
@@ -351,9 +369,7 @@ export function DeviceConfigPage() {
 
           {/* ── วิธียิง API ของอุปกรณ์ตัวนี้ ────────────────────────────────
               ยกมาจากหน้า API guide แต่เติมค่าจริงของอุปกรณ์นี้ให้แล้ว (key prefix,
-              รหัสเหตุการณ์ที่ติ๊กไว้, base URL ที่กำลังเปิดอยู่)
-              หน้า API guide เป็นเอกสารกลางที่ต้องมาแทนค่าเอง ซึ่งเป็นจังหวะที่พลาดกันบ่อย
-              — พิมพ์รหัสเหตุการณ์ผิดตัวเดียวก็ได้ 404 โดยไม่รู้ว่าพิมพ์ผิดตรงไหน */}
+              รหัสเหตุการณ์ที่ติ๊กไว้, base URL ที่กำลังเปิดอยู่) */}
           <Card className="flex min-w-0 flex-col gap-3 p-4">
             <div>
               <h3 className="text-caption font-bold">{T.dev_api_title}</h3>
@@ -373,6 +389,7 @@ export function DeviceConfigPage() {
             <div className="flex flex-col gap-1 border-t border-line-2 pt-2.5">
               <span className="font-mono text-micro tracking-[0.1em] text-ink-2 uppercase">{T.dev_api_status}</span>
               {[
+                ['400', T.dev_api_status_400],
                 ['401', T.dev_api_status_401],
                 ['403', T.dev_api_status_403],
                 ['404', T.dev_api_status_404],
@@ -387,6 +404,196 @@ export function DeviceConfigPage() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * หนึ่งแถว = หนึ่งประเภทเหตุการณ์ + ผู้รับของคู่นี้
+ *
+ * ติ๊กแล้วส่วนเลือกผู้รับถึงจะกางออก — เหตุการณ์ที่อุปกรณ์นี้ยิงไม่ได้ ไม่ต้องมีผู้รับ
+ * และการโชว์ช่องเลือกไว้ทั้งที่ยังไม่ติ๊กจะทำให้หน้ายาวจนหาแถวที่เปิดอยู่ไม่เจอ
+ */
+function EventTargetRow({
+  eventType,
+  target,
+  groups,
+  contactsByGroup,
+  onToggleEvent,
+  onSetTarget,
+  onToggleContact,
+  onMoveContact,
+  contactById,
+}: {
+  eventType: EventType;
+  target: LinkTarget | undefined;
+  groups: Group[];
+  contactsByGroup: Record<number, Contact[]>;
+  onToggleEvent: () => void;
+  onSetTarget: (t: LinkTarget) => void;
+  onToggleContact: (contactId: number) => void;
+  onMoveContact: (index: number, delta: number) => void;
+  contactById: (id: number) => Contact | undefined;
+}) {
+  const { T } = useApp();
+  const on = target !== undefined;
+  const mode = target?.mode ?? 'group';
+  const pickedIds = target?.mode === 'contacts' ? target.contactIds : [];
+  const groupId = target?.mode === 'group' ? target.groupId : null;
+  const totalContacts = Object.values(contactsByGroup).flat().length;
+  const incomplete = on && (mode === 'group' ? groupId == null : pickedIds.length === 0);
+
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-2.5 rounded-control border px-3 py-2.5 transition-colors',
+        on ? 'border-brand bg-brand-soft/40' : 'border-line bg-surface',
+      )}
+    >
+      <button type="button" onClick={onToggleEvent} className="flex min-w-0 items-center gap-2.5 text-start">
+        <span
+          className={cn(
+            'grid size-4 shrink-0 place-items-center rounded-[4px] border text-[10px] font-bold',
+            on ? 'border-brand bg-brand text-brand-ink' : 'border-line',
+          )}
+        >
+          {on ? '✓' : ''}
+        </span>
+        <span className="min-w-0">
+          <span className={cn('text-caption', on && 'font-semibold')}>{eventType.display_name}</span>
+          <span className="ms-1.5 font-mono text-micro text-ink-2">{eventType.code}</span>
+        </span>
+      </button>
+
+      {on ? (
+        <div className="flex flex-col gap-2.5 border-t border-line-2 pt-2.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <span className="text-micro font-semibold text-ink-2">{T.dev_target_mode}</span>
+            {(['group', 'contacts'] as const).map((m) => (
+              <label key={m} className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name={`target-${eventType.id}`}
+                  checked={mode === m}
+                  onChange={() =>
+                    onSetTarget(m === 'group' ? { mode: 'group', groupId: null } : { mode: 'contacts', contactIds: [] })
+                  }
+                  className="accent-brand"
+                />
+                <span className="text-caption">{m === 'group' ? T.dev_target_group : T.dev_target_contacts}</span>
+              </label>
+            ))}
+          </div>
+
+          {mode === 'group' ? (
+            <select
+              value={groupId ?? ''}
+              onChange={(ev) => onSetTarget({ mode: 'group', groupId: ev.target.value ? Number(ev.target.value) : null })}
+              className={cn(
+                inputCls,
+                'w-auto min-w-[180px] py-1.5 text-caption [color-scheme:light] dark:[color-scheme:dark]',
+                groupId == null && 'border-warn',
+              )}
+            >
+              <option value="">{T.dev_call_group_none}</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name} ({(contactsByGroup[g.id] ?? []).length})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-micro leading-[1.7] text-ink-2">{T.dev_pick_contacts_hint}</p>
+              {totalContacts === 0 ? (
+                <p className="text-caption leading-[1.8] text-warn">{T.dev_no_contacts_at_all}</p>
+              ) : (
+                <div className="flex max-h-[260px] flex-col gap-2 overflow-y-auto rounded-control border border-line bg-surface p-2.5">
+                  {groups.map((g) => {
+                    const rows = contactsByGroup[g.id] ?? [];
+                    if (rows.length === 0) return null;
+                    return (
+                      <div key={g.id} className="flex flex-col gap-1">
+                        <span className="font-mono text-micro tracking-[0.08em] text-ink-2 uppercase">{g.name}</span>
+                        {rows.map((c) => {
+                          const order = pickedIds.indexOf(c.id);
+                          return (
+                            <label
+                              key={c.id}
+                              className="flex cursor-pointer items-center gap-2 rounded-control px-1.5 py-1 hover:bg-surface-2"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={order >= 0}
+                                onChange={() => onToggleContact(c.id)}
+                                className="accent-brand"
+                              />
+                              {/* เลขลำดับติดอยู่กับตัวเบอร์เลย จะได้เห็นทันทีว่าติ๊กแล้วโทรเป็นคนที่เท่าไหร่
+                                  โดยไม่ต้องเลื่อนไปดูรายการลำดับด้านล่าง */}
+                              <span
+                                className={cn(
+                                  'grid size-5 shrink-0 place-items-center rounded-full font-mono text-micro',
+                                  order >= 0 ? 'bg-brand text-brand-ink' : 'text-ink-2',
+                                )}
+                              >
+                                {order >= 0 ? order + 1 : '–'}
+                              </span>
+                              <span className="min-w-0 text-caption">
+                                <b className="font-mono">{c.phone_number}</b>
+                                {c.name ? <span className="ms-1.5 text-ink-2">{c.name}</span> : null}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {pickedIds.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <span className="font-mono text-micro tracking-[0.08em] text-ink-2 uppercase">
+                    {T.dev_call_order}
+                  </span>
+                  {pickedIds.map((cid, index) => {
+                    const c = contactById(cid);
+                    return (
+                      <div key={cid} className="flex items-center gap-2 text-caption">
+                        <span className="font-mono text-ink-2">{index + 1}.</span>
+                        <span className="min-w-0 flex-1 truncate">
+                          <b className="font-mono">{c?.phone_number ?? cid}</b>
+                          {c?.name ? <span className="ms-1.5 text-ink-2">{c.name}</span> : null}
+                        </span>
+                        <button
+                          type="button"
+                          title={T.move_up}
+                          disabled={index === 0}
+                          onClick={() => onMoveContact(index, -1)}
+                          className="rounded-control border border-line px-1.5 py-0.5 text-micro text-ink-2 disabled:opacity-40"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          title={T.move_down}
+                          disabled={index === pickedIds.length - 1}
+                          onClick={() => onMoveContact(index, 1)}
+                          className="rounded-control border border-line px-1.5 py-0.5 text-micro text-ink-2 disabled:opacity-40"
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {incomplete ? <p className="text-micro leading-[1.7] text-warn">{T.dev_target_missing}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -79,27 +79,44 @@ export interface Contact {
 
 // ─── Event types ──────────────────────────────────────────────────────────────
 
+/**
+ * ประเภทเหตุการณ์ = "คำพูด" ล้วน ไม่รู้จักกลุ่มหรือเบอร์ใดๆ
+ * ใครได้รับสายเป็นเรื่องของคู่ (อุปกรณ์ + เหตุการณ์) ดู ApiKeyEventTypeRef
+ */
 export interface EventType {
   id: number;
   code: string;
   display_name: string;
   message_template: string;
-  /** กลุ่มเริ่มต้น — ไม่บังคับแล้ว กลุ่มจริงเลือกที่หน้าตั้งค่าอุปกรณ์ */
-  group_id: number | null;
-  group_name: string | null;
   is_active: boolean;
 }
 
 // ─── API keys ─────────────────────────────────────────────────────────────────
 
-/** event type ที่ key นี้ได้รับอนุญาตให้ยิง (ย่อจาก EventType เต็ม) */
+/** เบอร์ที่ถูกเลือกไว้รายตัวสำหรับคู่ (อุปกรณ์ + เหตุการณ์) เรียงตามลำดับไล่สาย */
+export interface PickedContact {
+  id: number;
+  name: string | null;
+  phone_number: string;
+  group_id: number;
+  group_name: string;
+}
+
+/**
+ * event type ที่ key นี้ได้รับอนุญาตให้ยิง + ผู้รับสายของคู่นี้
+ *
+ * ผู้รับมีได้อย่างใดอย่างหนึ่งเท่านั้น:
+ *   group_id มีค่า   → โทรทั้งกลุ่มนั้น
+ *   contacts มีของ  → โทรเฉพาะเบอร์เหล่านี้ตามลำดับ
+ *   ไม่มีทั้งคู่      → ยังตั้งค่าไม่เสร็จ หน้าเว็บต้องเตือนให้เห็น
+ */
 export interface ApiKeyEventTypeRef {
   id: number;
   code: string;
   display_name: string;
-  /** กลุ่มที่อุปกรณ์นี้จะโทรหาเมื่อยิงเหตุการณ์นี้ (null = ใช้กลุ่มเริ่มต้นของเหตุการณ์) */
   group_id: number | null;
   group_name: string | null;
+  contacts: PickedContact[];
 }
 
 /**
@@ -121,10 +138,16 @@ export interface ApiKeyCreateResponse extends ApiKey {
   plaintext_key: string;
 }
 
-/** เหตุการณ์ที่อุปกรณ์ยิงได้ 1 รายการ + กลุ่มที่จะโทรหาเมื่อยิงเหตุการณ์นั้น */
+/**
+ * เหตุการณ์ที่อุปกรณ์ยิงได้ 1 รายการ + ผู้รับสายของคู่นี้
+ *
+ * ส่ง contact_ids มาพร้อมของ = เลือกเบอร์เอง (ลำดับใน array คือลำดับไล่สาย)
+ * ไม่งั้นใช้ทั้งกลุ่มตาม group_id — ส่งมาทั้งคู่ backend จะยึด contact_ids และล้าง group_id ทิ้ง
+ */
 export interface ApiKeyEventLink {
   event_type_id: number;
   group_id: number | null;
+  contact_ids?: number[] | null;
 }
 
 export interface ApiKeyUpdate {

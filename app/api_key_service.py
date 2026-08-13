@@ -14,7 +14,7 @@ import secrets
 from sqlalchemy.orm import Session
 
 from app.crypto import decrypt, encrypt
-from app.database import ApiKey, ApiKeyEventType, EventType
+from app.database import ApiKey, ApiKeyEventContact, ApiKeyEventType, Contact, EventType
 
 _KEY_PREFIX = "gw_live_"
 
@@ -35,6 +35,14 @@ class UnknownEventTypeError(Exception):
     """อ้างถึง event type id ที่ไม่มีอยู่จริง"""
 
 
+class UnknownContactError(Exception):
+    """อ้างถึงเบอร์ (contact id) ที่ไม่มีอยู่จริง"""
+
+
+class RecipientsNotConfiguredError(Exception):
+    """คู่ (อุปกรณ์ + เหตุการณ์) นี้ยังไม่รู้ว่าต้องโทรหาใคร — ข้อความอธิบายอยู่ใน args[0]"""
+
+
 def _resolve_event_types(db: Session, event_type_ids: list[int]) -> list[EventType]:
     if not event_type_ids:
         return []
@@ -45,32 +53,119 @@ def _resolve_event_types(db: Session, event_type_ids: list[int]) -> list[EventTy
     return found
 
 
+def _resolve_contacts(db: Session, contact_ids: list[int]) -> list[Contact]:
+    if not contact_ids:
+        return []
+    found = db.query(Contact).filter(Contact.id.in_(contact_ids)).all()
+    missing = set(contact_ids) - {c.id for c in found}
+    if missing:
+        raise UnknownContactError(f"ไม่พบเบอร์ (contact id): {sorted(missing)}")
+    return found
+
+
 def set_event_links(db: Session, api_key: ApiKey, links: list[dict]) -> None:
     """
-    ตั้งใหม่ทั้งชุดว่าอุปกรณ์นี้ยิงเหตุการณ์ไหนได้ และแต่ละเหตุการณ์โทรหากลุ่มไหน
+    ตั้งใหม่ทั้งชุดว่าอุปกรณ์นี้ยิงเหตุการณ์ไหนได้ และแต่ละเหตุการณ์โทรหาใคร
 
-    links = [{"event_type_id": 1, "group_id": 2 | None}, ...]
-    group_id = None แปลว่าใช้กลุ่มเริ่มต้นของ event type นั้น (ถ้ามี)
+    links = [{"event_type_id": 1, "group_id": 2 | None, "contact_ids": [5, 3] | None}, ...]
+
+    ผู้รับเลือกได้แบบใดแบบหนึ่งเท่านั้น:
+      - contact_ids มีของ → ใช้เบอร์เหล่านั้นตามลำดับที่ส่งมา และล้าง group_id ทิ้ง
+      - ไม่งั้น           → ใช้ทั้งกลุ่มตาม group_id
+    ที่ต้องบังคับให้เลือกอย่างเดียวเพราะถ้ายอมให้มีทั้งคู่ ต้องมีกติกาซ่อนอยู่อีกชั้นว่าอันไหนชนะ
+    ซึ่งเป็นสิ่งที่การรื้อรอบนี้ตั้งใจกำจัดออกไป — ดูหน้าตั้งค่าแล้วต้องรู้คำตอบทันทีโดยไม่ต้องเดา
+
+    ลำดับใน contact_ids คือลำดับไล่สาย (escalation) ของคู่นี้โดยเฉพาะ ไม่เกี่ยวกับลำดับในกลุ่มต้นทาง
+    คนเดียวกันจึงเป็นเบอร์แรกของเหตุการณ์หนึ่งและเป็นเบอร์สำรองของอีกเหตุการณ์ได้
 
     แทนที่ทั้งชุดเสมอ ไม่ merge ทีละรายการ — หน้าเว็บส่งสถานะเต็มมาทุกครั้งอยู่แล้ว
     การ merge จะทำให้ลบสิทธิ์ออกไม่ได้ (ไม่มีทางบอกว่า "อันนี้เอาออก" ด้วย payload แบบเพิ่มอย่างเดียว)
     """
     _resolve_event_types(db, [l["event_type_id"] for l in links])  # โยน error ถ้ามี id ที่ไม่มีจริง
-    db.query(ApiKeyEventType).filter(ApiKeyEventType.api_key_id == api_key.id).delete()
     for l in links:
+        _resolve_contacts(db, list(l.get("contact_ids") or []))
+
+    # ลบลูกก่อนแม่ — FK เป็น composite และแม้ CASCADE จะทำงาน แต่ถ้าสั่งลบแม่ผ่าน query
+    # แบบ bulk delete ตัว ORM จะไม่รู้จักแถวลูกที่ยังค้างใน session (identity map)
+    # แล้วรอบถัดไปอาจเจอ object ผีที่ชี้ไปยังแถวที่ไม่มีอยู่แล้ว
+    db.query(ApiKeyEventContact).filter(ApiKeyEventContact.api_key_id == api_key.id).delete()
+    db.query(ApiKeyEventType).filter(ApiKeyEventType.api_key_id == api_key.id).delete()
+    db.flush()
+
+    for l in links:
+        contact_ids = list(l.get("contact_ids") or [])
         db.add(ApiKeyEventType(
             api_key_id=api_key.id,
             event_type_id=l["event_type_id"],
-            group_id=l.get("group_id"),
+            group_id=None if contact_ids else l.get("group_id"),
         ))
+        for index, contact_id in enumerate(contact_ids):
+            db.add(ApiKeyEventContact(
+                api_key_id=api_key.id,
+                event_type_id=l["event_type_id"],
+                contact_id=contact_id,
+                order_index=index,
+            ))
+    db.flush()
 
 
-def group_for(api_key: ApiKey, event_type_id: int) -> int | None:
-    """กลุ่มที่ต้องโทรเมื่ออุปกรณ์นี้ยิงเหตุการณ์นี้ — None = ให้ผู้เรียกถอยไปใช้กลุ่มเริ่มต้น"""
+def link_for(api_key: ApiKey, event_type_id: int) -> ApiKeyEventType | None:
+    """แถวเชื่อมของคู่นี้ — None = อุปกรณ์นี้ไม่มีสิทธิ์ยิงเหตุการณ์นี้"""
     for link in api_key.event_type_links:
         if link.event_type_id == event_type_id:
-            return link.group_id
+            return link
     return None
+
+
+def resolve_recipients(
+    db: Session, api_key: ApiKey, event_type_id: int
+) -> tuple[list[dict], str, int | None]:
+    """
+    หาว่า "อุปกรณ์นี้ยิงเหตุการณ์นี้ แล้วต้องโทรหาใครบ้าง ตามลำดับไหน"
+
+    คืน (recipients, label, group_id)
+      recipients = [{"name": str | None, "phone": str}, ...] เรียงตามลำดับไล่สาย
+      label      = ป้ายชื่อผู้รับสำหรับแสดงในประวัติ (snapshot ไม่เปลี่ยนตามการแก้ทีหลัง)
+      group_id   = id ของกลุ่ม ถ้าผู้รับมาจากทั้งกลุ่ม / None ถ้าเลือกเบอร์เอง
+
+    โยน RecipientsNotConfiguredError พร้อมข้อความที่บอกได้ว่าต้องไปตั้งตรงไหน
+    ทั้งกรณี "ยังไม่ได้เลือกผู้รับ" และ "เลือกกลุ่มไว้แล้วแต่กลุ่มนั้นไม่มีเบอร์เลย"
+    การดักตั้งแต่ตอนรับคำขอดีกว่าปล่อยให้เข้าคิวไปตายตอน worker หยิบ เพราะฝั่งที่ยิงเข้ามา
+    จะได้รู้ทันทีจาก HTTP response ว่าตั้งค่าไม่ครบ ไม่ใช่ไปเห็นเอาทีหลังในประวัติ
+    """
+    link = link_for(api_key, event_type_id)
+    device = api_key.name
+
+    if link is not None and link.contacts:
+        picked = [c.contact for c in link.contacts if c.contact is not None]
+        recipients = [{"name": c.name, "phone": c.phone_number} for c in picked]
+        if not recipients:
+            raise RecipientsNotConfiguredError(
+                f"เบอร์ที่เลือกไว้ให้อุปกรณ์ '{device}' ถูกลบไปหมดแล้ว — "
+                "เลือกผู้รับใหม่ที่หน้าตั้งค่าอุปกรณ์"
+            )
+        first = picked[0]
+        label = (first.name or first.phone_number) if len(picked) == 1 else f"เลือกเอง {len(picked)} เบอร์"
+        return recipients, label, None
+
+    if link is not None and link.group is not None:
+        group = link.group
+        ordered = sorted(group.contacts, key=lambda c: (c.order_index, c.id))
+        if not ordered:
+            raise RecipientsNotConfiguredError(
+                f"กลุ่ม '{group.name}' ยังไม่มีเบอร์โทรสักเบอร์ — "
+                "เพิ่มเบอร์ที่หน้ากลุ่มผู้รับก่อน ไม่งั้นไม่มีใครได้รับสาย"
+            )
+        return (
+            [{"name": c.name, "phone": c.phone_number} for c in ordered],
+            group.name,
+            group.id,
+        )
+
+    raise RecipientsNotConfiguredError(
+        f"อุปกรณ์ '{device}' ยังไม่ได้เลือกผู้รับสำหรับเหตุการณ์นี้ — "
+        "ไปที่หน้าตั้งค่าอุปกรณ์ แล้วเลือกว่าจะโทรทั้งกลุ่มหรือเลือกเบอร์เอง"
+    )
 
 
 def create_api_key(db: Session, name: str, event_type_ids: list[int] | None = None) -> tuple[ApiKey, str]:

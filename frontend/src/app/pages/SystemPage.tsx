@@ -26,6 +26,7 @@ import { getConfig, updateConfig } from '../api/config';
 import { getGsmDetail, getPiDetail, getSystemInfo, restartGsm } from '../api/system';
 import { Btn, Card, Divider, PageHeader, Pill, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
+import { fromMinSec, toMinSec } from '../lib/duration';
 import { operatorName } from '../lib/operator';
 import type { AppConfig, GsmDetail, PiDetail, SystemInfo } from '../types';
 
@@ -321,22 +322,26 @@ export function SystemPage() {
                   help={T.retry_count_help}
                   example={T.retry_count_example(cfg.call_retry_count)}
                 />
-                <ConfigRow
+                <DurationRow
                   label={T.retry_delay}
-                  unit={T.unit_seconds}
+                  minutesUnit={T.unit_minutes}
+                  secondsUnit={T.unit_seconds}
                   min={5}
                   max={300}
+                  rangeHint={T.duration_range(5, 300)}
                   value={cfg.call_retry_delay_seconds}
                   onChange={(v) => set('call_retry_delay_seconds', v)}
                   onCommit={() => void flushSave()}
                   help={T.retry_delay_help}
                   example={T.retry_delay_example(cfg.call_retry_delay_seconds)}
                 />
-                <ConfigRow
+                <DurationRow
                   label={T.ring_timeout}
-                  unit={T.unit_seconds}
+                  minutesUnit={T.unit_minutes}
+                  secondsUnit={T.unit_seconds}
                   min={10}
                   max={120}
+                  rangeHint={T.duration_range(10, 120)}
                   value={cfg.call_ring_timeout_seconds}
                   onChange={(v) => set('call_ring_timeout_seconds', v)}
                   onCommit={() => void flushSave()}
@@ -523,7 +528,7 @@ function ConfigRow({
 }) {
   return (
     <div className="flex flex-col gap-2 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-5">
-      <div className="flex shrink-0 flex-col gap-1.5 sm:w-[190px]">
+      <div className="flex shrink-0 flex-col gap-1.5 sm:w-[250px]">
         <label className="text-caption font-semibold">{label}</label>
         <div className="flex items-center gap-2">
           <input
@@ -538,6 +543,88 @@ function ConfigRow({
           />
           <span className="text-caption whitespace-nowrap text-ink-2">{unit}</span>
         </div>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1 sm:pt-6">
+        <p className="text-caption leading-[1.8] text-ink-2">{help}</p>
+        <p className="text-micro leading-[1.7] text-ink-2">
+          <span className="font-mono">→ </span>
+          {example}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ช่องกรอก "ระยะเวลา" แบบแยกนาทีกับวินาที
+ *
+ * backend รับ-ส่งเป็นวินาทีล้วนเหมือนเดิมทุกประการ (call_retry_delay_seconds,
+ * call_ring_timeout_seconds) คอมโพเนนต์นี้แค่แตกค่าให้กรอกง่ายแล้วประกอบกลับก่อนส่ง
+ *
+ * ที่ต้องแยกเพราะช่องเดียวเริ่มอ่านไม่ออกทันทีที่ค่าเกินหนึ่งนาที — ตั้ง 120 แล้วต้อง
+ * หารเองในหัวว่าคือ 2 นาที ยิ่งมาเจอข้อความตัวอย่างที่คำนวณผิดพอดี (ดู lib/duration.ts)
+ * ยิ่งชวนเข้าใจผิดหนักขึ้นไปอีก
+ *
+ * ค่าที่ประกอบได้อาจเกินเพดานชั่วคราวระหว่างพิมพ์ (เช่น 2 นาที 30 วินาที ในช่องที่รับสูงสุด
+ * 120 วินาที) ปล่อยให้พิมพ์ไปก่อนแล้วให้ flushSave clamp ตอนบันทึก — เหมือนที่ ConfigRow
+ * ทำอยู่ ถ้า clamp ทันทีที่พิมพ์จะแก้ค่าใต้มือคนกรอกจนพิมพ์ต่อไม่ได้
+ */
+function DurationRow({
+  label,
+  minutesUnit,
+  secondsUnit,
+  max,
+  rangeHint,
+  value,
+  onChange,
+  onCommit,
+  help,
+  example,
+}: {
+  label: string;
+  minutesUnit: string;
+  secondsUnit: string;
+  min: number;
+  max: number;
+  rangeHint: string;
+  value: number;
+  onChange: (v: number) => void;
+  onCommit: () => void;
+  help: string;
+  example: string;
+}) {
+  const { minutes, seconds } = toMinSec(value);
+  const boxCls = cn(inputCls, 'w-[64px] font-mono');
+
+  return (
+    <div className="flex flex-col gap-2 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-5">
+      <div className="flex shrink-0 flex-col gap-1.5 sm:w-[250px]">
+        <label className="text-caption font-semibold">{label}</label>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <input
+            type="number"
+            min={0}
+            max={Math.floor(max / 60)}
+            aria-label={`${label} (${minutesUnit})`}
+            className={boxCls}
+            value={minutes}
+            onChange={(e) => onChange(fromMinSec(Number(e.target.value), seconds))}
+            onBlur={onCommit}
+          />
+          <span className="text-caption whitespace-nowrap text-ink-2">{minutesUnit}</span>
+          <input
+            type="number"
+            min={0}
+            max={59}
+            aria-label={`${label} (${secondsUnit})`}
+            className={boxCls}
+            value={seconds}
+            onChange={(e) => onChange(fromMinSec(minutes, Number(e.target.value)))}
+            onBlur={onCommit}
+          />
+          <span className="text-caption whitespace-nowrap text-ink-2">{secondsUnit}</span>
+        </div>
+        <p className="text-micro leading-[1.7] text-ink-2">{rangeHint}</p>
       </div>
       <div className="flex min-w-0 flex-col gap-1 sm:pt-6">
         <p className="text-caption leading-[1.8] text-ink-2">{help}</p>

@@ -16,6 +16,7 @@ worker เช็ค AppSettings.updated_at เป็นระยะ (ทุก c
 ไม่มี event_type_id จะ fallback ไปอ่านจาก .env ตามกลไกเดิมเพื่อไม่ให้ job ค้างคาพัง
 """
 import datetime
+import json
 import logging
 import time
 
@@ -50,6 +51,27 @@ def _log_attempt(db: Session, job: CallJob, phone_number: str, result: str, deta
     db.commit()
 
 
+def _phones_from_snapshot(job) -> list[str] | None:
+    """
+    เบอร์ตามลำดับไล่สายจาก call_jobs.recipients — None = งานนี้ไม่มี snapshot (งานเก่า)
+
+    แยก None ออกจาก [] ให้ชัด เพราะสองอย่างนี้ต้องทำคนละแบบ: None แปลว่า "ไม่มีข้อมูล
+    ให้ถอยไปหาทางอื่น" ส่วน [] แปลว่า "ตัดสินใจแล้วว่าไม่มีใครให้โทร" ซึ่งต้องจบเป็น failed
+    ไม่ใช่ไปเดาเบอร์จากที่อื่นมาโทรแทน
+
+    JSON ที่พังถือเป็นไม่มี snapshot — ไม่ปล่อยให้ exception ล้มทั้ง worker thread
+    เพราะงานเดียวที่ข้อมูลเสียไม่ควรทำให้ทั้งคิวหยุดเดิน
+    """
+    if not job.recipients:
+        return None
+    try:
+        rows = json.loads(job.recipients)
+        return [r["phone"] for r in rows if r.get("phone")]
+    except (ValueError, TypeError, AttributeError, KeyError):
+        logger.exception("Job %s: อ่าน recipients ไม่ได้ ถอยไปใช้ข้อมูลกลุ่มแทน", job.id)
+        return None
+
+
 def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig):
     """
     ประมวลผลงานโทร 1 รายการตาม state machine:
@@ -57,32 +79,30 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
         CONNECTED -> stream audio -> DONE
         NO_ANSWER/BUSY -> retry (ถ้ายังไม่ครบรอบ) -> escalate (เบอร์ถัดไป) -> ครบทุกเบอร์แล้ว -> FAILED
     """
-    # ── หาเบอร์จากกลุ่มที่ถูกตัดสินใจไว้แล้วตอนรับคำขอ (call_jobs.group_id) ────────
-    # ห้ามกลับไปอ่าน event_type.group_id เป็นตัวหลักอีก นั่นคือ "กลุ่มเริ่มต้นของเหตุการณ์"
-    # ซึ่งเป็นคนละค่ากับ "กลุ่มของคู่ (อุปกรณ์ + เหตุการณ์)" ที่ผู้ใช้ตั้งไว้จริงในหน้าอุปกรณ์
-    # เดิมอ่านผิดตัว ผลคือกลุ่มรายอุปกรณ์ไม่เคยถูกใช้ และเหตุการณ์ที่ไม่ได้ตั้งกลุ่มเริ่มต้น
-    # จะได้ลิสต์เบอร์ว่างแล้วปิดงานเป็น failed ทันทีโดยไม่ได้โทรสักครั้ง
-    if job.group_id is not None:
+    # ── เบอร์ที่จะโทร: อ่านจาก snapshot ที่ติดมากับงาน (call_jobs.recipients) ──────
+    # ห้ามกลับไปอ่านกลุ่มสดๆ ตรงนี้เป็นตัวหลัก เหตุผลอยู่ที่ docstring ของ CallJob.recipients
+    # โดยย่อ: ผู้รับอาจไม่ได้มาจากกลุ่มเลย (เลือกเบอร์เองรายตัว) และการอ่านสดทำให้
+    # งานที่กำลังไล่สายอยู่เปลี่ยนผู้รับกลางคันถ้ามีคนแก้กลุ่มพอดี
+    contacts = _phones_from_snapshot(job)
+    if contacts is None and job.group_id is not None:
+        # งานเก่าที่เข้าคิวไว้ก่อนมีคอลัมน์ recipients — ถอยไปอ่านจากกลุ่มตามเดิม
+        logger.warning("Job %s: ไม่มี recipients (งานเก่า) ถอยไปอ่านเบอร์จากกลุ่ม", job.id)
         contacts = get_ordered_phone_numbers(db, job.group_id)
-    elif job.event_type_id is not None and job.event_type is not None:
-        # งานเก่าที่เข้าคิวไว้ก่อนมีคอลัมน์ group_id — ถอยไปใช้กลุ่มเริ่มต้นของเหตุการณ์ตามเดิม
-        logger.warning("Job %s: ไม่มี group_id (งานเก่า) ถอยไปใช้กลุ่มเริ่มต้นของเหตุการณ์", job.id)
-        contacts = get_ordered_phone_numbers(db, job.event_type.group_id)
-    else:
+    elif contacts is None:
         logger.warning(
-            "Job %s: ไม่มี event_type_id (job เก่าก่อน migration) ใช้ .env fallback สำหรับ '%s'",
+            "Job %s: ไม่มีทั้ง recipients และ group_id (job เก่าก่อน migration) ใช้ .env fallback สำหรับ '%s'",
             job.id, job.priority_group,
         )
         contacts = env_settings.get_contacts(job.priority_group)
 
     if not contacts:
-        logger.error("ไม่มีเบอร์ติดต่อสำหรับกลุ่ม %s", job.priority_group)
+        logger.error("ไม่มีเบอร์ติดต่อสำหรับผู้รับ %s", job.priority_group)
         update_job_status(db, job, CallStatus.FAILED)
         return
 
     if job.contact_index >= len(contacts):
         # escalation chain หมดแล้ว ไม่มีใครรับสายสักคน — ไม่มี SMS fallback แล้ว จบที่ FAILED ตรงๆ
-        logger.error("Job %s: ครบทุกเบอร์ในกลุ่มแล้วไม่มีใครรับสาย", job.id)
+        logger.error("Job %s: ครบทุกเบอร์แล้วไม่มีใครรับสาย", job.id)
         update_job_status(db, job, CallStatus.FAILED)
         return
 

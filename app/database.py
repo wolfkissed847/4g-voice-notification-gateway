@@ -9,6 +9,7 @@ import logging
 import os
 
 from sqlalchemy import (
+    ForeignKeyConstraint,
     create_engine, event, Column, ForeignKey, Integer, MetaData, String, DateTime, Enum, Text
 )
 from sqlalchemy.engine import Engine
@@ -126,7 +127,10 @@ class Contact(Base):
 class EventType(Base):
     """
     ประเภทเหตุการณ์ที่ระบบภายนอกยิงเข้ามาผ่าน /notify (เช่น power_outage, server_down)
-    เก็บ "ข้อความที่จะพูด" เป็นหลัก — เป็นคลังตัวเลือกที่อุปกรณ์หลายตัวหยิบไปใช้ร่วมกันได้
+
+    เก็บ "ข้อความที่จะพูด" อย่างเดียว — ไม่รู้จักกลุ่มหรือเบอร์ใดๆ ทั้งสิ้น
+    เป็นคลังคำพูดกลางที่อุปกรณ์หลายตัวหยิบไปใช้ร่วมกันได้ ใครยิงแล้วโทรหาใคร
+    เป็นเรื่องของคู่ (อุปกรณ์ + เหตุการณ์) ทั้งหมด ดู ApiKeyEventType
     """
     __tablename__ = "event_types"
 
@@ -134,19 +138,9 @@ class EventType(Base):
     code = Column(String, nullable=False, unique=True, index=True)
     display_name = Column(String, nullable=False)
     message_template = Column(Text, nullable=False)
-    # กลุ่มผู้รับ "เริ่มต้น" ของเหตุการณ์นี้ — ไม่บังคับแล้ว (เดิม nullable=False)
-    #
-    # ที่เปลี่ยนเพราะเดิมต้องเลือกกลุ่มตั้งแต่ตอนสร้างเหตุการณ์ ทั้งที่ตอนนั้นยังไม่รู้ว่า
-    # อุปกรณ์ตัวไหนจะเอาไปใช้และควรโทรหาใคร — อุปกรณ์คนละตัวใช้เหตุการณ์เดียวกัน
-    # แต่ต้องโทรหาคนละกลุ่มเป็นเรื่องปกติ (ปั๊มตึก A แจ้งช่างตึก A, ปั๊มตึก B แจ้งช่างตึก B)
-    # ตอนนี้กลุ่มจริงเลือกที่ "หน้าตั้งค่าอุปกรณ์" (ดู ApiKeyEventType.group_id)
-    # ค่านี้เหลือไว้เป็นค่าสำรองสำหรับการทดสอบจาก dashboard ที่ไม่ได้ยิงผ่านอุปกรณ์
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
     is_active = Column(String, default="true")  # เก็บเป็น string ตามรูปแบบเดิมของ AppSettings
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-
-    group = relationship("Group", backref="event_types")
 
 
 class ApiKeyEventType(Base):
@@ -164,13 +158,62 @@ class ApiKeyEventType(Base):
     event_type_id = Column(
         Integer, ForeignKey("event_types.id", ondelete="CASCADE"), primary_key=True
     )
-    # กลุ่มที่จะโทรหา "เมื่ออุปกรณ์ตัวนี้ยิงเหตุการณ์นี้" — จุดที่ผูกทั้งสามอย่างเข้าด้วยกัน
-    # null = ใช้กลุ่มเริ่มต้นของ event type (ถ้ามี)
+    # ── ผู้รับสายของคู่นี้ เลือกได้แบบใดแบบหนึ่ง ───────────────────────────────
+    #   1) ทั้งกลุ่ม      → group_id ชี้ไปที่กลุ่ม, ตาราง api_key_event_contacts ว่าง
+    #   2) เลือกเบอร์เอง  → group_id = NULL, เบอร์ที่เลือกอยู่ใน api_key_event_contacts
+    # ไม่มีทั้งสองอย่าง = ยังตั้งค่าไม่เสร็จ ระบบจะปฏิเสธคำขอพร้อมบอกว่าต้องไปตั้งตรงไหน
+    #
+    # เดิมมีทางที่สามคือ "ถอยไปใช้กลุ่มเริ่มต้นของเหตุการณ์" ซึ่งตัดทิ้งแล้ว —
+    # ประเภทเหตุการณ์ไม่รู้จักกลุ่มอีกต่อไป (ดู EventType) การมีค่าเริ่มต้นซ่อนอยู่อีกชั้น
+    # ทำให้ตอบคำถาม "ยิงเหตุการณ์นี้แล้วใครจะได้รับสาย" ต้องไล่ดูสองที่เสมอ
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
 
     # มี relationship ไว้เพื่ออ่านชื่อกลุ่มได้จากตัว link เอง ไม่ต้องส่ง session ไปด้วย
     # (ชั้นที่แปลงเป็น response ไม่มี db ให้ใช้ และไม่ควรต้องมี)
     group = relationship("Group")
+    contacts = relationship(
+        "ApiKeyEventContact",
+        order_by="ApiKeyEventContact.order_index",
+        cascade="all, delete-orphan",
+        backref="link",
+    )
+
+
+class ApiKeyEventContact(Base):
+    """
+    เบอร์ที่ "เลือกเอง" สำหรับคู่ (อุปกรณ์ + เหตุการณ์) — ใช้แทนการโทรทั้งกลุ่ม
+
+    มีไว้เพราะการเลือกได้แค่ระดับกลุ่มหยาบเกินไปในการใช้งานจริง: กลุ่ม 'ทีมช่าง' มี 5 คน
+    แต่เรื่อง 'ปั๊มน้ำตึก A ดับ' ควรโทรหาแค่ 2 คนที่ดูแลตึกนั้น การบังคับให้แตกกลุ่มใหม่
+    ทุกครั้งที่ผู้รับต่างไปนิดเดียว ทำให้เกิดกลุ่มซ้ำๆ ที่มีสมาชิกเหลื่อมกันเต็มไปหมด
+    แล้วเบอร์คนเดิมไปโผล่หลายกลุ่ม เปลี่ยนเบอร์ทีต้องไล่แก้ทุกกลุ่ม
+
+    order_index = ลำดับการไล่สาย (escalation) ของคู่นี้โดยเฉพาะ ไม่เกี่ยวกับลำดับในกลุ่มต้นทาง
+    คนเดียวกันจึงเป็นเบอร์แรกของเหตุการณ์หนึ่งและเป็นเบอร์สำรองของอีกเหตุการณ์ได้
+
+    FK ผูกกลับไปที่คู่ (api_key_id, event_type_id) แบบ composite ทำให้ลบสิทธิ์ของอุปกรณ์
+    หรือลบตัวอุปกรณ์/เหตุการณ์ทิ้ง แถวพวกนี้หายตามเองโดยไม่ต้องไล่ลบในโค้ด
+    ส่วน contact_id ผูกกับเบอร์ตรงๆ — ลบเบอร์ออกจากกลุ่มแล้วเบอร์นั้นหลุดจากทุกอุปกรณ์ทันที
+    ซึ่งเป็นสิ่งที่ต้องการ: เบอร์ที่ถูกลบต้องไม่มีทางถูกโทรอีก
+    """
+    __tablename__ = "api_key_event_contacts"
+
+    api_key_id = Column(Integer, primary_key=True)
+    event_type_id = Column(Integer, primary_key=True)
+    contact_id = Column(
+        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), primary_key=True
+    )
+    order_index = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["api_key_id", "event_type_id"],
+            ["api_key_event_types.api_key_id", "api_key_event_types.event_type_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    contact = relationship("Contact")
 
 
 class ApiKey(Base):
@@ -247,7 +290,16 @@ class CallJob(Base):
     # SET NULL ด้วยเหตุผลเดียวกับ api_key_id/event_type_id — ลบกลุ่มแล้วประวัติต้องไม่หาย
     # (ชื่อกลุ่ม ณ ตอนนั้นถูกเก็บไว้ใน priority_group อยู่แล้ว)
     group_id = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True, index=True)
-    priority_group = Column(String, nullable=False)  # snapshot ชื่อ group ตอนสั่งโทร (สำหรับแสดงผลใน history)
+    priority_group = Column(String, nullable=False)  # snapshot ป้ายชื่อผู้รับตอนสั่งโทร (สำหรับแสดงผลใน history)
+    # รายชื่อผู้รับที่ "ตัดสินใจเสร็จแล้ว" ตอนรับคำขอ — JSON: [{"name": ..., "phone": ...}, ...]
+    # เรียงตามลำดับการไล่สาย worker เดินตามลิสต์นี้ด้วย contact_index ตรงๆ
+    #
+    # ที่ต้อง snapshot ไม่ใช่ไปอ่านกลุ่มสดๆ ตอนจะโทรแต่ละครั้ง:
+    #   - ผู้รับอาจไม่ได้มาจากกลุ่มเลย (เลือกเบอร์เองรายตัว) จึงไม่มี group_id ให้ไปอ่าน
+    #   - งานหนึ่งกินเวลาหลายนาที ถ้ามีคนแก้กลุ่มระหว่างนั้น เบอร์ที่เหลือจะเปลี่ยนกลางคัน
+    #     และ contact_index ที่ชี้อยู่จะกระโดดไปคนละคนโดยไม่มีอะไรบอก
+    #   - ประวัติย้อนหลังต้องตอบได้ว่า "ตอนนั้นโทรหาใครบ้าง" ไม่ใช่ "ตอนนี้กลุ่มนั้นมีใคร"
+    recipients = Column(Text, nullable=True)
     # อุปกรณ์ที่เป็นต้นเหตุ — api_key_id ไว้ filter/นับการใช้งานรายอุปกรณ์
     # ส่วน source_device เป็น snapshot ชื่อ ณ ตอนนั้น ด้วยเหตุผลเดียวกับ priority_group
     # (เปลี่ยนชื่ออุปกรณ์ทีหลังแล้วประวัติเก่าต้องไม่เปลี่ยนตาม)

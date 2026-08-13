@@ -43,11 +43,13 @@ class TestNotifyRequest(NotifyRequest):
     """
     คำขอทดสอบจากหน้าเว็บ — เหมือน /notify แต่ระบุได้ว่า "ทดสอบในนามอุปกรณ์ตัวไหน"
 
-    จำเป็นตั้งแต่กลุ่มผู้รับย้ายไปผูกที่คู่ (อุปกรณ์ + เหตุการณ์) เพราะถ้าไม่บอกว่าเป็นอุปกรณ์ไหน
-    ระบบไม่มีทางรู้เลยว่าต้องโทรหากลุ่มไหน — ปุ่มทดสอบบนหน้าอุปกรณ์จึงต้องส่งค่านี้มาด้วย
-    ไม่งั้นจะทดสอบไม่ตรงกับที่อุปกรณ์จริงจะทำ ซึ่งทำให้การทดสอบไม่มีความหมาย
+    device_id บังคับ ไม่ใช่ optional: ผู้รับสายถูกตัดสินที่คู่ (อุปกรณ์ + เหตุการณ์) จุดเดียว
+    ไม่บอกว่าเป็นอุปกรณ์ไหน = ไม่มีทางรู้ว่าต้องโทรหาใคร ไม่มีค่าเริ่มต้นให้ถอยไปใช้อีกแล้ว
+
+    ผลพลอยได้คือการทดสอบตรงกับของจริง 100% — เดินเส้นทางเดียวกับตอนอุปกรณ์ยิงเข้ามาเอง
+    ทั้งการตรวจสิทธิ์ การหาผู้รับ และชื่ออุปกรณ์ที่ถูกพูดในสาย
     """
-    device_id: int | None = Field(None, description="id ของอุปกรณ์ที่ต้องการจำลอง (null = ทดสอบกลางๆ)")
+    device_id: int = Field(..., description="id ของอุปกรณ์ที่ต้องการจำลอง")
 
 
 class NotifyResponse(BaseModel):
@@ -99,25 +101,23 @@ class EventTypeCreateRequest(BaseModel):
     code: str = Field(..., min_length=1, max_length=64, description="รหัสไม่ซ้ำ เช่น power_outage")
     display_name: str = Field(..., min_length=1, max_length=120)
     message_template: str = Field(..., min_length=1, max_length=MAX_MESSAGE_CHARS)
-    # ไม่บังคับแล้ว — กลุ่มผู้รับจริงเลือกที่หน้าตั้งค่าอุปกรณ์ (ต่ออุปกรณ์ต่อเหตุการณ์)
-    # ค่านี้เหลือไว้เป็นกลุ่มสำรองสำหรับการทดสอบจาก dashboard ที่ไม่ได้ยิงผ่านอุปกรณ์
-    group_id: int | None = None
 
 
 class EventTypeUpdateRequest(BaseModel):
     display_name: str | None = Field(None, min_length=1, max_length=120)
     message_template: str | None = Field(None, min_length=1, max_length=MAX_MESSAGE_CHARS)
-    group_id: int | None = None
     is_active: bool | None = None
 
 
 class EventTypeResponse(BaseModel):
+    """
+    ประเภทเหตุการณ์เป็นแค่ "คำพูด" — ไม่มี group_id/group_name อีกต่อไป
+    ใครได้รับสายเป็นเรื่องของคู่ (อุปกรณ์ + เหตุการณ์) ดู ApiKeyEventTypeRef
+    """
     id: int
     code: str
     display_name: str
     message_template: str
-    group_id: int | None = None
-    group_name: str | None = None
     is_active: bool
 
 
@@ -129,9 +129,18 @@ class ApiKeyCreateRequest(BaseModel):
 
 
 class ApiKeyEventLink(BaseModel):
-    """เหตุการณ์ที่อุปกรณ์ยิงได้ 1 รายการ + กลุ่มที่จะโทรหาเมื่อยิงเหตุการณ์นั้น"""
+    """
+    เหตุการณ์ที่อุปกรณ์ยิงได้ 1 รายการ + ผู้รับสายของคู่นี้
+
+    เลือกได้แบบใดแบบหนึ่ง: contact_ids มีของ = เลือกเบอร์เอง (เรียงตามลำดับไล่สาย)
+    ไม่งั้นใช้ทั้งกลุ่มตาม group_id — ถ้าส่งมาทั้งคู่ ฝั่ง service จะยึด contact_ids
+    และล้าง group_id ทิ้ง เพื่อไม่ให้มีสองคำตอบค้างอยู่ในฐานข้อมูลพร้อมกัน
+    """
     event_type_id: int
     group_id: int | None = None
+    contact_ids: list[int] | None = Field(
+        None, max_length=50, description="เบอร์ที่เลือกเอง เรียงตามลำดับที่จะไล่โทร"
+    )
 
 
 class ApiKeyUpdateRequest(BaseModel):
@@ -143,13 +152,26 @@ class ApiKeyUpdateRequest(BaseModel):
     event_links: list[ApiKeyEventLink] | None = None
 
 
+class PickedContactRef(BaseModel):
+    """เบอร์ที่ถูกเลือกไว้รายตัวสำหรับคู่ (อุปกรณ์ + เหตุการณ์) เรียงตามลำดับไล่สาย"""
+    id: int
+    name: str | None = None
+    phone_number: str
+    group_id: int
+    group_name: str
+
+
 class ApiKeyEventTypeRef(BaseModel):
     id: int
     code: str
     display_name: str
-    # กลุ่มที่อุปกรณ์ตัวนี้จะโทรหาเมื่อยิงเหตุการณ์นี้ (null = ใช้กลุ่มเริ่มต้นของเหตุการณ์)
+    # ผู้รับของคู่นี้ — มีได้อย่างใดอย่างหนึ่งเท่านั้น
+    #   group_id/group_name มีค่า = โทรทั้งกลุ่มนั้น
+    #   contacts มีของ           = โทรเฉพาะเบอร์เหล่านี้ตามลำดับ
+    #   ไม่มีทั้งคู่              = ยังตั้งค่าไม่เสร็จ หน้าเว็บต้องเตือนให้เห็น
     group_id: int | None = None
     group_name: str | None = None
+    contacts: list[PickedContactRef] = Field(default_factory=list)
 
 
 class ApiKeyResponse(BaseModel):
@@ -270,7 +292,18 @@ class AppConfigResponse(BaseModel):
 
 
 class AppConfigUpdateRequest(BaseModel):
-    """ทุก field เป็น optional — ส่งเฉพาะที่ต้องการแก้ ที่เหลือคงค่าเดิม"""
-    call_retry_count: int | None = None
-    call_retry_delay_seconds: int | None = None
-    call_ring_timeout_seconds: int | None = None
+    """
+    ทุก field เป็น optional — ส่งเฉพาะที่ต้องการแก้ ที่เหลือคงค่าเดิม
+
+    ขอบเขตต้องตรงกับ CFG_LIMITS ในหน้าเว็บ (frontend/src/app/pages/SystemPage.tsx)
+    เดิมไม่มีการตรวจฝั่งนี้เลย ทั้งที่คอมเมนต์ฝั่งเว็บเขียนไว้ว่า "ต้องตรงกับ validation ฝั่ง /config"
+    ช่อง <input min/max> กันได้แค่คนที่กรอกผ่านหน้าเว็บ ใครยิง PUT /config ตรงๆ ผ่านไปได้หมด
+    ค่าที่หลุดเข้ามาแล้วเจ็บจริง:
+      - ring_timeout สูงลิ่ว → dial() วนรอสายเดียวได้เป็นชั่วโมง worker เป็น thread เดียว
+        ทั้งคิวหยุดรอไปด้วย และหน้าเว็บจะดูเหมือนระบบค้างโดยไม่มี error ให้เห็น
+      - retry_delay = 0    → ไม่รับสายแล้วโทรซ้ำทันทีไม่มีเว้น = สแปมโทรศัพท์ปลายทาง
+      - ค่าติดลบ           → retry_count ติดลบมีผลเท่ากับ 0 แต่เงียบ อ่าน config แล้วงงว่าทำไมไม่ retry
+    """
+    call_retry_count: int | None = Field(default=None, ge=0, le=10)
+    call_retry_delay_seconds: int | None = Field(default=None, ge=5, le=300)
+    call_ring_timeout_seconds: int | None = Field(default=None, ge=10, le=120)

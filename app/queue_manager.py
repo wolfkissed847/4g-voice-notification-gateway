@@ -19,6 +19,7 @@ def enqueue_job(
     event_type_id: int,
     priority_group: str,
     group_id: int | None = None,
+    recipients: str | None = None,
     api_key_id: int | None = None,
     source_device: str | None = None,
     event_type_code: str | None = None,
@@ -28,14 +29,16 @@ def enqueue_job(
     priority_group และ source_device เป็น snapshot ณ ตอนสั่งโทร ใช้แสดงผลใน history เท่านั้น
     (api_key_id เป็น FK จริงไว้ filter/นับการใช้งานรายอุปกรณ์)
 
-    group_id คือกลุ่มที่ "ตัดสินใจแล้ว" ว่าจะโทรหาใคร — ต่างจาก priority_group ที่เป็นแค่ชื่อ
-    สำหรับแสดงผล ค่านี้เป็นตัวที่ worker ใช้หาเบอร์จริง จึงต้องส่งมาทุกครั้ง
+    recipients คือรายชื่อผู้รับที่ "ตัดสินใจเสร็จแล้ว" (JSON) ซึ่ง worker ใช้หาเบอร์จริง
+    ต่างจาก priority_group ที่เป็นแค่ป้ายชื่อสำหรับแสดงผล ส่วน group_id มีไว้ให้ /history
+    กรองตามกลุ่มได้ และจะเป็น null เมื่อผู้รับถูกเลือกเป็นรายเบอร์ (ไม่ได้มาจากกลุ่มไหน)
     """
     job = CallJob(
         message=message,
         event_type_id=event_type_id,
         priority_group=priority_group,
         group_id=group_id,
+        recipients=recipients,
         api_key_id=api_key_id,
         source_device=source_device,
         event_type_code=event_type_code,
