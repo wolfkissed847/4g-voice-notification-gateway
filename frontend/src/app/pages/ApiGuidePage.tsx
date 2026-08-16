@@ -56,7 +56,8 @@ const RESP_ERR = `{
 
 type CodeLang = 'curl' | 'python' | 'esp32';
 
-export function ApiGuidePage() {
+/** embedded = ถูกฝังอยู่ในหน้าคู่มือที่มีหัวข้อของตัวเองแล้ว จึงไม่ต้องขึ้นหัวข้อซ้ำ */
+export function ApiGuidePage({ embedded = false }: { embedded?: boolean } = {}) {
   const { T, lang } = useApp();
   const [codeLang, setCodeLang] = useState<CodeLang>('curl');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -180,12 +181,12 @@ export function ApiGuidePage() {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <PageHeader title={T.api_title} meta={T.api_sub} />
+      {embedded ? null : <PageHeader title={T.api_title} meta={T.api_sub} />}
 
       {/* แถบ endpoint เต็มความกว้าง ตามภาพ — base URL ดึงจาก VITE_API_BASE_URL จริง
           ไม่ hardcode ให้คนเข้าใจผิดว่าต้องยิงไปที่ IP ในเอกสาร */}
       <Card className="flex flex-wrap items-center gap-3 px-4 py-3.5">
-        <span className="rounded-control bg-ok px-2.5 py-1 font-mono text-micro font-bold text-white">POST</span>
+        <span className="rounded-control bg-ok-strong px-2.5 py-1 font-mono text-micro font-bold text-status-ink">POST</span>
         <span className="font-mono text-lead font-bold">/notify</span>
         <span className="ms-auto min-w-0 truncate font-mono text-caption text-ink-2">
           {T.api_base_label}: {API_BASE_URL}
@@ -207,7 +208,7 @@ export function ApiGuidePage() {
                   </span>
                   <span className="min-w-0 flex-1 basis-[180px] text-caption leading-[1.8]">{s.text}</span>
                   {s.to ? (
-                    <Link to={s.to} className="text-caption font-medium whitespace-nowrap text-brand">
+                    <Link to={s.to} className="text-caption font-medium whitespace-nowrap text-brand-strong">
                       {T.dash_view_all} ›
                     </Link>
                   ) : null}
@@ -252,8 +253,8 @@ export function ApiGuidePage() {
                 className={cn(
                   'rounded-full border px-3.5 py-2 text-caption transition-colors',
                   codeLang === k
-                    ? 'border-brand bg-brand-soft font-semibold text-brand'
-                    : 'border-line bg-surface text-ink hover:border-brand',
+                    ? 'border-brand-strong bg-brand-soft font-semibold text-brand-strong'
+                    : 'border-line bg-surface text-ink hover:border-brand-strong',
                 )}
               >
                 {codeByLang[k].label}
@@ -303,7 +304,7 @@ export function ApiGuidePage() {
             <ul className="flex flex-col gap-1.5">
               {[T.api_note_1, T.api_note_2, T.api_note_3, T.api_note_4].map((n) => (
                 <li key={n} className="flex gap-2 text-caption leading-[1.8] text-ink-2">
-                  <span className="text-brand">▪</span>
+                  <span className="text-brand-strong">▪</span>
                   <span className="min-w-0">{n}</span>
                 </li>
               ))}

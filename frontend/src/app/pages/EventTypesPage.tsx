@@ -190,7 +190,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
               <tbody className="divide-y divide-line-2">
                 {eventTypes.map((et) => (
                   <tr key={et.id} className="hover:bg-surface-2 transition-colors">
-                    <td className="px-4 py-3 font-mono text-caption text-brand">{et.code}</td>
+                    <td className="px-4 py-3 font-mono text-caption text-brand-strong">{et.code}</td>
                     <td className="px-4 py-3 text-caption">{et.display_name}</td>
                     <td className="px-4 py-3 text-caption text-ink-2">
                       {usage[et.id] ? T.et_used_by_count(usage[et.id]) : T.et_used_by_none}
@@ -203,7 +203,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
                           <Pencil size={14} />
                         </button>
                         <button onClick={() => setDeleteTarget(et)} title={T.delete}
-                          className="p-1.5 rounded-control hover:bg-bad-soft text-ink-2 hover:text-bad transition-colors">
+                          className="p-1.5 rounded-control hover:bg-bad-soft text-ink-2 hover:text-bad-strong transition-colors">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -223,7 +223,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
             <DialogTitle>{form.id ? T.edit_event_type : T.new_event_type}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {formErr && <p className="text-caption text-bad">{formErr}</p>}
+            {formErr && <p className="text-caption text-bad-strong">{formErr}</p>}
             <div>
               <label className="text-caption text-ink-2 block mb-1.5">{T.code_label}</label>
               <input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}

@@ -207,7 +207,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
       )}
 
       {showNew ? (
-        <Card className="flex max-w-2xl flex-col gap-3 border-brand p-4">
+        <Card className="flex max-w-2xl flex-col gap-3 border-brand-strong p-4">
           <p className="text-caption font-semibold">{T.new_group}</p>
           <div className="flex flex-wrap gap-2">
             <input
@@ -239,7 +239,10 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
         </div>
       ) : null}
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(320px,100%),1fr))] items-start gap-3">
+      {/* การ์ดกลุ่มเรียงลงมาทีละใบเต็มความกว้าง ตามดีไซน์ — เดิมเป็น grid auto-fill 320px
+          ซึ่งบนจอกว้างจะได้การ์ดผอม ~350px ลอยชิดซ้ายโดยมีที่ว่างครึ่งจอ และฟอร์ม
+          "เพิ่มเบอร์" ข้างในที่มีช่องกรอกสองช่องเรียงกันก็แคบจนพิมพ์ชื่อไม่เห็น */}
+      <div className="flex flex-col gap-3">
         {groups.map((g) => {
           const phones = contactsByGroup[g.id] || [];
           const pending = pendingDelete === g.id;
@@ -263,7 +266,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                       type="button"
                       onClick={() => saveGroupName(g.id)}
                       disabled={!groupDraft.trim()}
-                      className="shrink-0 rounded-control px-1.5 py-1 text-ok disabled:opacity-40"
+                      className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
                       aria-label={T.save}
                     >
                       <Check size={15} />
@@ -285,7 +288,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                       className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
                     >
                       <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft">
-                        <Users size={15} className="text-brand" strokeWidth={1.8} />
+                        <Users size={15} className="text-brand-strong" strokeWidth={1.8} />
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-caption font-semibold">{g.name}</span>
@@ -308,7 +311,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                       onClick={() => (pending ? removeGroup(g.id) : setPendingDelete(g.id))}
                       className={cn(
                         'shrink-0 rounded-control px-2 py-1.5 text-micro transition-colors',
-                        pending ? 'bg-bad text-white' : 'text-ink-2 hover:text-bad',
+                        pending ? 'bg-bad-strong text-status-ink' : 'text-ink-2 hover:text-bad-strong',
                       )}
                     >
                       {pending ? T.device_remove_confirm : <Trash2 size={14} />}
@@ -365,7 +368,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                             type="button"
                             onClick={() => saveContact(g.id, c.id)}
                             disabled={!contactDraft.phone.trim()}
-                            className="shrink-0 rounded-control px-1.5 py-1 text-ok disabled:opacity-40"
+                            className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
                             aria-label={T.save}
                           >
                             <Check size={15} />
@@ -425,7 +428,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                           <button
                             type="button"
                             onClick={() => removePhone(g.id, c.id)}
-                            className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-bad"
+                            className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-bad-strong"
                             aria-label={T.delete}
                             title={T.delete}
                           >

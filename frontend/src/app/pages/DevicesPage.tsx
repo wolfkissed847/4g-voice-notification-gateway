@@ -118,7 +118,10 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         />
       )}
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(290px,100%),1fr))] gap-3">
+      {/* การ์ดอุปกรณ์เรียงลงมาทีละใบเต็มความกว้าง ตามดีไซน์ — เดิมเป็น grid auto-fill 290px
+          ได้การ์ดผอมที่ปุ่มสามปุ่ม (ตั้งค่า / ทดสอบโทร / ลบอุปกรณ์) ตกลงไปสองบรรทัด
+          และ key กับวันที่ใช้ล่าสุดถูกบีบจนต้องตัดด้วย truncate ทั้งคู่ */}
+      <div className="flex flex-col gap-3">
         {keys.map((d) => {
           const pending = pendingDelete === d.id;
           const online = d.is_active && isRecentlyActive(d.last_used_at);
@@ -149,7 +152,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
               <div className="flex min-w-0 flex-col gap-1.5">
                 <p className="text-caption text-ink-2">{T.allowed_events_label}</p>
                 {d.allowed_event_types.length === 0 ? (
-                  <p className="text-caption leading-[1.8] text-warn">{T.allowed_events_none}</p>
+                  <p className="text-caption leading-[1.8] text-warn-strong">{T.allowed_events_none}</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {d.allowed_event_types.map((e) => (
@@ -163,7 +166,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
 
               {/* flex-wrap: ปุ่มตกบรรทัดเองเมื่อ label ไทยยาวขึ้น */}
               <div className="mt-0.5 flex flex-wrap gap-2">
-                <Btn className="min-w-[70px] flex-1" onClick={() => navigate(`/devices/${d.id}`)}>
+                <Btn onClick={() => navigate(`/devices/${d.id}`)}>
                   {T.device_configure}
                 </Btn>
                 <Btn onClick={() => void testCall(d)} disabled={!d.is_active}>
@@ -188,7 +191,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
             <p className="text-lead font-semibold">{T.devices_empty_title}</p>
             <p className="text-caption text-ink-2">{T.devices_empty_body}</p>
             {eventTypes.length === 0 ? (
-              <p className="text-caption text-warn">{T.allowed_events_empty_hint}</p>
+              <p className="text-caption text-warn-strong">{T.allowed_events_empty_hint}</p>
             ) : null}
             <Btn variant="primary" className="mt-0.5" onClick={() => setShowAdd(true)}>
               + {T.add_device}

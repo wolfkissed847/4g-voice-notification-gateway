@@ -1,0 +1,153 @@
+/* แอนิเมชันเฉพาะหน้าเข้าสู่ระบบ — คัดจาก figma/Redesign Corporate Web App/src/index.css
+ *
+ * แยกไฟล์แทนที่จะยัดรวมใน tw-theme.css เพราะทั้งชุดนี้ใช้ที่หน้าเดียว และเป็นงานตกแต่ง
+ * ล้วนๆ ไม่มีอันไหนสื่อสถานะจริงของระบบ — คนที่มาอ่านทีหลังจะได้รู้ว่าลบทิ้งได้ทั้งไฟล์
+ * โดยไม่กระทบหน้าอื่น (ต่างจาก signal-flow.css ที่แอนิเมชันผูกกับสถานะงานจริง)
+ *
+ * ทุกตัวเคารพ prefers-reduced-motion ท้ายไฟล์ — แผงขวามีของขยับ 4 ชั้นพร้อมกัน
+ * (วงแหวน + จุดวิ่ง + การ์ดลอย + แถบคลื่น) ซึ่งเป็นปริมาณที่ทำให้คนที่ไวต่อการเคลื่อนไหว
+ * เวียนหัวได้จริง
+ */
+
+/* วงแหวนขยายออกจากป้าย 4G — ยิงพร้อมกัน 3 วงเหลื่อมเวลากันวงละ 0.8 วิ */
+@keyframes lg-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.lg-ring-1 {
+  animation: lg-ring 2.4s ease-out infinite;
+}
+.lg-ring-2 {
+  animation: lg-ring 2.4s ease-out 0.8s infinite;
+}
+.lg-ring-3 {
+  animation: lg-ring 2.4s ease-out 1.6s infinite;
+}
+
+/* ป้าย 4G ลอยขึ้นลง */
+@keyframes lg-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+.lg-float {
+  animation: lg-float 3.2s ease-in-out infinite;
+}
+
+/* แผ่นไอคอนขยับขึ้นลงเบาๆ — คนละคาบกับป้าย 4G ตรงกลาง (3.2 วิ) จะได้ไม่ขยับพร้อมกันทั้งจอ */
+@keyframes lg-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.lg-bob {
+  animation: lg-bob 4.2s ease-in-out infinite;
+}
+
+/* การ์ดสถานะโผล่เข้ามาทีละใบ (delay ตั้งเป็น inline style รายใบ) */
+@keyframes lg-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.lg-card {
+  animation: lg-card-in 0.6s ease-out both;
+}
+
+/* จุดกะพริบหน้าการ์ดสถานะ */
+@keyframes lg-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.lg-blink {
+  animation: lg-blink 1.6s ease-in-out infinite;
+}
+
+/* เส้นประไหลตามส่วนโค้งสัญญาณ — ค่าเท่ากับ sfm-dash เพื่อให้จังหวะเดียวกับการ์ด Signal Flow */
+@keyframes lg-dash {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+.lg-dash {
+  animation: lg-dash 0.9s linear infinite;
+}
+
+/* แถบคลื่นเสียง — ความสูงฐานมาจาก inline style แล้วให้ scaleY ทำให้ขยับ */
+@keyframes lg-wave {
+  from {
+    transform: scaleY(0.4);
+    opacity: 0.5;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* การ์ดทั้งใบค่อยๆ ลอยขึ้นตอนเปิดหน้า */
+@keyframes lg-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lg-fade-in {
+  animation: lg-fade-in 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-ring-1,
+  .lg-ring-2,
+  .lg-ring-3,
+  .lg-float,
+  .lg-bob,
+  .lg-card,
+  .lg-blink,
+  .lg-dash,
+  .lg-fade-in,
+  .lg-wave-bar {
+    animation: none !important;
+  }
+  /* วงแหวนที่หยุดนิ่งจะกองทับกันเป็นวงหนาๆ รอบป้าย — ซ่อนไปเลยดีกว่า */
+  .lg-ring-1,
+  .lg-ring-2,
+  .lg-ring-3 {
+    display: none;
+  }
+}

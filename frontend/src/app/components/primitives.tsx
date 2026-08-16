@@ -17,7 +17,7 @@ import { cn } from '@/app/components/ui/utils';
 export const card = 'bg-surface border border-line rounded-card shadow-card';
 export const control = 'bg-surface-2 border border-line rounded-control';
 export const inputCls =
-  'w-full bg-surface-2 border border-line rounded-control px-3 py-3 text-body outline-none focus:border-brand';
+  'w-full bg-surface-2 border border-line rounded-control px-3 py-3 text-body outline-none focus:border-brand-strong';
 export const monoCls = 'font-mono text-caption whitespace-nowrap';
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
@@ -50,10 +50,10 @@ export function PageHeader({ title, meta, action }: { title: string; meta?: stri
 export type Tone = 'ok' | 'warn' | 'bad' | 'accent' | 'muted';
 
 const toneRing: Record<Tone, string> = {
-  ok: 'border-ok text-ok bg-ok-soft',
-  warn: 'border-warn text-warn bg-warn-soft',
-  bad: 'border-bad text-bad bg-bad-soft',
-  accent: 'border-brand text-brand bg-brand-soft',
+  ok: 'border-ok text-ok-strong bg-ok-soft',
+  warn: 'border-warn text-warn-strong bg-warn-soft',
+  bad: 'border-bad text-bad-strong bg-bad-soft',
+  accent: 'border-brand-strong text-brand-strong bg-brand-soft',
   muted: 'border-line text-ink-2 bg-transparent',
 };
 
@@ -80,12 +80,29 @@ export function Dot({ tone = 'muted', pulse = false }: { tone?: Tone; pulse?: bo
 
 /** min-w-0 บนตัวการ์ด: เป็น grid item เสมอ ถ้าไม่ใส่ ข้อความยาวใน foot (เช่นชื่อผู้ให้บริการ)
  *  จะดันคอลัมน์กว้างเกินจนทั้งหน้าเลื่อนแนวนอนได้บนมือถือ */
-export function StatTile({ label, value, foot }: { label: string; value: ReactNode; foot?: ReactNode }) {
+/**
+ * ช่องตัวเลขสรุปบนหัวหน้าภาพรวม
+ *
+ * alert = ช่องนี้กำลังบอกเรื่องผิดปกติ ไม่ใช่แค่ตัวเลข — ตีกรอบและลงพื้นสีแดง
+ * ให้เห็นจากหางตาโดยไม่ต้องมีแถบเตือนแยกอีกแถบเหนือแถวนี้
+ */
+export function StatTile({
+  label,
+  value,
+  foot,
+  alert,
+}: {
+  label: string;
+  value: ReactNode;
+  foot?: ReactNode;
+  alert?: boolean;
+}) {
   return (
     <div
       className={cn(
         card,
         'animate-fade-up min-w-0 p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-card',
+        alert && 'border-bad bg-bad-soft/35',
       )}
     >
       <p className="text-caption text-ink-2">{label}</p>
@@ -104,9 +121,9 @@ export function Btn({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' | 'dashed' }) {
   const map = {
     primary: 'bg-brand text-brand-ink border-transparent hover:brightness-110',
-    ghost: 'bg-surface-2 text-ink border-line hover:border-brand',
-    danger: 'bg-bad text-white border-bad',
-    dashed: 'bg-transparent text-brand border-dashed border-line',
+    ghost: 'bg-surface-2 text-ink border-line hover:border-brand-strong',
+    danger: 'bg-bad-strong text-status-ink border-bad-strong',
+    dashed: 'bg-transparent text-brand-strong border-dashed border-line',
   } as const;
   return (
     <button
@@ -134,7 +151,7 @@ export function Chip({ active, children, ...rest }: React.ButtonHTMLAttributes<H
       type="button"
       className={cn(
         'rounded-full border px-3.5 py-2 text-caption transition-colors',
-        active ? 'border-brand bg-brand-soft font-semibold text-brand' : 'border-line bg-surface text-ink hover:border-brand',
+        active ? 'border-brand-strong bg-brand-soft font-semibold text-brand-strong' : 'border-line bg-surface text-ink hover:border-brand-strong',
       )}
       {...rest}
     >

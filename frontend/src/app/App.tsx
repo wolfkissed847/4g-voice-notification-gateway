@@ -11,7 +11,7 @@ import { CallLogPage } from "./pages/CallLogPage";
 import { SystemPage } from "./pages/SystemPage";
 import { SetupPage } from "./pages/SetupPage";
 import { DeviceConfigPage } from "./pages/DeviceConfigPage";
-import { ApiGuidePage } from "./pages/ApiGuidePage";
+import { GuidePage } from "./pages/GuidePage";
 
 export default function App() {
   return (
@@ -36,7 +36,7 @@ export default function App() {
               <Route path="/devices" element={<SetupPage />} />
               <Route path="/devices/:id" element={<DeviceConfigPage />} />
               <Route path="/api-keys" element={<Navigate to="/devices" replace />} />
-              <Route path="/api-guide" element={<ApiGuidePage />} />
+              <Route path="/api-guide" element={<GuidePage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/overview" replace />} />

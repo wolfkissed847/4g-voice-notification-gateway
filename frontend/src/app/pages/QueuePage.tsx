@@ -12,17 +12,17 @@
  * 3. ตาราง desktop + การ์ด mobile ของเดิม รวมเป็น grid ชุดเดียวที่เลื่อนแนวนอนได้
  *    ตามกฎในดีไซน์ (บีบตัวอักษรไทยจนอ่านไม่ออกแย่กว่าปล่อยให้เลื่อน)
  */
-import { cn } from '@/app/components/ui/utils';
-import { getQueueStatus } from '../api/queue';
-import { Dot, PageHeader } from '../components/primitives';
-import { StatusBadge } from '../components/StatusBadge';
-import { useApp } from '../context/AppContext';
-import { usePolling } from '../lib/usePolling';
-import { SignalFlowMonitor } from '../widgets/SignalFlowMonitor';
+import { cn } from "@/app/components/ui/utils";
+import { getQueueStatus } from "../api/queue";
+import { Dot, PageHeader } from "../components/primitives";
+import { StatusBadge } from "../components/StatusBadge";
+import { useApp } from "../context/AppContext";
+import { usePolling } from "../lib/usePolling";
+import { SignalFlowMonitor } from "../widgets/SignalFlowMonitor";
 
 /** กริดชุดเดียวใช้ทั้งหัวตารางและแถว — เปลี่ยนคอลัมน์ที่เดียว */
 const queueGridCls =
-  'grid gap-2.5 min-w-[520px] grid-cols-[minmax(70px,0.6fr)_minmax(120px,1.2fr)_minmax(110px,1fr)_minmax(60px,0.5fr)_minmax(130px,1.2fr)]';
+  "grid gap-2.5 min-w-[520px] grid-cols-[minmax(70px,0.6fr)_minmax(120px,1.2fr)_minmax(110px,1fr)_minmax(60px,0.5fr)_minmax(130px,1.2fr)]";
 
 export function QueuePage() {
   const { T } = useApp();
@@ -30,7 +30,10 @@ export function QueuePage() {
   const items = data?.items ?? [];
 
   return (
-    <div className="flex flex-col gap-3.5">
+    /* h-full + min-h-0 = หน้านี้สูงเท่าจอพอดี ไม่เลื่อนหน้าเว็บ
+       ส่วนที่ยาวไม่จำกัดคือตารางคิว จึงให้มันเป็นตัวเดียวที่เลื่อน (อยู่ในกล่องตัวเอง)
+       — คิวยาวแค่ไหนหัวเรื่องกับการ์ดติดตามสัญญาณก็ยังอยู่ที่เดิม ไม่ถูกดันหายขึ้นไป */
+    <div className="flex h-full min-h-0 flex-col gap-3.5">
       <PageHeader
         title={T.queue_title}
         meta={T.queue_sub}
@@ -49,44 +52,54 @@ export function QueuePage() {
           ใช้ component ตัวเดียวกับหน้าภาพรวม ดึงข้อมูลเองในตัว ไม่ต้องส่ง prop */}
       <SignalFlowMonitor />
 
-      <div className="overflow-x-auto overscroll-x-contain rounded-card border border-line bg-surface shadow-card">
-        <div
-          className={cn(
-            queueGridCls,
-            'border-b border-line bg-surface-2 px-4 py-2.5 font-mono text-micro font-bold text-ink-2',
-          )}
-        >
-          <div>{T.col_id}</div>
-          <div>{T.col_group}</div>
-          <div>{T.col_status}</div>
-          <div>{T.col_retry}</div>
-          <div>{T.col_created}</div>
-        </div>
-
-        {items.map((item) => (
+      {/* min-h-[150px] กันกล่องแบนจนอ่านไม่ออกบนจอเตี้ย — ถ้าเตี้ยกว่านั้นจริงๆ
+          ก็ปล่อยให้ทั้งหน้าเลื่อนตามปกติ ดีกว่าบีบตารางจนเหลือครึ่งแถว */}
+      <div className="flex min-h-[150px] min-w-0 flex-1 flex-col overflow-hidden rounded-card border border-line bg-surface shadow-card">
+        {/* หัวตารางกับแถวข้อมูลอยู่ในกล่องเลื่อนเดียวกัน คอลัมน์จึงเลื่อนแนวนอนพร้อมกัน
+            แล้วใช้ sticky ตรึงหัวไว้ตอนเลื่อนลง */}
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
           <div
-            key={item.job_id}
             className={cn(
               queueGridCls,
-              'items-center border-b border-line-2 px-4 py-3 font-mono text-caption last:border-b-0',
+              "sticky top-0 z-10 border-b border-line bg-surface-2 px-4 py-2.5 font-mono text-micro font-bold text-ink-2",
             )}
           >
-            <div className="text-brand">#{item.job_id}</div>
-            <div className="min-w-0 truncate font-sans">{item.priority_group}</div>
-            <div>
-              <StatusBadge status={item.status} />
-            </div>
-            <div className="text-ink-2">{item.retry_count}</div>
-            <div className="text-ink-2">{new Date(item.created_at).toLocaleString()}</div>
+            <div>{T.col_id}</div>
+            <div>{T.col_group}</div>
+            <div>{T.col_status}</div>
+            <div>{T.col_retry}</div>
+            <div>{T.col_created}</div>
           </div>
-        ))}
 
-        {!loading && items.length === 0 ? (
-          <div className="flex flex-col items-center gap-1.5 px-4 py-8 text-center">
-            <p className="text-lead font-semibold">{T.queue_empty}</p>
-            <p className="text-caption text-ink-2">{T.queue_empty_sub}</p>
-          </div>
-        ) : null}
+          {items.map((item) => (
+            <div
+              key={item.job_id}
+              className={cn(
+                queueGridCls,
+                "items-center border-b border-line-2 px-4 py-3 font-mono text-caption last:border-b-0",
+              )}
+            >
+              <div className="text-brand-strong">#{item.job_id}</div>
+              <div className="min-w-0 truncate font-sans">
+                {item.priority_group}
+              </div>
+              <div>
+                <StatusBadge status={item.status} />
+              </div>
+              <div className="text-ink-2">{item.retry_count}</div>
+              <div className="text-ink-2">
+                {new Date(item.created_at).toLocaleString()}
+              </div>
+            </div>
+          ))}
+
+          {!loading && items.length === 0 ? (
+            <div className="flex flex-col items-center gap-1.5 px-4 py-8 text-center">
+              <p className="text-lead font-semibold">{T.queue_empty}</p>
+              <p className="text-caption text-ink-2">{T.queue_empty_sub}</p>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

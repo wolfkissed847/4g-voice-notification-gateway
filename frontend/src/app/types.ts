@@ -56,6 +56,10 @@ export interface AppConfig {
   call_retry_count: number;
   call_retry_delay_seconds: number;
   call_ring_timeout_seconds: number;
+  /** เว้นช่วงหลังปลายสายรับ ก่อนเริ่มพูด — ให้เวลาคนยกหูขึ้นแนบหู */
+  call_answer_delay_seconds: number;
+  /** พูดข้อความซ้ำกี่รอบต่อ 1 สาย (1 = พูดครั้งเดียว) */
+  call_repeat_count: number;
 }
 
 export type AppConfigUpdate = Partial<AppConfig>;
@@ -221,6 +225,13 @@ export interface GsmDetail {
   /** ผลของการรีสตาร์ทครั้งล่าสุด */
   restart_result: 'ok' | 'failed' | null;
   restart_at: string | null;
+  /**
+   * อ่านจากขา STATUS ของโมดูลตรงๆ — true=ไฟติด · false=ไฟดับ · null=ตอบไม่ได้
+   *
+   * null เกิดกับโมดูลที่เสียบผ่าน USB (ไม่มีขานี้ให้อ่าน) จึงต้องแยกจาก false
+   * ไม่งั้นเครื่องที่ใช้ USB จะขึ้นว่า "โมดูลไฟดับ" ตลอดเวลาทั้งที่ใช้งานได้ปกติ
+   */
+  power_on: boolean | null;
 }
 
 export interface GsmRestartResponse {

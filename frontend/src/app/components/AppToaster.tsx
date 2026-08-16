@@ -27,10 +27,10 @@ export function AppToaster() {
           toast: "rounded-card! border! shadow-card! bg-surface! font-sans!",
           title: "text-caption! font-medium! text-ink!",
           description: "text-micro! text-ink-2!",
-          success: "border-ok! [&_[data-icon]]:text-ok!",
-          error: "border-bad! [&_[data-icon]]:text-bad!",
-          warning: "border-warn! [&_[data-icon]]:text-warn!",
-          info: "border-brand! [&_[data-icon]]:text-brand!",
+          success: "border-ok! [&_[data-icon]]:text-ok-strong!",
+          error: "border-bad! [&_[data-icon]]:text-bad-strong!",
+          warning: "border-warn! [&_[data-icon]]:text-warn-strong!",
+          info: "border-brand-strong! [&_[data-icon]]:text-brand-strong!",
         },
       }}
     />

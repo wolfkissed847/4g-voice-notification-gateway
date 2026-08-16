@@ -217,7 +217,7 @@ export function DeviceConfigPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Link to="/devices" className="text-caption font-medium text-brand">
+        <Link to="/devices" className="text-caption font-medium text-brand-strong">
           ‹ {T.devices_title}
         </Link>
         {/* mt-2 กันวรรณยุกต์ของหัวข้อไทยชนลิงก์ย้อนกลับ */}
@@ -236,8 +236,8 @@ export function DeviceConfigPage() {
               className={cn(
                 'shrink-0 rounded-control border px-2.5 py-1.5 font-mono text-micro transition-colors',
                 copiedKey === 'key'
-                  ? 'border-ok bg-ok-soft text-ok'
-                  : 'border-line bg-surface text-ink-2 hover:border-brand',
+                  ? 'border-ok bg-ok-soft text-ok-strong'
+                  : 'border-line bg-surface text-ink-2 hover:border-brand-strong',
               )}
             >
               {copiedKey === 'key' ? `✓ ${T.copied}` : `⧉ ${T.copy}`}
@@ -246,7 +246,7 @@ export function DeviceConfigPage() {
         ) : (
           <>
             <p className="mt-1 font-mono text-caption text-ink-2">key {device.key_prefix}•••••</p>
-            <p className="mt-1 text-caption leading-[1.8] text-warn">{T.dev_key_locked}</p>
+            <p className="mt-1 text-caption leading-[1.8] text-warn-strong">{T.dev_key_locked}</p>
           </>
         )}
       </div>
@@ -265,7 +265,7 @@ export function DeviceConfigPage() {
           <section className="flex flex-col gap-3">
             <h2 className="text-lead font-bold">{T.allowed_events_pick}</h2>
             {eventTypes.length === 0 ? (
-              <p className="text-caption leading-[1.8] text-warn">{T.allowed_events_empty_hint}</p>
+              <p className="text-caption leading-[1.8] text-warn-strong">{T.allowed_events_empty_hint}</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {eventTypes.map((e) => (
@@ -285,7 +285,7 @@ export function DeviceConfigPage() {
               </div>
             )}
             {picked.length === 0 ? (
-              <p className="text-caption leading-[1.8] text-warn">{T.allowed_events_none}</p>
+              <p className="text-caption leading-[1.8] text-warn-strong">{T.allowed_events_none}</p>
             ) : null}
             <p className="rounded-card border border-dashed border-line bg-surface-2 px-3 py-3 text-caption leading-[1.8] text-ink-2">
               {T.shared_config_note}
@@ -299,7 +299,7 @@ export function DeviceConfigPage() {
             <Btn onClick={() => void testCall()}>{T.device_test_call}</Btn>
             <Btn
               variant={pendingDelete ? 'danger' : 'dashed'}
-              className={pendingDelete ? '' : 'ms-auto text-warn'}
+              className={pendingDelete ? '' : 'ms-auto text-warn-strong'}
               onClick={() => (pendingDelete ? void remove() : setPendingDelete(true))}
             >
               {pendingDelete ? `${T.device_remove_confirm} “${device.name}”` : T.device_remove}
@@ -327,7 +327,7 @@ export function DeviceConfigPage() {
                             {T.dev_will_call} <b className="text-ink">{label}</b>
                           </>
                         ) : (
-                          <b className="text-warn">{T.dev_target_missing}</b>
+                          <b className="text-warn-strong">{T.dev_target_missing}</b>
                         )}
                         {rows.map((c, i) => (
                           <span key={c.id}>
@@ -339,7 +339,7 @@ export function DeviceConfigPage() {
                         {label && rows.length === 0 ? (
                           <>
                             <br />
-                            <span className="text-warn">— {T.dev_group_empty}</span>
+                            <span className="text-warn-strong">— {T.dev_group_empty}</span>
                           </>
                         ) : null}
                         {config ? (
@@ -356,10 +356,10 @@ export function DeviceConfigPage() {
                   );
                 })}
                 <div className="flex flex-wrap gap-2">
-                  <Link to="/event-types" className="text-caption font-medium text-brand">
+                  <Link to="/event-types" className="text-caption font-medium text-brand-strong">
                     {T.goto_event_types} ›
                   </Link>
-                  <Link to="/contacts" className="text-caption font-medium text-brand">
+                  <Link to="/contacts" className="text-caption font-medium text-brand-strong">
                     {T.goto_contacts} ›
                   </Link>
                 </div>
@@ -377,14 +377,14 @@ export function DeviceConfigPage() {
             </div>
 
             {pickedTypes.length === 0 ? (
-              <p className="text-caption leading-[1.8] text-warn">{T.dev_api_no_event}</p>
+              <p className="text-caption leading-[1.8] text-warn-strong">{T.dev_api_no_event}</p>
             ) : null}
 
             <CodeBlock label={T.payload_title} code={curlCode} onCopy={copy} copied={copiedKey === 'curl'} ck="curl" />
             <CodeBlock label={T.dev_api_ok} code={OK_RESPONSE} onCopy={copy} copied={copiedKey === 'ok'} ck="ok" />
             <CodeBlock label={T.dev_api_err} code={ERR_RESPONSE} onCopy={copy} copied={copiedKey === 'err'} ck="err" />
 
-            <p className="text-micro leading-[1.7] text-warn">{T.dev_api_key_note}</p>
+            <p className="text-micro leading-[1.7] text-warn-strong">{T.dev_api_key_note}</p>
 
             <div className="flex flex-col gap-1 border-t border-line-2 pt-2.5">
               <span className="font-mono text-micro tracking-[0.1em] text-ink-2 uppercase">{T.dev_api_status}</span>
@@ -396,7 +396,7 @@ export function DeviceConfigPage() {
                 ['422', T.dev_api_status_422],
               ].map(([code, desc]) => (
                 <p key={code} className="flex gap-2 text-micro leading-[1.7]">
-                  <b className="shrink-0 font-mono text-bad">{code}</b>
+                  <b className="shrink-0 font-mono text-bad-strong">{code}</b>
                   <span className="text-ink-2">{desc}</span>
                 </p>
               ))}
@@ -447,14 +447,14 @@ function EventTargetRow({
     <div
       className={cn(
         'flex flex-col gap-2.5 rounded-control border px-3 py-2.5 transition-colors',
-        on ? 'border-brand bg-brand-soft/40' : 'border-line bg-surface',
+        on ? 'border-brand-strong bg-brand-soft/40' : 'border-line bg-surface',
       )}
     >
       <button type="button" onClick={onToggleEvent} className="flex min-w-0 items-center gap-2.5 text-start">
         <span
           className={cn(
             'grid size-4 shrink-0 place-items-center rounded-[4px] border text-[10px] font-bold',
-            on ? 'border-brand bg-brand text-brand-ink' : 'border-line',
+            on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line',
           )}
         >
           {on ? '✓' : ''}
@@ -506,7 +506,7 @@ function EventTargetRow({
             <div className="flex flex-col gap-2">
               <p className="text-micro leading-[1.7] text-ink-2">{T.dev_pick_contacts_hint}</p>
               {totalContacts === 0 ? (
-                <p className="text-caption leading-[1.8] text-warn">{T.dev_no_contacts_at_all}</p>
+                <p className="text-caption leading-[1.8] text-warn-strong">{T.dev_no_contacts_at_all}</p>
               ) : (
                 <div className="flex max-h-[260px] flex-col gap-2 overflow-y-auto rounded-control border border-line bg-surface p-2.5">
                   {groups.map((g) => {
@@ -591,7 +591,7 @@ function EventTargetRow({
             </div>
           )}
 
-          {incomplete ? <p className="text-micro leading-[1.7] text-warn">{T.dev_target_missing}</p> : null}
+          {incomplete ? <p className="text-micro leading-[1.7] text-warn-strong">{T.dev_target_missing}</p> : null}
         </div>
       ) : null}
     </div>
@@ -634,7 +634,7 @@ function CodeBlock({
           onClick={() => onCopy(ck, code)}
           className={cn(
             'absolute end-1.5 top-1.5 rounded-control border px-2 py-1 font-mono text-micro transition-colors',
-            copied ? 'border-ok bg-ok-soft text-ok' : 'border-line bg-surface text-ink-2 hover:border-brand',
+            copied ? 'border-ok bg-ok-soft text-ok-strong' : 'border-line bg-surface text-ink-2 hover:border-brand-strong',
           )}
         >
           {copied ? '✓' : '⧉'}

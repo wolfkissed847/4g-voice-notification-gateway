@@ -15,26 +15,40 @@
  * ที่ตัดออกเพราะไม่มีข้อมูล/endpoint: เครดิตซิม, รีสตาร์ทโมดูล, เสียงชาย-หญิง+ความเร็ว,
  * เปลี่ยนรหัสผ่าน, ออกจากระบบทุกอุปกรณ์ — บอกไว้ในการ์ดท้ายหน้าตรงๆ ไม่ทำช่องหลอก
  */
-import { useEffect, useRef, useState } from 'react';
-import type { SVGProps } from 'react';
-import { createPortal } from 'react-dom';
-import { toast } from 'sonner';
-import { Moon, Sun } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode, SVGProps } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { Moon, Sun } from "lucide-react";
 
-import { cn } from '@/app/components/ui/utils';
-import { getConfig, updateConfig } from '../api/config';
-import { getGsmDetail, getPiDetail, getSystemInfo, restartGsm } from '../api/system';
-import { Btn, Card, Divider, PageHeader, Pill, inputCls } from '../components/primitives';
-import { useApp } from '../context/AppContext';
-import { fromMinSec, toMinSec } from '../lib/duration';
-import { operatorName } from '../lib/operator';
-import type { AppConfig, GsmDetail, PiDetail, SystemInfo } from '../types';
+import { cn } from "@/app/components/ui/utils";
+import { getConfig, updateConfig } from "../api/config";
+import {
+  getGsmDetail,
+  getPiDetail,
+  getSystemInfo,
+  restartGsm,
+} from "../api/system";
+import {
+  Btn,
+  Card,
+  Divider,
+  PageHeader,
+  Pill,
+  inputCls,
+} from "../components/primitives";
+import { useApp } from "../context/AppContext";
+import { fromMinSec, toMinSec } from "../lib/duration";
+import { operatorName } from "../lib/operator";
+import type { AppConfig, GsmDetail, PiDetail, SystemInfo } from "../types";
 
 /** ขอบเขตที่ backend ยอมรับ — ต้องตรงกับ min/max ของแต่ละช่องและ validation ฝั่ง /config */
 const CFG_LIMITS = {
   call_retry_count: [0, 10],
   call_retry_delay_seconds: [5, 300],
   call_ring_timeout_seconds: [10, 120],
+  call_answer_delay_seconds: [0, 10],
+  call_repeat_count: [1, 5],
 } as const;
 
 export function SystemPage() {
@@ -43,7 +57,9 @@ export function SystemPage() {
   const [pi, setPi] = useState<PiDetail | null>(null);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [cfg, setCfg] = useState<AppConfig | null>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "failed"
+  >("idle");
   const [confirmRestart, setConfirmRestart] = useState(false);
   // จำว่ารอบก่อนกำลังรีสตาร์ทอยู่ไหม เพื่อจับ "จังหวะที่เพิ่งเปลี่ยนจากกำลังทำ → เสร็จ"
   // แล้วเด้ง toast ครั้งเดียว ถ้าดูจาก restart_result อย่างเดียวจะเด้งซ้ำทุก 2 วิที่ poll
@@ -63,11 +79,16 @@ export function SystemPage() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [g, p, i] = await Promise.all([getGsmDetail(), getPiDetail(), getSystemInfo()]);
+      const [g, p, i] = await Promise.all([
+        getGsmDetail(),
+        getPiDetail(),
+        getSystemInfo(),
+      ]);
       if (cancelled) return;
       if (wasRestarting.current && !g.restarting) {
-        if (g.restart_result === 'ok') toast.success(T.gsm_restart_ok);
-        else if (g.restart_result === 'failed') toast.error(T.gsm_restart_failed);
+        if (g.restart_result === "ok") toast.success(T.gsm_restart_ok);
+        else if (g.restart_result === "failed")
+          toast.error(T.gsm_restart_failed);
       }
       wasRestarting.current = g.restarting;
       setGsm(g);
@@ -105,18 +126,23 @@ export function SystemPage() {
     if (!current) return;
 
     const clamped: AppConfig = { ...current };
-    for (const [key, [lo, hi]] of Object.entries(CFG_LIMITS) as [keyof typeof CFG_LIMITS, [number, number]][]) {
+    for (const [key, [lo, hi]] of Object.entries(CFG_LIMITS) as [
+      keyof typeof CFG_LIMITS,
+      [number, number],
+    ][]) {
       const n = Number(current[key]);
-      clamped[key] = Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : lo;
+      clamped[key] = Number.isFinite(n)
+        ? Math.min(hi, Math.max(lo, Math.round(n)))
+        : lo;
     }
     setCfg(clamped);
 
-    setSaveState('saving');
+    setSaveState("saving");
     try {
       setCfg(await updateConfig(clamped));
-      setSaveState('saved');
+      setSaveState("saved");
     } catch (e) {
-      setSaveState('failed');
+      setSaveState("failed");
       toast.error(e instanceof Error ? e.message : T.error_generic);
     }
   };
@@ -129,12 +155,17 @@ export function SystemPage() {
 
   // ถ้าออกจากหน้าไปตอนที่ยังหน่วงอยู่ ค่าที่เพิ่งแก้จะหายไปเงียบๆ — เคลียร์ตัวจับเวลาทิ้ง
   // (กรณีนี้กันได้อีกชั้นด้วย onBlur ที่ช่องกรอก ซึ่งบันทึกทันทีตอนคลิกออกจากช่อง)
-  useEffect(() => () => {
-    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    },
+    [],
+  );
 
   return (
-    <div className="flex flex-col gap-3.5">
+    /* h-full = พอดีจอ ไม่ต้องเลื่อน — สามส่วนของหน้านี้ (ฮาร์ดแวร์ / ค่าการโทร /
+       หมายเหตุ) เป็นข้อมูลที่ต้องดูพร้อมกันตอนไล่ปัญหา ถ้าต้องเลื่อนไปมาจะเทียบไม่ได้ */
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <PageHeader title={T.sys_title} meta={T.sys_meta} />
 
       {/* 3 คอลัมน์ที่ 1180px ตามภาพ (เดิม minmax 280px ได้ 4 คอลัมน์ การ์ดแคบเกิน อ่านยาก)
@@ -142,7 +173,6 @@ export function SystemPage() {
           ถ้าบีบเท่าการ์ดอื่นช่องกรอกจะแคบจนพิมพ์เลข 3 หลักไม่เห็น */}
       {/* items-stretch (ไม่ใช่ items-start) = การ์ดทุกใบสูงเท่ากันตามใบที่สูงสุดในแถว
           เดิมใช้ items-start การ์ดจึงสูงตามเนื้อหาของตัวเอง ได้ขอบล่างไม่ตรงกันเป็นขั้นบันได */}
-      <p className="font-mono text-micro tracking-[0.12em] text-ink-2 uppercase">{T.sys_section_hw}</p>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-stretch gap-3.5">
         <Card className="flex min-w-0 flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +183,17 @@ export function SystemPage() {
                 ใช้สีส้ม (เตือน) ไม่ใช่แดง เพราะไม่ใช่ความผิดปกติ เป็นสถานะชั่วคราวที่เราสั่งเอง */}
             {/* gsm === null = ยังโหลดไม่เสร็จ ต้องเป็นสีกลาง ไม่ใช่แดง "โมดูลไม่พร้อม"
                 ซึ่งเป็นการเตือนเรื่องที่ยังไม่รู้ว่าจริงหรือเปล่า */}
-            <Pill tone={gsm === null ? 'muted' : gsm.restarting ? 'warn' : gsm.connected ? 'ok' : 'bad'}>
+            <Pill
+              tone={
+                gsm === null
+                  ? "muted"
+                  : gsm.restarting
+                    ? "warn"
+                    : gsm.connected
+                      ? "ok"
+                      : "bad"
+              }
+            >
               {gsm === null
                 ? T.loading
                 : gsm.restarting
@@ -166,22 +206,47 @@ export function SystemPage() {
           {/* ค่าทั้งหมดมาจาก AT command จริงที่ worker เช็คไว้ตอน idle (AT+CSQ, AT+COPS?) */}
           <dl className="font-mono text-caption leading-[2] break-words text-ink-2">
             <div>
-              {T.gsm_operator_label} <b className="text-ink">{operatorName(gsm?.operator) ?? T.gsm_no_operator}</b>
-            </div>
-            <div>
-              {T.gsm_mode_label} <b className="text-ink">{gsm?.network_mode ?? T.gsm_signal_unknown}</b>
-            </div>
-            <div>
-              {T.gsm_signal_label}{' '}
+              {T.gsm_operator_label}{" "}
               <b className="text-ink">
-                {gsm?.signal_quality != null ? `${gsm.signal_quality}/31` : T.gsm_signal_unknown}
+                {operatorName(gsm?.operator) ?? T.gsm_no_operator}
               </b>
             </div>
             <div>
-              {T.sys_module_port} {gsm?.port ?? '—'}
+              {T.gsm_mode_label}{" "}
+              <b className="text-ink">
+                {gsm?.network_mode ?? T.gsm_signal_unknown}
+              </b>
             </div>
             <div>
-              {T.sys_module_updated} {gsm?.updated_at ? new Date(gsm.updated_at).toLocaleString() : '—'}
+              {T.gsm_signal_label}{" "}
+              <b className="text-ink">
+                {gsm?.signal_quality != null
+                  ? `${gsm.signal_quality}/31`
+                  : T.gsm_signal_unknown}
+              </b>
+            </div>
+            {/* แสดงเฉพาะเครื่องที่ต่อ GPIO ไว้ (power_on ไม่ใช่ null) — โมดูลที่เสียบ USB
+                ไม่มีขา STATUS ให้อ่าน ถ้าโชว์บรรทัดนี้ด้วยจะกลายเป็นข้อมูลที่ตอบไม่ได้
+
+                ค่านี้ตอบคนละคำถามกับป้ายสถานะด้านบน: ป้ายบอกว่า "คุย AT รู้เรื่องไหม"
+                ส่วนบรรทัดนี้บอกว่า "โมดูลมีไฟเลี้ยงอยู่ไหม" — ไฟติดแต่ AT ไม่ตอบ = เฟิร์มแวร์ค้าง
+                แก้ด้วยการรีบูตโมดูล ส่วนไฟไม่ติดเลย = ปัญหาไฟหรือสาย รีบูตไปก็ไม่ช่วย */}
+            {gsm?.power_on != null ? (
+              <div>
+                {T.sys_module_power}{" "}
+                <b className={gsm.power_on ? "text-ok-strong" : "text-bad-strong"}>
+                  {gsm.power_on ? T.sys_module_power_on : T.sys_module_power_off}
+                </b>
+              </div>
+            ) : null}
+            <div>
+              {T.sys_module_port} {gsm?.port ?? "—"}
+            </div>
+            <div>
+              {T.sys_module_updated}{" "}
+              {gsm?.updated_at
+                ? new Date(gsm.updated_at).toLocaleString()
+                : "—"}
             </div>
           </dl>
 
@@ -205,7 +270,10 @@ export function SystemPage() {
                 </span>
               )}
             </Btn>
-            <p className="text-micro leading-[1.6] text-ink-2">{T.gsm_restart_hint}</p>
+            <p className="text-micro leading-[1.6] text-ink-2">
+              {T.gsm_restart_hint}
+            </p>
+
           </div>
         </Card>
 
@@ -221,19 +289,27 @@ export function SystemPage() {
             <Meter
               label={T.pi_cpu_label}
               value={pi?.cpu_percent ?? null}
-              text={pi ? `${pi.cpu_percent}%` : '—'}
+              text={pi ? `${pi.cpu_percent}%` : "—"}
             />
             <Meter
               label={T.pi_ram_label}
               value={pi?.mem_percent ?? null}
-              text={pi ? `${pi.mem_percent}% · ${pi.mem_used_mb}/${pi.mem_total_mb} MB` : '—'}
+              text={
+                pi
+                  ? `${pi.mem_percent}% · ${pi.mem_used_mb}/${pi.mem_total_mb} MB`
+                  : "—"
+              }
             />
             <Meter
               label={T.pi_temp_label}
               // Pi เริ่มลดความเร็ว CPU เองที่ 80°C — ใช้เป็นเพดานของแถบ ค่าที่เห็นจึงบอกได้ว่า
               // "ใกล้จุดที่เครื่องจะเริ่มช้าลงหรือยัง" ไม่ใช่แค่ตัวเลของศาที่ไม่มีบริบท
               value={pi?.cpu_temp_c != null ? (pi.cpu_temp_c / 80) * 100 : null}
-              text={pi?.cpu_temp_c != null ? `${pi.cpu_temp_c}°C` : T.pi_temp_unavailable}
+              text={
+                pi?.cpu_temp_c != null
+                  ? `${pi.cpu_temp_c}°C`
+                  : T.pi_temp_unavailable
+              }
             />
           </div>
         </Card>
@@ -248,20 +324,30 @@ export function SystemPage() {
               {/* โชว์ commit คู่กับเลขเวอร์ชันเสมอ — เลขเวอร์ชันเป็นค่าที่คนตั้งเอง ถ้าลืมบั๊ม
                   จะค้างอยู่ค่าเดิมตลอดไป ส่วน commit มาจาก git ตอน build จึงตอบได้จริงว่า
                   "โค้ดที่รันอยู่คืออันล่าสุดหรือยัง" โดยไม่ต้อง SSH เข้าไปเช็ค */}
-              {T.system_info_version}{' '}
-              <b className="text-ink">{info?.app_version ?? '—'}</b>
-              {info?.app_git_sha ? <span className="text-ink-2"> · {info.app_git_sha}</span> : null}
+              {T.system_info_version}{" "}
+              <b className="text-ink">{info?.app_version ?? "—"}</b>
+              {info?.app_git_sha ? (
+                <span className="text-ink-2"> · {info.app_git_sha}</span>
+              ) : null}
             </div>
             <div>
-              {T.system_info_worker}{' '}
-              <b className={info?.worker_started_at ? 'text-ok' : 'text-bad'}>
-                {info?.worker_started_at ? T.system_info_worker_running : T.system_info_worker_stopped}
+              {T.system_info_worker}{" "}
+              <b
+                className={
+                  info?.worker_started_at ? "text-ok-strong" : "text-bad-strong"
+                }
+              >
+                {info?.worker_started_at
+                  ? T.system_info_worker_running
+                  : T.system_info_worker_stopped}
               </b>
             </div>
             <div>
-              {T.system_info_db_size}{' '}
+              {T.system_info_db_size}{" "}
               <b className="text-ink">
-                {info?.db_size_bytes != null ? `${(info.db_size_bytes / 1024).toFixed(0)} KB` : '—'}
+                {info?.db_size_bytes != null
+                  ? `${(info.db_size_bytes / 1024).toFixed(0)} KB`
+                  : "—"}
               </b>
             </div>
           </dl>
@@ -282,7 +368,6 @@ export function SystemPage() {
         </Card>
       </div>
 
-      <p className="mt-1 font-mono text-micro tracking-[0.12em] text-ink-2 uppercase">{T.sys_section_call}</p>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-3.5">
         <Card className="col-span-full flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -290,16 +375,20 @@ export function SystemPage() {
             {/* สถานะการบันทึกอยู่ตรงนี้แทนปุ่ม — ไม่มีปุ่มแล้ว ผู้ใช้จึงต้องมีอะไรยืนยันว่า
                 ที่แก้ไปถูกบันทึกจริง ไม่งั้นจะไม่แน่ใจแล้วกดรีเฟรชเช็คเอง
                 ไม่ใช้ toast เพราะจะเด้งทุกครั้งที่ขยับเลข รบกวนเกินไปสำหรับการกระทำเล็กๆ แบบนี้ */}
-            {saveState !== 'idle' ? (
+            {saveState !== "idle" ? (
               <span
                 className={cn(
-                  'font-mono text-micro',
-                  saveState === 'failed' ? 'text-bad' : saveState === 'saved' ? 'text-ok' : 'text-ink-2',
+                  "font-mono text-micro",
+                  saveState === "failed"
+                    ? "text-bad-strong"
+                    : saveState === "saved"
+                      ? "text-ok-strong"
+                      : "text-ink-2",
                 )}
               >
-                {saveState === 'saving'
+                {saveState === "saving"
                   ? T.cfg_saving
-                  : saveState === 'saved'
+                  : saveState === "saved"
                     ? `✓ ${T.cfg_saved}`
                     : T.cfg_save_failed}
               </span>
@@ -310,14 +399,17 @@ export function SystemPage() {
               {/* ช่องกรอกกว้าง 90px พอดีเลข 3 หลัก — เดิมยืดเต็มคอลัมน์ในการ์ดที่กว้างทั้งหน้า
                   ได้ช่องยาวเป็นฟุตสำหรับกรอกเลขตัวเดียว ดูไม่ออกว่าต้องใส่อะไร
                   พื้นที่ที่เหลือเอาไปอธิบายว่าค่านั้นทำอะไร ซึ่งมีค่ากับคนใช้มากกว่าช่องกรอกยาวๆ */}
-              <div className="flex flex-col divide-y divide-line-2">
+              {/* สามค่านี้เรียงเป็นคอลัมน์ ไม่ใช่แถวซ้อนกันแบบเดิม — แบบแถวกินความสูงเกิน 500px
+                  ทำให้หน้านี้ต้องเลื่อนทั้งที่มีของอยู่แค่ 4 กล่อง และทั้งสามค่าคูณกันเป็นเวลารวม
+                  ต่อเบอร์อยู่แล้ว วางเรียงข้างกันจึงเทียบกันได้ในสายตาเดียว */}
+              <div className="grid gap-x-6 gap-y-4 md:grid-cols-3 md:divide-x md:divide-line-2 md:[&>*:not(:first-child)]:ps-6">
                 <ConfigRow
                   label={T.retry_count}
                   unit={T.unit_times}
                   min={0}
                   max={10}
                   value={cfg.call_retry_count}
-                  onChange={(v) => set('call_retry_count', v)}
+                  onChange={(v) => set("call_retry_count", v)}
                   onCommit={() => void flushSave()}
                   help={T.retry_count_help}
                   example={T.retry_count_example(cfg.call_retry_count)}
@@ -330,7 +422,7 @@ export function SystemPage() {
                   max={300}
                   rangeHint={T.duration_range(5, 300)}
                   value={cfg.call_retry_delay_seconds}
-                  onChange={(v) => set('call_retry_delay_seconds', v)}
+                  onChange={(v) => set("call_retry_delay_seconds", v)}
                   onCommit={() => void flushSave()}
                   help={T.retry_delay_help}
                   example={T.retry_delay_example(cfg.call_retry_delay_seconds)}
@@ -343,10 +435,12 @@ export function SystemPage() {
                   max={120}
                   rangeHint={T.duration_range(10, 120)}
                   value={cfg.call_ring_timeout_seconds}
-                  onChange={(v) => set('call_ring_timeout_seconds', v)}
+                  onChange={(v) => set("call_ring_timeout_seconds", v)}
                   onCommit={() => void flushSave()}
                   help={T.ring_timeout_help}
-                  example={T.ring_timeout_example(cfg.call_ring_timeout_seconds)}
+                  example={T.ring_timeout_example(
+                    cfg.call_ring_timeout_seconds,
+                  )}
                 />
               </div>
 
@@ -354,7 +448,9 @@ export function SystemPage() {
                   เช่น retry 2 + ดัง 25 วิ + รอ 30 วิ = กว่าจะข้ามไปเบอร์ที่ 2 ก็ 2 นาทีครึ่งแล้ว
                   ซึ่งอาจนานเกินไปมากสำหรับเหตุด่วน */}
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-control border border-line bg-surface-2 px-3.5 py-2.5">
-                <span className="text-caption font-semibold">{T.call_budget_title}</span>
+                <span className="text-caption font-semibold">
+                  {T.call_budget_title}
+                </span>
                 <span className="font-mono text-caption text-ink-2">
                   {T.call_budget(
                     (cfg.call_retry_count + 1) * cfg.call_ring_timeout_seconds +
@@ -362,20 +458,26 @@ export function SystemPage() {
                     cfg.call_retry_count + 1,
                   )}
                 </span>
+                {/* หมายเหตุ "บันทึกอัตโนมัติ" ย้ายมาต่อท้ายบรรทัดเดียวกัน ไม่แยกย่อหน้าใหม่
+                    — ประหยัดความสูงไปหนึ่งบรรทัด ซึ่งเป็นส่วนต่างที่ทำให้หน้านี้พอดีจอพอดี */}
+                <span className="ms-auto text-micro text-ink-2">
+                  {T.sys_call_config_note}
+                </span>
               </div>
-
-              <p className="text-caption leading-[1.8] text-ink-2">{T.sys_call_config_note}</p>
             </>
           ) : null}
         </Card>
-
       </div>
 
       {/* หมายเหตุนี้ทำเป็นกล่องเส้นประ ไม่ใช่การ์ดทึบ — มันเป็นข้อมูลกำกับ ไม่ใช่ของที่ใช้งานได้
           ถ้าทำเป็นการ์ดเหมือนกันจะแย่งน้ำหนักสายตากับการ์ดที่กดใช้จริง */}
-      <div className="mt-1 flex flex-col gap-1.5 rounded-card border border-dashed border-warn bg-warn-soft/40 px-4 py-3.5">
-        <h2 className="text-caption font-bold text-warn">{T.sys_missing_title}</h2>
-        <p className="text-caption leading-[1.9] text-ink-2">{T.sys_missing_body}</p>
+      <div className="flex flex-col gap-1 rounded-card border border-dashed border-warn bg-warn-soft/40 px-4 py-3">
+        <h2 className="text-caption font-bold text-warn-strong">
+          {T.sys_missing_title}
+        </h2>
+        <p className="text-caption leading-[1.9] text-ink-2">
+          {T.sys_missing_body}
+        </p>
       </div>
 
       {/* ยืนยันก่อนรีสตาร์ท — ไม่ใช่ปุ่มกดพลาดแล้วไม่เป็นไร ระหว่างรีสตาร์ทโทรออกไม่ได้เลย
@@ -477,9 +579,24 @@ function RefreshIcon(props: SVGProps<SVGSVGElement>) {
  * ซึ่งคนที่ไม่คุ้นกับ Pi ตอบไม่ได้ (64% ของ RAM คือปกติหรือใกล้เต็ม?) แถบสีตอบให้ทันที
  * เกณฑ์: <70 ปกติ · 70-89 เริ่มตึง · ≥90 อันตราย (ใกล้จุดที่ระบบจะเริ่มมีปัญหา)
  */
-function Meter({ label, value, text }: { label: string; value: number | null; text: string }) {
+function Meter({
+  label,
+  value,
+  text,
+}: {
+  label: string;
+  value: number | null;
+  text: string;
+}) {
   const pct = value == null ? 0 : Math.max(0, Math.min(100, value));
-  const tone = value == null ? 'bg-line' : pct >= 90 ? 'bg-bad' : pct >= 70 ? 'bg-warn' : 'bg-ok';
+  const tone =
+    value == null
+      ? "bg-line"
+      : pct >= 90
+        ? "bg-bad"
+        : pct >= 70
+          ? "bg-warn"
+          : "bg-ok";
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -491,7 +608,10 @@ function Meter({ label, value, text }: { label: string; value: number | null; te
         {/* transition ให้แถบไหลไปค่าใหม่แทนการกระตุก — หน้านี้รีเฟรชทุก 2 วิ ถ้าเด้งทันที
             ทุกครั้งจะรบกวนสายตาคนที่เปิดจอค้างไว้ดูนานๆ */}
         <span
-          className={cn('block h-full rounded-full transition-[width,background-color] duration-500', tone)}
+          className={cn(
+            "block h-full rounded-full transition-[width,background-color] duration-500",
+            tone,
+          )}
           style={{ width: `${pct}%` }}
         />
       </span>
@@ -505,6 +625,45 @@ function Meter({ label, value, text }: { label: string; value: number | null; te
  * ตัวอย่างคำนวณจากค่าที่กรอกอยู่จริง ไม่ใช่ข้อความตายตัว — พิมพ์เลขเปลี่ยนปุ๊บประโยค
  * ตัวอย่างเปลี่ยนตาม เห็นผลของค่าที่กำลังจะบันทึกก่อนกดบันทึกจริง
  */
+/**
+ * โครงร่วมของช่องตั้งค่าทั้งสามช่อง — ต้องเหมือนกันเป๊ะทุกช่อง
+ *
+ * เดิมแต่ละช่องมีบรรทัดไม่เท่ากัน (ช่อง "จำนวนครั้ง" ไม่มีบรรทัดบอกช่วงค่า) คำอธิบาย
+ * ของสามช่องเลยเริ่มคนละระดับ อ่านแล้วสายตาต้องไล่หาว่าอันไหนคู่กับอันไหน
+ *
+ * mt-auto ที่กล่องตัวอย่าง = ดันลงชิดขอบล่างเสมอ ช่องที่คำอธิบายสั้นกว่าจึงยังมีกล่อง
+ * ตัวอย่างอยู่ระดับเดียวกับช่องอื่น (grid ยืดทุกช่องสูงเท่ากันอยู่แล้ว)
+ */
+function SettingCell({
+  label,
+  range,
+  help,
+  example,
+  children,
+}: {
+  label: string;
+  range: string;
+  help: string;
+  example: string;
+  children: ReactNode;
+}) {
+  const { T } = useApp();
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <label className="text-caption font-semibold">{label}</label>
+      {children}
+      <p className="text-micro leading-[1.5] text-ink-2">{range}</p>
+      <p className="text-micro leading-[1.75]">{help}</p>
+      {/* ตัวอย่างอยู่ในกล่องพื้นจมพร้อมป้ายกำกับ — เดิมเป็นย่อหน้าธรรมดาที่มีแค่ลูกศรนำ
+          จึงอ่านปนกับคำอธิบายด้านบนจนแยกไม่ออกว่าอันไหนคือคำอธิบาย อันไหนคือตัวอย่าง */}
+      <p className="mt-auto rounded-control bg-surface-2 px-2.5 py-1.5 text-micro leading-[1.65] text-ink-2">
+        <span className="font-semibold text-ink">{T.cfg_example_label} · </span>
+        {example}
+      </p>
+    </div>
+  );
+}
+
 function ConfigRow({
   label,
   unit,
@@ -526,32 +685,30 @@ function ConfigRow({
   help: string;
   example: string;
 }) {
+  const { T } = useApp();
   return (
-    <div className="flex flex-col gap-2 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-5">
-      <div className="flex shrink-0 flex-col gap-1.5 sm:w-[250px]">
-        <label className="text-caption font-semibold">{label}</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={min}
-            max={max}
-            className={cn(inputCls, 'w-[90px] font-mono')}
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
-            // บันทึกทันทีตอนคลิกออกจากช่อง ไม่ต้องรอครบ 700ms — กันค่าหายถ้ารีบเปลี่ยนหน้าต่อ
-            onBlur={onCommit}
-          />
-          <span className="text-caption whitespace-nowrap text-ink-2">{unit}</span>
-        </div>
+    <SettingCell
+      label={label}
+      range={T.count_range(min, max, unit)}
+      help={help}
+      example={example}
+    >
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          className={cn(inputCls, "w-[90px] font-mono")}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          // บันทึกทันทีตอนคลิกออกจากช่อง ไม่ต้องรอครบ 700ms — กันค่าหายถ้ารีบเปลี่ยนหน้าต่อ
+          onBlur={onCommit}
+        />
+        <span className="text-caption whitespace-nowrap text-ink-2">
+          {unit}
+        </span>
       </div>
-      <div className="flex min-w-0 flex-col gap-1 sm:pt-6">
-        <p className="text-caption leading-[1.8] text-ink-2">{help}</p>
-        <p className="text-micro leading-[1.7] text-ink-2">
-          <span className="font-mono">→ </span>
-          {example}
-        </p>
-      </div>
-    </div>
+    </SettingCell>
   );
 }
 
@@ -594,58 +751,55 @@ function DurationRow({
   example: string;
 }) {
   const { minutes, seconds } = toMinSec(value);
-  const boxCls = cn(inputCls, 'w-[64px] font-mono');
+  const boxCls = cn(inputCls, "w-[64px] font-mono");
 
   return (
-    <div className="flex flex-col gap-2 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-5">
-      <div className="flex shrink-0 flex-col gap-1.5 sm:w-[250px]">
-        <label className="text-caption font-semibold">{label}</label>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <input
-            type="number"
-            min={0}
-            max={Math.floor(max / 60)}
-            aria-label={`${label} (${minutesUnit})`}
-            className={boxCls}
-            value={minutes}
-            onChange={(e) => onChange(fromMinSec(Number(e.target.value), seconds))}
-            onBlur={onCommit}
-          />
-          <span className="text-caption whitespace-nowrap text-ink-2">{minutesUnit}</span>
-          <input
-            type="number"
-            min={0}
-            max={59}
-            aria-label={`${label} (${secondsUnit})`}
-            className={boxCls}
-            value={seconds}
-            onChange={(e) => onChange(fromMinSec(minutes, Number(e.target.value)))}
-            onBlur={onCommit}
-          />
-          <span className="text-caption whitespace-nowrap text-ink-2">{secondsUnit}</span>
-        </div>
-        <p className="text-micro leading-[1.7] text-ink-2">{rangeHint}</p>
+    <SettingCell label={label} range={rangeHint} help={help} example={example}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <input
+          type="number"
+          min={0}
+          max={Math.floor(max / 60)}
+          aria-label={`${label} (${minutesUnit})`}
+          className={boxCls}
+          value={minutes}
+          onChange={(e) =>
+            onChange(fromMinSec(Number(e.target.value), seconds))
+          }
+          onBlur={onCommit}
+        />
+        <span className="text-caption whitespace-nowrap text-ink-2">
+          {minutesUnit}
+        </span>
+        <input
+          type="number"
+          min={0}
+          max={59}
+          aria-label={`${label} (${secondsUnit})`}
+          className={boxCls}
+          value={seconds}
+          onChange={(e) =>
+            onChange(fromMinSec(minutes, Number(e.target.value)))
+          }
+          onBlur={onCommit}
+        />
+        <span className="text-caption whitespace-nowrap text-ink-2">
+          {secondsUnit}
+        </span>
       </div>
-      <div className="flex min-w-0 flex-col gap-1 sm:pt-6">
-        <p className="text-caption leading-[1.8] text-ink-2">{help}</p>
-        <p className="text-micro leading-[1.7] text-ink-2">
-          <span className="font-mono">→ </span>
-          {example}
-        </p>
-      </div>
-    </div>
+    </SettingCell>
   );
 }
 
 /* ── ไอคอน (stroke 1.6 ชุดเดียวกับ Signal Flow Monitor) ──────────────────── */
 
 const iconBase: SVGProps<SVGSVGElement> = {
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
   strokeWidth: 1.6,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
 };
 
 function TowerIcon(props: SVGProps<SVGSVGElement>) {

@@ -122,7 +122,7 @@ export function AddDeviceDialog({
 
         {created ? (
           <>
-            <div className="flex min-w-0 flex-col gap-2.5 rounded-card border border-brand bg-brand-soft p-3.5">
+            <div className="flex min-w-0 flex-col gap-2.5 rounded-card border border-brand-strong bg-brand-soft p-3.5">
               <p className="text-caption font-semibold">{T.key_once_title}</p>
               <p className="text-caption leading-[1.8] text-ink-2">{T.key_once_body}</p>
               {/* items-start ไม่ใช่ items-center — key ตัดหลายบรรทัดได้ ปุ่มต้องอยู่ชิดบนไม่ใช่กลาง */}
@@ -172,7 +172,7 @@ X-API-Key: ${created.plaintext_key}
             <div className="flex min-w-0 flex-col gap-1.5">
               <span className="text-caption text-ink-2">{T.allowed_events_pick}</span>
               {eventTypes.length === 0 ? (
-                <p className="text-caption leading-[1.8] text-warn">{T.allowed_events_empty_hint}</p>
+                <p className="text-caption leading-[1.8] text-warn-strong">{T.allowed_events_empty_hint}</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {eventTypes.map((e) => (
@@ -183,8 +183,8 @@ X-API-Key: ${created.plaintext_key}
                       className={cn(
                         'rounded-full border px-3.5 py-2 text-caption transition-colors',
                         picked.includes(e.id)
-                          ? 'border-brand bg-brand-soft font-semibold text-brand'
-                          : 'border-line bg-surface text-ink hover:border-brand',
+                          ? 'border-brand-strong bg-brand-soft font-semibold text-brand-strong'
+                          : 'border-line bg-surface text-ink hover:border-brand-strong',
                       )}
                     >
                       {e.display_name}
@@ -193,7 +193,7 @@ X-API-Key: ${created.plaintext_key}
                 </div>
               )}
               {picked.length === 0 && eventTypes.length > 0 ? (
-                <p className="text-caption leading-[1.8] text-warn">{T.allowed_events_none}</p>
+                <p className="text-caption leading-[1.8] text-warn-strong">{T.allowed_events_none}</p>
               ) : null}
             </div>
 

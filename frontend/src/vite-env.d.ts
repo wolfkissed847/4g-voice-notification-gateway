@@ -7,3 +7,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** เวอร์ชันแอปที่ถูกฝังตอน build — อ่านมาจาก app/main.py (ดู vite.config.ts) */
+declare const __APP_VERSION__: string;

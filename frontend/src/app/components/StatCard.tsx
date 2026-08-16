@@ -14,10 +14,10 @@ type CardColor = 'brand' | 'green' | 'red' | 'amber' | 'slate';
 
 /** คงชื่อสีเดิมไว้เพื่อไม่ต้องแก้ทุกที่ที่เรียกใช้ แต่ map ไปที่ token ตามความหมาย */
 export const CARD_CLR: Record<CardColor, { bg: string; icon: string }> = {
-  brand: { bg: 'bg-brand-soft', icon: 'text-brand' },
-  green: { bg: 'bg-ok-soft', icon: 'text-ok' },
-  red: { bg: 'bg-bad-soft', icon: 'text-bad' },
-  amber: { bg: 'bg-warn-soft', icon: 'text-warn' },
+  brand: { bg: 'bg-brand-soft', icon: 'text-brand-strong' },
+  green: { bg: 'bg-ok-soft', icon: 'text-ok-strong' },
+  red: { bg: 'bg-bad-soft', icon: 'text-bad-strong' },
+  amber: { bg: 'bg-warn-soft', icon: 'text-warn-strong' },
   slate: { bg: 'bg-surface-2', icon: 'text-ink-2' },
 };
 

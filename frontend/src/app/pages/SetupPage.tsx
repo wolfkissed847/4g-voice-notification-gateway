@@ -51,8 +51,8 @@ export function SetupPage() {
             className={cn(
               'rounded-full border px-3.5 py-1.5 text-caption whitespace-nowrap transition-colors',
               tab === t.id
-                ? 'border-brand bg-brand-soft font-semibold text-ink'
-                : 'border-line bg-surface font-medium text-ink hover:border-brand',
+                ? 'border-brand bg-brand font-semibold text-brand-ink'
+                : 'border-line bg-surface font-medium text-ink hover:border-brand-strong',
             )}
           >
             {t.label}

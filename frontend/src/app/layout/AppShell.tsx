@@ -1,21 +1,31 @@
 /**
  * AppShell — เชลล์ที่ทุกหน้าใช้ร่วมกัน (nav + ธีม + ภาษา + สถานะโมดูล)
- * พอร์ตจาก figma/handoff/components/AppShell.tsx
  *
- * ── ต่างจากต้นฉบับ ────────────────────────────────────────────────────
- * 1. ต้นฉบับใช้ prop `screen` + `onNavigate` (state ในแอป)
- *    ของเราใช้ react-router — เปลี่ยนเป็น <Outlet /> + NavLink + useLocation
- * 2. ต้นฉบับถือ state ธีม/ภาษาไว้เอง ของเราใช้ AppContext ที่มีอยู่แล้ว
- *    (เก็บลง localStorage + สลับคลาส .dark/.light บน <html>)
- * 3. ต้นฉบับมี 6 แท็บ ของเรามี 8 หน้า — เพิ่ม คิวการโทร / ประเภทเหตุการณ์ / กลุ่มผู้รับ
- *    ที่ดีไซน์ยุบรวมไว้ที่อื่น แต่ backend เราแยกเป็นหน้าจริง (ดู DEPLOYMENT_MODELS.md)
- * 4. ป้ายสถานะโมดูลต้นฉบับเป็นข้อความคงที่ — ของเราดึงจาก /system/info จริง
+ * พอร์ตโครงจาก figma/Redesign Corporate Web App — เปลี่ยนจากแท็บแนวนอนด้านบน
+ * เป็นแถบเมนูข้างซ้าย 240px และเนื้อหากินเต็มความกว้างจอ
  *
- * แทนที่ DashboardLayout เดิม (sidebar + bottom tabs) ด้วย top nav เดียวตามดีไซน์
+ * ── ทำไมเปลี่ยนเป็นแถบข้าง ──────────────────────────────────────────────────
+ * แท็บแนวนอนเดิมมี 6 อัน ป้ายภาษาไทยยาว พอจอแคบกว่า ~1100px จะตกบรรทัดเป็น 2 แถว
+ * กินความสูงเหนือเนื้อหาจริงไปเกือบ 100px ทุกหน้า และต้องมีเมนูแบบกดกางแยกอีกชุด
+ * สำหรับมือถือ แถบข้างแก้ทั้งสองอย่าง: ป้ายยาวแค่ไหนก็เรียงลงล่างได้ไม่จำกัด
+ * และบนมือถือกลายเป็นลิ้นชักที่เลื่อนเข้ามาทับ ไม่แย่งพื้นที่แนวตั้งเลย
+ *
+ * เนื้อหาเดิมถูกจำกัดที่ 1180px ทำให้ตารางประวัติ/คิวบนจอกว้างเหลือขอบว่างสองข้าง
+ * เยอะมากทั้งที่ข้อมูลเป็นตารางที่ยิ่งกว้างยิ่งอ่านง่าย — เอาเพดานออก
+ *
+ * ── ที่ต่างจากไฟล์ดีไซน์ ────────────────────────────────────────────────────
+ * 1. ดีไซน์สลับหน้าด้วย useState ของเราใช้ react-router — NavLink + <Outlet />
+ * 2. ดีไซน์ถือ state ธีม/ภาษาไว้เอง ของเราใช้ AppContext (เก็บ localStorage +
+ *    สลับคลาสบน <html>) และปุ่มออกจากระบบของดีไซน์ยังไม่ได้ต่อ ของเราเคลียร์ token จริง
+ * 3. จุดสถานะโมดูลของดีไซน์เป็นจุดแดงคงที่ ของเราดึงจาก /system/info ทุก 30 วิ
+ *    และกดแล้วพาไปหน้าระบบ เพราะพอเห็นว่า "ไม่พร้อม" คำถามถัดไปคือ "เพราะอะไร"
+ * 4. ดีไซน์มีปุ่มลอย "ทดลองดูแอนิเมชัน" ไม่เอามา — ของจริงมีงานโทรจริงให้ดูอยู่แล้ว
+ *    ปุ่มที่เล่นภาพจำลองบนหน้าจอเฝ้าระวังทำให้แยกไม่ออกว่าอันไหนของจริง
  */
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
+import { BookOpen, Clock, Cpu, LayoutGrid, Layers, LogOut, Menu, Moon, Settings, Sun, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { clearToken } from '../api/client';
@@ -24,221 +34,286 @@ import { useApp } from '../context/AppContext';
 import { usePolling } from '../lib/usePolling';
 import { Dot } from '../components/primitives';
 
+const SIDEBAR_W = 240;
+
+type NavItem = {
+  path: string;
+  label: string;
+  icon: LucideIcon;
+  /** path อื่นที่ถือว่าอยู่เมนูเดียวกัน (หน้าเดียวกันแต่คนละแท็บ) */
+  alsoMatch?: string[];
+};
+
 export function AppShell() {
   const location = useLocation();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // ปิดลิ้นชักทันทีที่เปลี่ยนหน้า ไม่งั้นมันจะค้างทับเนื้อหาที่เพิ่งกดเข้าไปดู
+  useEffect(() => setDrawerOpen(false), [location.pathname]);
+
   return (
-    <div className="flex min-h-screen flex-col bg-bg text-ink">
-      <Header />
-      <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 pt-6 pb-16 md:px-5">
-        {/* key={pathname} บังคับให้ React มองเป็น element ใหม่ตอนเปลี่ยนหน้า
-            animate-fade-up (keyframe เดิมใน tw-theme.css) เลยเล่นซ้ำทุกครั้งที่สลับแท็บ */}
-        <div key={location.pathname} className="animate-fade-up">
-          <Outlet />
+    /* h-dvh + overflow-hidden = หน้าต่างเว็บไม่เลื่อนเอง ให้เนื้อหาข้างในเลื่อนแทน
+       dvh ไม่ใช่ vh เพราะบนมือถือ vh นับรวมแถบ URL ที่ยุบได้ ทำให้เนื้อหาล้นออกไปใต้แถบ
+
+       ทำแบบนี้เพื่อให้หน้าที่ "ควรพอดีจอ" (คิว / ระบบ) สั่ง h-full แล้วได้ความสูงจริง
+       แล้วดันส่วนที่ยาว (ตารางคิว) ให้เลื่อนอยู่ในกล่องของตัวเองแทนที่จะดันทั้งหน้ายาวลงไป
+       ส่วนหน้าที่ยาวจริงๆ อย่างคู่มือ ยังเลื่อนได้ตามปกติเพราะ <main> เป็น overflow-y-auto */
+    <div className="flex h-dvh overflow-hidden bg-bg text-ink">
+      {/* ── แถบข้างถาวรบนจอกว้าง ─────────────────────────────────────────── */}
+      <div className="hidden shrink-0 lg:block" style={{ width: SIDEBAR_W }}>
+        <SideNav />
+      </div>
+
+      {/* ── ลิ้นชักบนจอแคบ ───────────────────────────────────────────────── */}
+      {drawerOpen ? (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <button
+            type="button"
+            aria-label="close menu"
+            onClick={() => setDrawerOpen(false)}
+            className="absolute inset-0 bg-black/50"
+          />
+          <div className="animate-fade-up relative" style={{ width: SIDEBAR_W }}>
+            <SideNav onClose={() => setDrawerOpen(false)} />
+          </div>
         </div>
-      </main>
+      ) : null}
+
+      {/* min-h-0 จำเป็นกับ flex item ที่ต้องยอมให้ลูกเลื่อนได้ — ค่าเริ่มต้นของ
+          min-height ใน flex คือ auto ซึ่งแปลว่า "ห้ามเตี้ยกว่าเนื้อหา" กล่องลูกจึงยืดยาว
+          ออกไปแทนที่จะเกิด scrollbar */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <MobileBar onOpen={() => setDrawerOpen(true)} />
+
+        {/* เนื้อหากินเต็มความกว้าง ไม่มีเพดาน — ตารางประวัติ/คิวยิ่งกว้างยิ่งอ่านง่าย */}
+        <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-4 md:px-7">
+          {/* key={pathname} บังคับให้ React มองเป็น element ใหม่ตอนเปลี่ยนหน้า
+              animate-fade-up เลยเล่นซ้ำทุกครั้งที่สลับเมนู
+              h-full ส่งความสูงต่อให้หน้าที่อยากพอดีจอใช้ได้ (หน้าที่ยาวกว่านั้นก็ล้นแล้วเลื่อนตามปกติ) */}
+          <div key={location.pathname} className="animate-fade-up h-full">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
 
-const chipCls =
-  'rounded-full border border-line bg-surface px-2.5 py-1 font-mono text-micro text-ink-2 transition-colors hover:border-brand';
+/* ── แถบเมนู ─────────────────────────────────────────────────────────────── */
 
-function Header() {
+function useNavItems(): NavItem[] {
+  const { T } = useApp();
+  return [
+    { path: '/overview', label: T.nav_overview, icon: LayoutGrid },
+    { path: '/queue', label: T.nav_queue, icon: Layers },
+    { path: '/history', label: T.nav_history, icon: Clock },
+    // อุปกรณ์ / ประเภทเหตุการณ์ / กลุ่มผู้รับ เป็นหน้าเดียวกัน (SetupPage) คนละแท็บ
+    { path: '/devices', label: T.setup_title, icon: Settings, alsoMatch: ['/event-types', '/contacts'] },
+    { path: '/system', label: T.sys_title, icon: Cpu },
+    { path: '/api-guide', label: T.nav_api, icon: BookOpen },
+  ];
+}
+
+function SideNav({ onClose }: { onClose?: () => void }) {
   const { T, dark, toggleDark, lang, toggleLang } = useApp();
-  const navigate = useNavigate();
   const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  // ปิดเมนูทันทีที่เปลี่ยนหน้า ไม่งั้นรายการจะค้างบังเนื้อหาที่เพิ่งกดเข้าไปดู
-  useEffect(() => setMenuOpen(false), [location.pathname]);
+  const navigate = useNavigate();
+  const items = useNavItems();
 
   // 30 วิพอสำหรับป้ายสถานะ — ถี่กว่านี้เปลือง log ของ container บน Pi เปล่าๆ
   const { data: info } = usePolling(getSystemInfo, 30_000);
-
-  const tabs = [
-    { path: '/overview', label: T.nav_overview },
-    { path: '/queue', label: T.nav_queue },
-    { path: '/history', label: T.nav_history },
-    // อุปกรณ์กับประเภทเหตุการณ์รวมเป็นเมนูเดียว (SetupPage) เพราะตั้งค่าคู่กันเสมอ
-    // — path ยังแยกกันอยู่ ใช้เป็นตัวเลือกแท็บ
-    { path: '/devices', label: T.setup_title, alsoMatch: ['/event-types', '/contacts'] },
-    { path: '/system', label: T.sys_title },
-    { path: '/api-guide', label: T.nav_api },
-  ];
 
   const logout = () => {
     clearToken();
     navigate('/login', { replace: true });
   };
 
-  // ชื่อหน้าปัจจุบันสำหรับปุ่มเมนูบนมือถือ — startsWith เพื่อให้ /devices/12 ยังนับเป็นแท็บ "อุปกรณ์"
-  // เมนูหนึ่งอันอาจครอบหลาย path ได้ (เมนู "อุปกรณ์ & เหตุการณ์" ครอบทั้ง /devices และ
-  // /event-types ซึ่งเป็นสองแท็บของหน้าเดียวกัน) จึงเช็คทั้ง path หลักและ alsoMatch
-  // ใช้ตัวนี้แทน isActive ของ NavLink ที่ดูแค่ path เดียวตรงๆ
-  const isTabActive = (t: (typeof tabs)[number]) =>
-    location.pathname.startsWith(t.path) || (t.alsoMatch ?? []).some((p) => location.pathname.startsWith(p));
-
-  const current = tabs.find(isTabActive) ?? tabs[0];
+  const isActive = (item: NavItem) =>
+    location.pathname.startsWith(item.path) ||
+    (item.alsoMatch ?? []).some((p) => location.pathname.startsWith(p));
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-3 px-4 py-3 md:px-5">
-        <div className="me-auto flex items-center gap-2.5">
-          <span className="grid size-7 place-items-center rounded-lg bg-brand font-mono text-micro font-bold text-brand-ink">
-            4G
-          </span>
-          <span className="text-caption font-bold whitespace-nowrap">{T.app_name}</span>
-        </div>
+    <nav
+      className="sticky top-0 flex h-screen flex-col overflow-y-auto border-e border-line bg-surface"
+      aria-label={T.app_name}
+    >
+      {/* ── หัวแถบ ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2.5 border-b border-line px-4 py-4">
+        <span className="grid size-7 shrink-0 place-items-center rounded-control bg-brand font-mono text-micro font-bold text-brand-ink">
+          4G
+        </span>
+        <span className="min-w-0 flex-1 truncate text-caption font-bold">{T.app_name}</span>
 
-        {/* order-3 + w-full = แท็บอยู่บรรทัดล่างเสมอ ไม่ใช่แค่บนมือถือ
-            โค้ด handoff ใส่ md:order-none md:w-auto ให้แท็บแทรกอยู่แถวเดียวกับโลโก้บนจอกว้าง
-            แต่ภาพ mockup แยกเป็น 2 บรรทัดทุกขนาดจอ (โลโก้+ปุ่มขวาบรรทัดบน / แท็บบรรทัดล่าง)
-            ยึดตามภาพ เพราะแท็บ 8 อันภาษาไทยแทรกแถวเดียวกันแล้วดันปุ่มขวาตกบรรทัด
+        {/* จุดสถานะโมดูล — กดแล้วไปหน้าระบบ เพราะคำถามถัดจาก "ไม่พร้อม" คือ "เพราะอะไร"
+            ระหว่างรอผลรอบแรก (info == null) ต้องเป็นสีกลาง ไม่ใช่แดง ไม่งั้นจะเห็น
+            สัญญาณเตือนที่ไม่จริงแวบหนึ่งทุกครั้งที่โหลดหน้า */}
+        <NavLink
+          to="/system"
+          title={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
+          aria-label={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
+          className="grid size-6 shrink-0 place-items-center rounded-full transition-colors hover:bg-surface-2"
+        >
+          <Dot
+            tone={info == null ? 'muted' : info.gsm_connected ? 'ok' : 'bad'}
+            pulse={info?.gsm_connected === true}
+          />
+        </NavLink>
 
-            flex-wrap ไม่ใช่ overflow-x-auto: ภาพจอแคบแสดงแท็บขึ้นบรรทัดใหม่ (2 แถว)
-            การเลื่อนแนวนอนซ่อนแท็บที่เลยขอบจอ ผู้ใช้ไม่รู้ว่ามีอยู่ — ยิ่งเรามี 8 แท็บ
-            ยิ่งต้องเห็นครบ ดีกว่าให้เดาว่าต้องปัดหา */}
-        {/* ── มือถือ: ปุ่มเดียวบอกหน้าปัจจุบัน กดแล้วกางรายการเต็มแนวตั้ง ──────────
-            เดิมปล่อยให้ pill 8 อัน flex-wrap เองทุกขนาดจอ บนจอ 360px กลายเป็น 3 แถว
-            สูงเกือบ 120px กินพื้นที่เหนือเนื้อหาจริงไปมาก และความยาวป้ายไทยไม่เท่ากัน
-            ทำให้แต่ละแถวจบไม่ตรงกัน ดูรกกว่าเป็นระเบียบ
-
-            ยังเห็นครบทั้ง 8 หน้าเหมือนเดิมตอนกางออก — ต่างจากการเลื่อนแนวนอน
-            ที่ซ่อนแท็บไว้นอกจอโดยผู้ใช้ไม่รู้ว่ามีอยู่ */}
-        <div className="order-3 w-full md:hidden">
+        {onClose ? (
           <button
             type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-expanded={menuOpen}
-            className="flex w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-3.5 py-2 text-caption font-semibold text-ink transition-colors"
+            onClick={onClose}
+            aria-label={T.cancel}
+            className="grid size-6 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:text-ink"
           >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="font-mono text-micro text-ink-2">
-                {String(tabs.indexOf(current) + 1).padStart(2, '0')}
-              </span>
-              <span className="truncate">{current.label}</span>
-            </span>
-            <ChevronDown
-              size={16}
-              className={cn('shrink-0 text-ink-2 transition-transform', menuOpen && 'rotate-180')}
-            />
+            <X size={16} />
           </button>
+        ) : null}
+      </div>
 
-          {menuOpen ? (
-            <div className="animate-fade-up mt-1 flex flex-col overflow-hidden rounded-control border border-line bg-surface">
-              {tabs.map((tab, i) => (
-                <NavLink
-                  key={tab.path}
-                  to={tab.path}
-                  className={cn(
-                    'flex items-center gap-2.5 border-b border-line-2 px-3.5 py-2.5 text-caption text-ink last:border-b-0',
-                    isTabActive(tab) ? 'bg-brand-soft font-semibold' : 'font-medium',
-                  )}
-                >
-                  <span className="font-mono text-micro text-ink-2">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  {tab.label}
-                </NavLink>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {/* ── จอกว้าง: pill เรียงเหมือนเดิมตามภาพ mockup ────────────────────── */}
-        <nav className="order-3 hidden w-full flex-wrap gap-1 md:flex">
-          {tabs.map((tab) => (
+      {/* ── รายการเมนู ─────────────────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col gap-0.5 px-3 py-3">
+        {items.map((item) => {
+          const on = isActive(item);
+          const Icon = item.icon;
+          return (
             <NavLink
-              key={tab.path}
-              to={tab.path}
+              key={item.path}
+              to={item.path}
               className={cn(
-                // ตัวอักษรเป็น text-ink (ดำ) ทั้งสองสถานะ — บอก active ด้วยกรอบ+พื้น+น้ำหนักตัวอักษร
-                // ไม่ใช้สีตัวอักษรเป็นตัวบอก เพราะอ่านง่ายกว่าและไม่พึ่งการแยกสีอย่างเดียว
-                'rounded-full border px-3.5 py-1.5 text-caption whitespace-nowrap transition-colors',
-                isTabActive(tab)
-                  ? 'border-brand bg-brand-soft font-semibold text-ink'
-                  : 'border-line bg-surface font-medium text-ink hover:border-brand',
+                'flex items-center gap-2.5 rounded-control px-3 py-2.5 text-caption transition-colors',
+                on
+                  ? 'bg-brand-soft font-semibold text-brand-strong'
+                  : 'font-medium text-ink-2 hover:bg-surface-2 hover:text-ink',
               )}
             >
-              {tab.label}
+              <Icon size={15} className="shrink-0" />
+              <span className="min-w-0 truncate">{item.label}</span>
             </NavLink>
-          ))}
-        </nav>
+          );
+        })}
+      </div>
 
-        {/* ป้ายทั้งชุดใช้คำสั้นตาม handoff (โมดูลพร้อม / โหมดมืด / ออก)
-            ของเดิมผมใช้คำยาว ("GSM module ยังไม่เชื่อมต่อ", "ออกจากระบบ") ซึ่งดันกันจนตกบรรทัด */}
-        {/* flex-wrap ที่ชุดปุ่มด้วย — จอ 360px ปุ่ม 4 อันไม่พอในแถวเดียว ให้ตกบรรทัดเองแทนล้นขอบ */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* เดิมซ่อนป้ายนี้ต่ำกว่า 640px (hidden sm:flex) แต่ภาพจอ 530px ยังแสดงอยู่
-              และนี่คือป้ายที่บอกว่าระบบพร้อมโทรหรือไม่ — ไม่ควรเป็นอย่างแรกที่หายไปบนมือถือ */}
-          {/* ป้ายนี้บอกว่าระบบพร้อมโทรหรือไม่ — ทำเป็นลิงก์ไปหน้าระบบ เพราะพอเห็นว่า "ไม่พร้อม"
-              คำถามถัดไปคือ "แล้วเพราะอะไร" ซึ่งคำตอบ (สัญญาณ/ผู้ให้บริการ/พอร์ต) อยู่หน้านั้นพอดี */}
-          {/* เหลือแค่จุดสี — กว้างคงที่ 30px เท่ากับปุ่มไอคอนอื่น ไม่ขยับตอนสลับภาษา
-              ข้อความเต็ม ("ออนไลน์"/"ออฟไลน์") ยังอยู่ใน title + aria-label ให้ทั้ง tooltip
-              ตอนชี้เมาส์และ screen reader — คนที่มองไม่เห็นสีจึงยังรู้สถานะได้
-              ตอนออฟไลน์ขอบเป็นสีแดงด้วย ไม่ได้พึ่งจุดสีอย่างเดียวในการเตือน */}
-          {/* ระหว่างรอผลรอบแรก (info === undefined) ต้องเป็นสีกลาง ไม่ใช่แดง
-              เดิมเขียน info?.gsm_connected ซึ่งตอนยังไม่มีข้อมูลจะได้ undefined = falsy
-              เท่ากับ "โมดูลไม่พร้อม" ผู้ใช้จึงเห็นจุดแดงแวบหนึ่งทุกครั้งที่เปลี่ยนหน้า/รีเฟรช
-              ทั้งที่ระบบปกติดี — แสดงสัญญาณเตือนที่ไม่จริงแม้แค่วินาทีเดียวก็ไม่ควร */}
-          <NavLink
-            to="/system"
-            title={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
-            aria-label={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
-            className={cn(
-              chipCls,
-              'grid size-[30px] place-items-center px-0',
-              info?.gsm_connected === false && 'border-bad hover:border-bad',
-            )}
-          >
-            <Dot
-              tone={info == null ? 'muted' : info.gsm_connected ? 'ok' : 'bad'}
-              pulse={info?.gsm_connected === true}
-            />
-          </NavLink>
-
-          {/* รหัสภาษาที่จะสลับไป — ใช้ font-mono ที่สืบมาจาก chipCls ซึ่งเป็นฟอนต์เดียวกับ
-              ป้ายเทคนิคอื่นทั้งเว็บ (Space Mono) และน้ำหนักปกติเท่าเพื่อนในแถวเดียวกัน
-              ไม่ใส่ font-bold เหมือนรอบก่อน เพราะทำให้ปุ่มนี้หนากว่าทุกอย่างรอบตัวอยู่ปุ่มเดียว
-
-              ตรึงขนาด 30×38 เท่าปุ่มไอคอนข้างๆ — TH กับ EN กว้างไม่เท่ากันเล็กน้อย
-              ถ้าปล่อยตามเนื้อหาปุ่มจะขยับทุกครั้งที่สลับภาษา */}
-          <button
-            type="button"
+      {/* ── ปุ่มท้ายแถบ: ภาษา / ธีม / ออก ──────────────────────────────────
+          สามปุ่มกว้างเท่ากันเป๊ะ ป้ายใต้ไอคอนจึงไม่ทำให้ปุ่มขยับตอนสลับภาษา */}
+      <div className="border-t border-line px-3 py-3">
+        <div className="flex items-stretch gap-1">
+          <FootBtn
             onClick={toggleLang}
-            className={cn(chipCls, 'grid h-[30px] w-[38px] place-items-center px-0 tracking-[0.06em]')}
-            aria-label={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+            label={lang === 'th' ? 'EN' : 'TH'}
             title={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+            highlight
           >
-            {lang === 'th' ? 'EN' : 'TH'}
-          </button>
+            <GlobeIcon />
+          </FootBtn>
 
-          {/* ไอคอนแทนข้อความ — ข้อความไทย "สลับเป็นสว่าง/มืด" ยาวจนเบียดปุ่มอื่นตกบรรทัดบนจอแคบ
-              aria-label + title ยังคงข้อความเต็มไว้ให้ทั้ง screen reader และ tooltip ตอนชี้เมาส์ */}
-          <button
-            type="button"
+          <FootBtn
             onClick={toggleDark}
-            className={cn(chipCls, 'grid size-[30px] place-items-center px-0')}
-            aria-label={dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
+            label={dark ? T.sys_theme_light : T.sys_theme_dark}
             title={dark ? T.sys_theme_to_light : T.sys_theme_to_dark}
           >
-            {dark ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
+            {dark ? <Sun size={16} /> : <Moon size={16} />}
+          </FootBtn>
 
-          {/* ไอคอนแทนข้อความด้วยเหตุผลเดียวกับปุ่มธีม — "ออก" กับ "Sign out" ยาวไม่เท่ากัน
-              พอสลับภาษาปุ่มจะหดขยายแล้วดันปุ่มอื่นขยับตามทั้งแถว */}
-          <button
-            type="button"
-            onClick={logout}
-            className={cn(chipCls, 'grid size-[30px] place-items-center px-0 hover:border-bad hover:text-bad')}
-            aria-label={T.nav_logout}
-            title={T.nav_logout}
-          >
-            <LogOut size={14} />
-          </button>
+          <FootBtn onClick={logout} label={T.nav_logout} title={T.nav_logout} danger>
+            <LogOut size={16} />
+          </FootBtn>
         </div>
       </div>
-    </header>
+    </nav>
   );
 }
 
+function FootBtn({
+  onClick,
+  label,
+  title,
+  highlight,
+  danger,
+  children,
+}: {
+  onClick: () => void;
+  label: string;
+  title: string;
+  highlight?: boolean;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={cn(
+        'flex flex-1 flex-col items-center gap-1 rounded-control bg-surface-2 py-2 transition-colors',
+        danger ? 'text-ink-2 hover:text-bad-strong' : 'text-ink-2 hover:text-ink',
+      )}
+    >
+      {children}
+      <span
+        className={cn(
+          'max-w-full truncate px-1 text-[9px] leading-none font-semibold',
+          highlight ? 'rounded bg-brand-soft px-1.5 py-0.5 font-mono text-brand-strong' : 'text-ink-2',
+        )}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
+/* ── แถบบนสำหรับจอแคบ ───────────────────────────────────────────────────── */
+
+function MobileBar({ onOpen }: { onOpen: () => void }) {
+  const { T } = useApp();
+  const { data: info } = usePolling(getSystemInfo, 30_000);
+
+  return (
+    <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface px-4 py-3 lg:hidden">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={T.nav_overview}
+        className="grid size-7 place-items-center rounded-control text-ink-2 transition-colors hover:text-ink"
+      >
+        <Menu size={18} />
+      </button>
+      <span className="grid size-6 shrink-0 place-items-center rounded-control bg-brand font-mono text-[9px] font-bold text-brand-ink">
+        4G
+      </span>
+      <span className="min-w-0 truncate text-caption font-bold">{T.app_name}</span>
+      <NavLink
+        to="/system"
+        title={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
+        aria-label={info == null ? T.loading : info.gsm_connected ? T.module_ready : T.module_not_ready}
+        className="ms-auto grid size-6 place-items-center rounded-full"
+      >
+        <Dot
+          tone={info == null ? 'muted' : info.gsm_connected ? 'ok' : 'bad'}
+          pulse={info?.gsm_connected === true}
+        />
+      </NavLink>
+    </div>
+  );
+}
+
+/** ลูกโลก — lucide มี Globe แต่เส้นเยอะกว่าไอคอนอื่นในแถวนี้ วาดเองให้น้ำหนักเท่ากัน */
+function GlobeIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
+}

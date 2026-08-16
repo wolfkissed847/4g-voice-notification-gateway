@@ -10,10 +10,10 @@ import { cn } from '@/app/components/ui/utils';
 export type AlertTone = 'ok' | 'warn' | 'bad' | 'accent';
 
 const toneStyle: Record<AlertTone, string> = {
-  ok: 'border-ok bg-ok-soft text-ok',
-  warn: 'border-warn bg-warn-soft text-warn',
-  bad: 'border-bad bg-bad-soft text-bad',
-  accent: 'border-brand bg-brand-soft text-brand',
+  ok: 'border-ok bg-ok-soft text-ok-strong',
+  warn: 'border-warn bg-warn-soft text-warn-strong',
+  bad: 'border-bad bg-bad-soft text-bad-strong',
+  accent: 'border-brand-strong bg-brand-soft text-brand-strong',
 };
 
 const toneIcon: Record<AlertTone, typeof AlertTriangle> = {

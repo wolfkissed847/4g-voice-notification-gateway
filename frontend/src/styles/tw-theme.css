@@ -111,17 +111,33 @@
   --color-line: rgb(var(--line));
   --color-line-2: rgb(var(--line-2));
 
-  /* brand = สีน้ำเงินอิ่มที่ handoff เรียกว่า accent (ดูหมายเหตุหัวไฟล์) */
+  /* brand = สีน้ำเงินอิ่มที่ handoff เรียกว่า accent (ดูหมายเหตุหัวไฟล์)
+     แยกเป็นสองบทบาทเพราะสีเดียวทำสองหน้าที่พร้อมกันไม่ได้:
+       brand        ใช้เป็น "พื้น" (ปุ่ม/ชิป) — ไซแอนสดได้เต็มที่เพราะตัวอักษรบนนั้นเป็นสีดำ
+       brand-strong ใช้เป็น "ตัวอักษร/เส้นขอบ" บนพื้นสว่าง — ต้องเข้มพอให้ผ่าน 4.5:1
+     ใน dark mode ทั้งคู่เป็น #00bdfe ตัวเดียวกัน เพราะบนพื้นดำมันอ่านออกอยู่แล้ว */
   --color-brand: var(--accent);
+  --color-brand-strong: var(--accent-strong);
   --color-brand-soft: var(--accent-soft);
   --color-brand-ink: var(--accent-ink);
 
+  /* สถานะแยกสองบทบาทด้วยเหตุผลเดียวกับ brand ด้านบน:
+       ok / warn / bad        = สีสด ใช้กับเส้นขอบ จุดสถานะ พื้นทึบ (ไม่มีตัวอักษรทับ)
+       *-strong               = เฉดเข้มสำหรับ "ตัวอักษร" บนพื้นสว่าง
+     ใน dark mode ทั้งคู่เป็นค่าเดียวกัน */
   --color-ok: var(--ok);
+  --color-ok-strong: var(--ok-strong);
   --color-ok-soft: var(--ok-soft);
   --color-warn: var(--warn);
+  --color-warn-strong: var(--warn-strong);
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
+  --color-bad-strong: var(--bad-strong);
   --color-bad-soft: var(--bad-soft);
+
+  /* ตัวอักษรบนป้าย/ปุ่มที่ลงพื้นด้วย *-strong — ขาวในธีมสว่าง ดำในธีมมืด
+     (พื้น *-strong กลับด้านกันระหว่างสองธีม ดูเหตุผลใน theme-tuning.css) */
+  --color-status-ink: rgb(var(--status-ink));
 
   /* ── ช่องของ shadcn/ui — accent ตรงนี้คือพื้นจาง ไม่ใช่ brand ── */
   --color-background: var(--background);

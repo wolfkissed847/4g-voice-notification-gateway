@@ -12,3 +12,5 @@
 @import './tw-theme.css';
 /* token + keyframes เฉพาะการ์ด Signal Flow Monitor (ต้องอยู่หลัง theme เพราะอ้างค่าจากมัน) */
 @import './signal-flow.css';
+/* แอนิเมชันของหน้าเข้าสู่ระบบ (หน้าเดียว ลบทั้งไฟล์ได้ไม่กระทบหน้าอื่น) */
+@import './login.css';
