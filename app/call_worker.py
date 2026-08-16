@@ -284,7 +284,15 @@ def _poll_gsm_status(gsm: GSMModule, power: GsmPower | None = None):
             # ที่บอกเรื่องเดียวกับบรรทัดแรกทุกประการ
             log = logger.warning if streak == 0 else logger.info
             log("โมดูลไม่ตอบ — กด PWRKEY ปลุกเอง (ครั้งที่ %s)", streak + 1)
-            if power.power_on() and _reconnect_after_power(gsm):
+
+            # ไม่เอาผลของ power_on() มาเป็นเงื่อนไขว่าจะลองต่อ AT ต่อไหม — มันตัดสินจากขา
+            # STATUS ซึ่งบอร์ดที่ใช้จริงเชื่อไม่ได้ (มีทั้งจังหวะที่ค้างสูงตอนโมดูลตาย และ
+            # จังหวะที่ไม่ขึ้นตอนโมดูลบูตขึ้นมาแล้ว) เจอจริง: กดแล้วโมดูลกลับมาใช้งานได้
+            # แต่ log รายงานว่า "เปิดโมดูลไม่สำเร็จ" เพราะ STATUS ไม่ขึ้นใน 25 วิ
+            #
+            # ตัวชี้ขาดว่าปลุกสำเร็จหรือไม่มีอย่างเดียวคือ "AT ตอบไหม" จึงลองต่อเสมอ
+            power.power_on()
+            if _reconnect_after_power(gsm):
                 _poll_gsm_status._power_on_fail_streak = 0
                 logger.warning("ปลุกโมดูลกลับมาได้เองแล้ว")
                 return
