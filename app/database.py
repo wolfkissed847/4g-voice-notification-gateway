@@ -94,6 +94,12 @@ class AppSettings(Base):
     call_retry_count = Column(Integer, default=2)
     call_retry_delay_seconds = Column(Integer, default=30)
     call_ring_timeout_seconds = Column(Integer, default=25)
+    # เว้นช่วงหลังปลายสายรับก่อนเริ่มพูด — คนรับสายต้องยกหูขึ้นแนบหูก่อน
+    # ถ้าพูดทันทีที่รับ ประโยคต้นจะหายไปกับจังหวะที่มือถือยังไม่ถึงหู
+    call_answer_delay_seconds = Column(Integer, default=2)
+    # พูดข้อความซ้ำกี่รอบต่อ 1 สาย (1 = พูดครั้งเดียว) — ฟังรอบเดียวมักจับใจความไม่ครบ
+    # โดยเฉพาะคนที่เพิ่งตื่นหรืออยู่ในที่เสียงดัง ซึ่งเป็นสถานการณ์ปกติของการแจ้งเตือนกลางดึก
+    call_repeat_count = Column(Integer, default=2)
 
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

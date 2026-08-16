@@ -16,6 +16,12 @@ class WorkerState:
     gsm_operator: str | None = None
     gsm_network_mode: str | None = None
     gsm_status_updated_at: datetime.datetime | None = None
+    # อ่านจากขา STATUS ของโมดูลตรงๆ — None = ตอบไม่ได้ (ไม่ได้ต่อ GPIO ไว้ หรือเป็นโมดูล USB)
+    #
+    # ต่างจาก gsm_connected ที่หมายถึง "คุย AT กับโมดูลรู้เรื่องไหม" — สองอย่างนี้ไม่เหมือนกัน
+    # และตอนต่างกันคือตอนที่มีประโยชน์ที่สุด: ไฟติดแต่ AT ไม่ตอบ = เฟิร์มแวร์ค้าง (แก้ด้วยรีบูต)
+    # ส่วนไฟไม่ติดเลย = ไฟเลี้ยงหรือสายมีปัญหา (รีบูตไปก็ไม่ช่วย) คนละอาการคนละวิธีแก้
+    gsm_power_on: bool | None = None
     # ขั้นตอนย่อยที่ worker กำลังทำกับงานปัจจุบัน (ดู CallStep ด้านล่าง)
     # เก็บในหน่วยความจำอย่างเดียว ไม่ลง DB เพราะเป็นข้อมูลชั่วขณะที่หมดความหมายทันทีที่ process ตาย
     # และซิมมีใบเดียว = โทรได้ทีละสาย จึงมีงานที่ "กำลังทำอยู่" ได้แค่งานเดียวเสมอ
@@ -64,6 +70,12 @@ def set_gsm_connected(connected: bool, port: str | None = None):
         _state.gsm_connected = connected
         if port is not None:
             _state.gsm_port = port
+
+
+def set_gsm_power_on(power_on: bool | None):
+    """บันทึกสถานะขา STATUS ของโมดูล — worker เป็นคนเรียก เพราะเป็นฝ่ายที่ถือ GPIO ไว้"""
+    with _lock:
+        _state.gsm_power_on = power_on
 
 
 def set_gsm_status(signal_quality: int | None, operator: str | None, network_mode: str | None):

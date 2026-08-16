@@ -20,6 +20,8 @@ class EffectiveConfig:
     call_retry_count: int
     call_retry_delay_seconds: int
     call_ring_timeout_seconds: int
+    call_answer_delay_seconds: int
+    call_repeat_count: int
 
 
 def get_or_create_app_settings(db: Session) -> AppSettings:
@@ -33,6 +35,8 @@ def get_or_create_app_settings(db: Session) -> AppSettings:
         call_retry_count=settings.call_retry_count,
         call_retry_delay_seconds=settings.call_retry_delay_seconds,
         call_ring_timeout_seconds=settings.call_ring_timeout_seconds,
+        call_answer_delay_seconds=settings.call_answer_delay_seconds,
+        call_repeat_count=settings.call_repeat_count,
     )
     db.add(row)
     db.commit()
@@ -47,6 +51,8 @@ def get_effective_config(db: Session) -> EffectiveConfig:
         call_retry_count=row.call_retry_count,
         call_retry_delay_seconds=row.call_retry_delay_seconds,
         call_ring_timeout_seconds=row.call_ring_timeout_seconds,
+        call_answer_delay_seconds=row.call_answer_delay_seconds,
+        call_repeat_count=row.call_repeat_count,
     )
 
 
@@ -57,6 +63,8 @@ def get_masked_config(db: Session) -> dict:
         "call_retry_count": row.call_retry_count,
         "call_retry_delay_seconds": row.call_retry_delay_seconds,
         "call_ring_timeout_seconds": row.call_ring_timeout_seconds,
+        "call_answer_delay_seconds": row.call_answer_delay_seconds,
+        "call_repeat_count": row.call_repeat_count,
     }
 
 
@@ -66,6 +74,7 @@ def update_app_settings(db: Session, **fields) -> AppSettings:
 
     direct_fields = {
         "call_retry_count", "call_retry_delay_seconds", "call_ring_timeout_seconds",
+        "call_answer_delay_seconds", "call_repeat_count",
     }
 
     for key, value in fields.items():

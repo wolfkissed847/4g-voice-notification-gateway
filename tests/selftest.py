@@ -216,8 +216,13 @@ from app.config_service import get_effective_config
 class FakeGSM:
     """โมดูลปลอม — บันทึกว่าถูกสั่งโทรไปเบอร์ไหน แทนที่จะแตะพอร์ตอนุกรมจริง"""
 
-    def __init__(self, result="connected"):
+    def __init__(self, result="connected", stay_active=True):
         self.dialed, self.result, self.played = [], result, 0
+        # ปลายสายยังไม่วางไหม — ใช้ทดสอบว่าการพูดซ้ำหยุดเองตอนสายหลุดกลางคัน
+        self.stay_active = stay_active
+
+    def call_is_active(self):
+        return self.stay_active
 
     def prepare_audio(self, path, on_progress=None):
         pass
@@ -235,14 +240,39 @@ class FakeGSM:
 
 cw.text_to_speech = lambda text: os.path.join(_TMP, "fake.mp3")  # ไม่เรียก gTTS จริง
 cfg = get_effective_config(db)
+# เร่งเทสให้เร็ว — ค่าจริงหน่วง 2 วิก่อนพูด + 1.5 วิระหว่างรอบ ซึ่งไม่ได้เพิ่มความมั่นใจอะไร
+# ในเทสแต่ทำให้ชุดทดสอบช้าลงทุกครั้งที่รัน (ตรรกะการเว้นช่วงเป็นแค่ time.sleep ตรงๆ)
+cfg.call_answer_delay_seconds = 0
+cw.REPEAT_GAP_SECONDS = 0
 
 gsm = FakeGSM("connected")
 claimed = claim_next_job(db)
 cw.process_job(db, claimed, gsm, cfg)
 db.refresh(claimed)
 check("โทรออกไปยังเบอร์ของกลุ่มที่ผูกกับอุปกรณ์นั้น", gsm.dialed == ["0810000001"], f"โทรไป {gsm.dialed}")
-check("เล่นข้อความเสียงเข้าสาย 1 ครั้ง", gsm.played == 1)
+check(
+    f"พูดข้อความซ้ำครบ {cfg.call_repeat_count} รอบตามที่ตั้งไว้",
+    gsm.played == cfg.call_repeat_count,
+    f"พูดไป {gsm.played} รอบ",
+)
 check("ปิดงานเป็น connected", claimed.status == CallStatus.CONNECTED)
+
+# ปลายสายวางก่อนพูดรอบสอง — ต้องหยุดเองไม่ใช่ฝืนสั่งเล่นซ้ำจนค้างรอ URC ที่ไม่มีวันมา
+# group_id=None โดยตั้งใจ — งานนี้ต้องไม่ไปโผล่ในเทสกรองตามกลุ่มที่อยู่ถัดลงไป
+enqueue_job(
+    db, message="ทดสอบวางสายกลางคัน", event_type_id=ev.id,
+    priority_group="เทสวางสายกลางคัน", group_id=None,
+    recipients=json.dumps([{"name": None, "phone": "0810000001"}], ensure_ascii=False),
+    event_type_code=ev.code, event_type_name=ev.display_name,
+)
+gsm_drop = FakeGSM("connected", stay_active=False)
+claimed_drop = claim_next_job(db)
+cw.process_job(db, claimed_drop, gsm_drop, cfg)
+check(
+    "ปลายสายวางกลางคัน หยุดพูดซ้ำทันที (พูดแค่รอบเดียว)",
+    gsm_drop.played == 1,
+    f"พูดไป {gsm_drop.played} รอบ",
+)
 
 gsm2 = FakeGSM("no_answer")
 claimed_b = claim_next_job(db)

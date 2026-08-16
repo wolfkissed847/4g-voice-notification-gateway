@@ -230,6 +230,10 @@ class GsmDetailResponse(BaseModel):
     restarting: bool = Field(False, description="worker กำลังปิด/เปิดคลื่นวิทยุอยู่ตอนนี้")
     restart_result: str | None = Field(None, description="ผลของการรีสตาร์ทครั้งล่าสุด: 'ok' | 'failed'")
     restart_at: str | None = Field(None, description="เวลาที่รีสตาร์ทเสร็จครั้งล่าสุด (UTC)")
+    power_on: bool | None = Field(
+        None,
+        description="อ่านจากขา STATUS ของโมดูล — true=ไฟติด false=ไฟดับ null=ตอบไม่ได้ (ไม่ได้ต่อ GPIO)",
+    )
 
 
 class GsmRestartResponse(BaseModel):
@@ -289,6 +293,8 @@ class AppConfigResponse(BaseModel):
     call_retry_count: int
     call_retry_delay_seconds: int
     call_ring_timeout_seconds: int
+    call_answer_delay_seconds: int
+    call_repeat_count: int
 
 
 class AppConfigUpdateRequest(BaseModel):
@@ -307,3 +313,5 @@ class AppConfigUpdateRequest(BaseModel):
     call_retry_count: int | None = Field(default=None, ge=0, le=10)
     call_retry_delay_seconds: int | None = Field(default=None, ge=5, le=300)
     call_ring_timeout_seconds: int | None = Field(default=None, ge=10, le=120)
+    call_answer_delay_seconds: int | None = Field(default=None, ge=0, le=10)
+    call_repeat_count: int | None = Field(default=None, ge=1, le=5)

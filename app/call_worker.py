@@ -27,6 +27,7 @@ from app.config_service import EffectiveConfig, get_effective_config, get_or_cre
 from app.contacts_service import get_ordered_phone_numbers
 from app.database import CallJob, CallLog, CallStatus, SessionLocal
 from app.gsm_module import GSMModule
+from app.gsm_power import GsmPower
 from app.queue_manager import claim_next_job, recover_orphaned_jobs, update_job_status
 from app.tts_service import text_to_speech
 from app import worker_state
@@ -141,7 +142,25 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
     if result == "connected":
         try:
             worker_state.set_current_step(job.id, worker_state.CallStep.PLAYING)
-            gsm.play_audio()
+
+            # ── เว้นช่วงก่อนเริ่มพูด ──────────────────────────────────────────
+            # โมดูลรายงานว่า "รับสายแล้ว" ตั้งแต่วินาทีที่กดรับ แต่คนยังไม่ได้เอาหูแนบ
+            # ถ้าเล่นเสียงทันที ประโยคต้นจะหายไปกับจังหวะยกโทรศัพท์ ซึ่งมักเป็นประโยค
+            # ที่บอกว่าเกิดอะไรขึ้น = ส่วนที่สำคัญที่สุดของทั้งสาย
+            if cfg.call_answer_delay_seconds > 0:
+                time.sleep(cfg.call_answer_delay_seconds)
+
+            # ── พูดซ้ำตามจำนวนรอบที่ตั้งไว้ ───────────────────────────────────
+            # เช็คว่าสายยังอยู่ก่อนพูดรอบถัดไปทุกครั้ง — ถ้าปลายสายวางไปแล้วการสั่งเล่นซ้ำ
+            # จะค้างรอ URC ที่ไม่มีวันมาจนครบ timeout 30 วิ ทำให้คิวงานถัดไปหยุดนิ่งไปเปล่าๆ
+            for round_no in range(1, cfg.call_repeat_count + 1):
+                if round_no > 1:
+                    if not gsm.call_is_active():
+                        logger.info("Job %s: ปลายสายวางไปแล้ว หยุดพูดซ้ำที่รอบ %s", job.id, round_no - 1)
+                        break
+                    time.sleep(REPEAT_GAP_SECONDS)
+                logger.info("Job %s: พูดข้อความรอบที่ %s/%s", job.id, round_no, cfg.call_repeat_count)
+                gsm.play_audio()
         except Exception as exc:
             # โทรติดแล้วแต่เล่นเสียงพัง (เช่น อัปโหลดไฟล์เข้าโมดูลไม่สำเร็จ) — เจอเองจริงระหว่าง
             # ทดสอบกับฮาร์ดแวร์ ต้องบันทึก detail ไว้ ไม่งั้น history จะโชว์ last_result เป็น
@@ -198,7 +217,7 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
         )
 
 
-def _poll_gsm_status(gsm: GSMModule):
+def _poll_gsm_status(gsm: GSMModule, power: GsmPower | None = None):
     """
     เช็คว่าโมดูลยังเสียบอยู่ไหม + ดึงสัญญาณ/operator/network mode — เรียกเฉพาะตอน idle เท่านั้น
     เพื่อไม่ให้ AT command ของการเช็คสถานะไปแทรกกลางขั้นตอนโทรที่ใช้ serial port เดียวกัน
@@ -213,7 +232,18 @@ def _poll_gsm_status(gsm: GSMModule):
     # โดยไม่ได้ข้อมูลเพิ่มเลย (บรรทัดที่ 2 เป็นต้นไปบอกเรื่องเดิมกับบรรทัดแรกทุกประการ)
     was_connected = worker_state.get_state().gsm_connected
 
+    # อ่านขา STATUS ไว้แสดงบนหน้าเว็บ — แยกแยะ "ดับ" ออกจาก "ค้าง" ได้ ซึ่ง AT ทำไม่ได้
+    if power is not None:
+        worker_state.set_gsm_power_on(power.is_on())
+
     if gsm.is_responsive():
+        # กันสายโทรกลับ — จุดนี้เรียกเฉพาะตอน worker ว่าง (ไม่มีสายที่ระบบโทรออกค้างอยู่)
+        # จึงไม่มีทางไปวางสายของตัวเอง และเจอสายเรียกเข้าภายในไม่กี่วินาทีเสมอ
+        try:
+            gsm.reject_incoming_call()
+        except Exception:
+            logger.exception("เช็ค/วางสายเรียกเข้าไม่สำเร็จ")
+
         try:
             signal = gsm.get_signal_quality()
             operator, mode = gsm.get_operator_info()
@@ -233,6 +263,33 @@ def _poll_gsm_status(gsm: GSMModule):
     if was_connected:
         logger.warning("โมดูล GSM ที่ %s ไม่ตอบสนอง — จะพยายามเชื่อมต่อใหม่ทุกรอบจนกว่าจะกลับมา", gsm.port)
 
+    # ── ปลุกโมดูลเองเมื่อคุยกับมันไม่รู้เรื่อง ──────────────────────────────────
+    # เคสหลักที่ออกแบบมาเพื่อรองรับ: ไฟดับแล้วกลับมา ซึ่งเป็นเหตุผลที่ระบบนี้มีอยู่
+    # ตอนไฟกลับมา Pi บูตเองได้ แต่โมดูลตัวนี้ไม่ติดเอง (ทดสอบแล้ว: ถอดไฟเลี้ยงแล้วเสียบใหม่
+    # ไฟเขียวไม่ติด) ถ้าไม่มีใครกด PWRKEY ระบบจะขึ้นเขียวทุกอย่างแต่โทรไม่ออกจริง
+    #
+    # เงื่อนไขคือ "AT ไม่ตอบ" ไม่ใช่ "STATUS ต่ำ" — เดิมผูกไว้กับ STATUS แล้วพลาด เพราะ
+    # บอร์ดที่ใช้จริงมีจังหวะที่ STATUS ค้างสูงทั้งที่โมดูลไม่ทำงานแล้ว (เจอจากการทดสอบ)
+    # การกด PWRKEY ตอนโมดูลติดอยู่แล้วไม่มีผลเสียอะไร แต่การไม่กดตอนมันตายคือระบบเงียบไปเฉยๆ
+    #
+    # คูลดาวน์ 60 วิกันกดรัว: ถ้าโมดูลเสียจริงหรือสายหลุด การกดทุกวินาทีไม่ได้ช่วยอะไร
+    if power is not None and power.available:
+        now = time.monotonic()
+        last = getattr(_poll_gsm_status, "_last_power_on_try", 0.0)
+        if now - last >= AUTO_POWER_ON_COOLDOWN:
+            _poll_gsm_status._last_power_on_try = now
+            streak = getattr(_poll_gsm_status, "_power_on_fail_streak", 0)
+            # เตือนเสียงดังเฉพาะครั้งแรกหลังโมดูลหาย จากนั้นลดเป็น info — ถ้าโมดูลเสียจริง
+            # ระบบจะพยายามทุกนาทีตลอดไป เตือนทุกครั้งเท่ากับ log 1,440 บรรทัด/วัน
+            # ที่บอกเรื่องเดียวกับบรรทัดแรกทุกประการ
+            log = logger.warning if streak == 0 else logger.info
+            log("โมดูลไม่ตอบ — กด PWRKEY ปลุกเอง (ครั้งที่ %s)", streak + 1)
+            if power.power_on() and _reconnect_after_power(gsm):
+                _poll_gsm_status._power_on_fail_streak = 0
+                logger.warning("ปลุกโมดูลกลับมาได้เองแล้ว")
+                return
+            _poll_gsm_status._power_on_fail_streak = streak + 1
+
     # ลองต่อใหม่ทุกรอบที่ poll เผื่อผู้ใช้เสียบกลับเข้าไป หรือโมดูล reset ตัวเองหลังไฟตก
     # (สำคัญมากบน Pi ที่ไฟเลี้ยงไม่พอ โมดูลจะ re-enumerate ตัวเองเป็นระยะ)
     # ถ้าไม่มีบรรทัดนี้ พอหลุดครั้งเดียวต้อง restart ทั้ง process ถึงจะกลับมาโทรได้
@@ -245,6 +302,63 @@ def _poll_gsm_status(gsm: GSMModule):
     if gsm.is_responsive():
         worker_state.set_gsm_connected(True, gsm.port)
         logger.info("เชื่อมต่อโมดูล GSM ที่ %s ใหม่สำเร็จ", gsm.port)
+
+
+# เว้นช่วงสั้นๆ ระหว่างการพูดซ้ำแต่ละรอบ — พูดติดกันเลยจะฟังเป็นประโยคเดียวยาวๆ
+# แยกไม่ออกว่าจบรอบแรกตรงไหน ซึ่งทำให้การพูดซ้ำเสียประโยชน์ไปเกือบหมด
+REPEAT_GAP_SECONDS = 1.5
+
+# เว้นระยะระหว่างการพยายามปลุกโมดูลเอง — ไม่กดรัวทุกวินาที
+# 60 วิเป็นค่าที่พอดีระหว่าง "กลับมาเร็ว" กับ "ไม่กดปุ่มโมดูลรัวๆ ตอนมันเสียจริง"
+AUTO_POWER_ON_COOLDOWN = 60.0
+
+
+def _restart_radio(gsm: GSMModule) -> bool:
+    """
+    ปิด/เปิดคลื่นวิทยุตามที่หน้าเว็บสั่ง — คืน True ถ้าสำเร็จ
+
+    เรียกจาก worker เท่านั้น และเฉพาะจังหวะที่ไม่มีสายค้างอยู่ (ดูจุดเรียกใน loop)
+    ต้องกลืน exception เองทั้งหมด ถ้าปล่อยหลุดออกไป worker thread จะตายแล้วระบบเงียบทั้งก้อน
+    ซึ่งแย่กว่าปุ่มที่กดแล้วไม่สำเร็จมาก
+
+    เคยมีขั้นไต่ระดับไปแตะขา RESET ต่อเมื่อวิธีนี้ไม่ผ่าน — ถอดออกแล้วเพราะบอร์ดที่ใช้จริง
+    ต่อสาย RESET เข้า GPIO แล้วโมดูลไม่ยอมบูตเลย (ดู gsm_power.py หัวข้อ "ที่เคยมีแล้วถอดออก")
+    """
+    logger.warning("ได้รับคำสั่งรีสตาร์ทโมดูลจากหน้าเว็บ — เริ่มปิด/เปิดคลื่นวิทยุ")
+    try:
+        return gsm.restart_radio()
+    except Exception:
+        logger.exception("รีสตาร์ทโมดูลล้มเหลว")
+        return False
+
+
+# ขา STATUS ขึ้นตั้งแต่ต้นลำดับการบูต แต่เฟิร์มแวร์ยังไม่พร้อมรับ AT อีกสิบกว่าวินาที
+AT_READY_TIMEOUT = 40.0
+AT_READY_INTERVAL = 2.0
+
+
+def _reconnect_after_power(gsm: GSMModule) -> bool:
+    """
+    ต่อพอร์ตใหม่หลังโมดูลเพิ่งบูต แล้วรอจนคุย AT รู้เรื่อง
+
+    ต้องวนรอ ไม่ใช่เช็คครั้งเดียว — เดิมเช็คทีเดียวทันทีที่ STATUS ขึ้น ผลคือรายงานว่า
+    ไม่สำเร็จทุกครั้งทั้งที่โมดูลติดขึ้นมาปกติดี แล้วอีกสิบกว่าวินาทีต่อมา loop ปกติก็ต่อได้เอง
+    """
+    deadline = time.monotonic() + AT_READY_TIMEOUT
+    while time.monotonic() < deadline:
+        try:
+            gsm.disconnect()
+            gsm.connect()
+            if gsm.is_responsive():
+                worker_state.set_gsm_connected(True, gsm.port)
+                logger.warning("โมดูลพร้อมรับคำสั่งแล้วหลังบูต")
+                return True
+        except Exception:
+            pass  # ยังไม่พร้อม ลองใหม่รอบหน้า
+        time.sleep(AT_READY_INTERVAL)
+
+    logger.warning("โมดูลบูตขึ้นแล้วแต่ยังไม่ตอบ AT ภายใน %.0f วิ", AT_READY_TIMEOUT)
+    return False
 
 
 def run_worker_loop(poll_interval: float = 1.0, config_check_interval: float = 10.0, gsm_status_interval: float = 1.0):
@@ -281,6 +395,17 @@ def run_worker_loop(poll_interval: float = 1.0, config_check_interval: float = 1
     worker_state.mark_started()
     gsm = GSMModule()
 
+    # คุมไฟโมดูลผ่าน GPIO — ใช้ได้เฉพาะโมดูลที่ต่อผ่านหัว GPIO ถ้าปิดสวิตช์ไว้
+    # (หรือเป็นโมดูลที่เสียบ USB) ตัวนี้จะตอบว่าทำไม่ได้ทุกคำสั่ง โดยไม่ทำให้ worker พัง
+    power = GsmPower()
+
+    # โมดูลที่ต่อผ่าน GPIO ไม่ได้ติดเองตอน Pi บูต — ต้องมีคนกด PWRKEY ให้
+    # ถ้าไม่ปลุกตรงนี้ ระบบจะค้างที่ "โมดูลไม่พร้อม" ตลอดหลังไฟดับแล้วกลับมา
+    # จนกว่าจะมีคนเดินไปกดปุ่มที่ตัวเครื่อง ซึ่งขัดกับเหตุผลที่ระบบนี้มีอยู่ตั้งแต่แรก
+    if power.available and power.is_on() is False:
+        logger.warning("โมดูลดับอยู่ตอน worker เริ่มทำงาน — สั่งเปิดให้อัตโนมัติ")
+        power.power_on()
+
     # ── ต่อโมดูลไม่ได้ตอนสตาร์ต ต้องไม่ทำให้ worker ตาย ────────────────────────
     # เดิมเรียก gsm.connect() ลอยๆ ถ้าโมดูลยังไม่ได้เสียบ (หรือ Pi บูตเร็วกว่าที่ USB
     # จะ enumerate เสร็จ) มันจะโยน SerialException ออกมาแล้ว thread นี้ตายถาวร
@@ -314,12 +439,7 @@ def run_worker_loop(poll_interval: float = 1.0, config_check_interval: float = 1
                 # จุดเดียวที่การันตีได้ว่าไม่มีสายที่กำลังคุยอยู่ (process_job ทำงานแบบ blocking
                 # จนจบสายเสมอ) ปุ่มบนหน้าเว็บจึงไม่มีทางไปตัดสายที่คนกำลังฟังข้อความอยู่
                 if worker_state.take_gsm_restart_request():
-                    logger.warning("ได้รับคำสั่งรีสตาร์ทโมดูลจากหน้าเว็บ — เริ่มปิด/เปิดคลื่นวิทยุ")
-                    try:
-                        ok = gsm.restart_radio()
-                    except Exception:
-                        logger.exception("รีสตาร์ทโมดูลล้มเหลว")
-                        ok = False
+                    ok = _restart_radio(gsm)
                     worker_state.finish_gsm_restart(ok)
                     logger.warning("รีสตาร์ทโมดูล%s", "สำเร็จ" if ok else "ไม่สำเร็จ")
                     # บังคับให้เช็คสถานะสัญญาณใหม่ทันทีในรอบถัดไป ไม่ต้องรอครบ interval
@@ -350,13 +470,14 @@ def run_worker_loop(poll_interval: float = 1.0, config_check_interval: float = 1
                     now = time.monotonic()
                     if now - last_gsm_status_check >= gsm_status_interval:
                         last_gsm_status_check = now
-                        _poll_gsm_status(gsm)
+                        _poll_gsm_status(gsm, power)
                     time.sleep(poll_interval)
             finally:
                 db.close()
     finally:
         worker_state.set_gsm_connected(False)
         gsm.disconnect()
+        power.close()
 
 
 if __name__ == "__main__":

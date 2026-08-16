@@ -349,6 +349,7 @@ def system_gsm(_user: str = Depends(get_current_user)):
         restarting=state.gsm_restarting,
         restart_result=state.gsm_restart_result,
         restart_at=_iso_utc(state.gsm_restart_at),
+        power_on=state.gsm_power_on,
     )
 
 

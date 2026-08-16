@@ -22,8 +22,30 @@ class Settings(BaseSettings):
     app_git_sha: str = "dev"
 
     # GSM Module (SIM ตัวเดียว)
+    # /dev/ttyUSB2  = โมดูลที่เสียบผ่าน USB (บอร์ด Waveshare)
+    # /dev/serial0  = โมดูลเปล่าที่ต่อผ่านหัว GPIO ของ Pi (ต้องเปิด enable_uart=1
+    #                 และ dtoverlay=disable-bt ใน config.txt ก่อน ไม่งั้นจะได้ mini-UART
+    #                 ที่ baud rate เพี้ยนตามความถี่ CPU = อ่านข้อมูลมั่วตอนเครื่องทำงานหนัก
+    #                 ซึ่งคือตอนกำลังโทรพอดี)
     gsm_serial_port: str = "/dev/ttyUSB2"
     gsm_baudrate: int = 115200
+
+    # ── คุมไฟโมดูลผ่าน GPIO (เฉพาะโมดูลที่ต่อผ่านหัว GPIO) ────────────────────
+    # ปิดไว้เป็นค่าเริ่มต้นโดยตั้งใจ — โมดูลที่เสียบ USB ไม่มีขาพวกนี้ให้แตะ
+    # และถ้าเปิดทิ้งไว้บนเครื่องที่ต่อสายไม่ตรง จะกลายเป็นการไปแตะขาที่คนอื่นใช้อยู่
+    #
+    # เลขที่ใส่คือ "เลข GPIO" ไม่ใช่ "เลขขาบนหัวต่อ" — คนละระบบกันคนละเรื่อง
+    # ค่าเริ่มต้นด้านล่างตรงกับการต่อจริงบนเครื่องที่ใช้อยู่:
+    #     GPIO18 = pin 12    GPIO23 = pin 16    GPIO24 = pin 18
+    # ⚠️ เลขขาคู่หลายตัวเป็น GND ไม่ใช่ GPIO (pin 14, 20, 25 ...) ต่อ RESET ลงไปโดน
+    #    เท่ากับกดรีเซ็ตค้างไว้ตลอดเวลา โมดูลจะไม่บูตเลยและหาสาเหตุยากมาก
+    gsm_gpio_enabled: bool = False
+    gsm_gpio_chip: int = 0
+    gsm_gpio_pwrkey: int = 18
+    gsm_gpio_status: int = 24
+    # gsm_gpio_reset ถูกถอดออกแล้ว — ต่อสาย RESET เข้า GPIO แล้วโมดูลไม่ยอมบูต
+    # (ลองสองขาและทั้งแบบปล่อยลอย/pull-up ได้ผลเหมือนกัน) ตัวแปรใน .env ที่ยังค้างอยู่
+    # ไม่ทำให้พัง เพราะ pydantic-settings ไม่สนใจ env ที่ไม่มี field รองรับ
 
     # Database
     database_url: str = "sqlite:///./gateway.db"
@@ -58,6 +80,8 @@ class Settings(BaseSettings):
     call_retry_count: int = 2
     call_retry_delay_seconds: int = 30
     call_ring_timeout_seconds: int = 25
+    call_answer_delay_seconds: int = 2
+    call_repeat_count: int = 2
 
     # TTS
     tts_language: str = "th"
