@@ -343,8 +343,6 @@ export const TR = {
     sys_theme_label: "ธีมของหน้าเว็บ",
     sys_theme_to_light: "สลับเป็นสว่าง",
     sys_theme_to_dark: "สลับเป็นมืด",
-    sys_missing_title: "ยังไม่มีใน backend",
-    sys_missing_body: "เครดิตซิม · รีสตาร์ทโมดูล · เสียงชาย/หญิง+ความเร็ว · เปลี่ยนรหัสผ่านจากหน้าเว็บ · ออกจากระบบทุกอุปกรณ์ — ดีไซน์เผื่อไว้แต่ยังไม่มี endpoint รองรับ จึงไม่ได้ทำเป็นช่องหลอกไว้",
 
     // ─── หน้าประวัติการโทร (call log) ───
     log_filter_all: "ทั้งหมด",
@@ -723,8 +721,6 @@ export const TR = {
     sys_theme_label: "Page theme",
     sys_theme_to_light: "Switch to light",
     sys_theme_to_dark: "Switch to dark",
-    sys_missing_title: "Not in the backend yet",
-    sys_missing_body: "SIM credit · module restart · voice gender+speed · change password from the web · sign out everywhere — the design allows for these but no endpoint backs them yet, so they are not shown as dead controls",
 
     // ─── Call log ───
     log_filter_all: "All",
