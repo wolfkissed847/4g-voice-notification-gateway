@@ -79,8 +79,8 @@ export function LoginPage() {
       className={cn(
         'grid min-h-screen place-items-center p-4 sm:p-6',
         dark
-          ? 'bg-[radial-gradient(ellipse_at_60%_40%,#07182c_0%,rgb(var(--bg))_70%)]'
-          : 'bg-[radial-gradient(ellipse_at_60%_40%,#e2f1ff_0%,rgb(var(--bg))_70%)]',
+          ? 'bg-[radial-gradient(ellipse_at_60%_40%,#071828_0%,rgb(var(--bg))_70%)]'
+          : 'bg-[radial-gradient(ellipse_at_60%_40%,#e0f5ff_0%,rgb(var(--bg))_70%)]',
       )}
     >
       <div className="lg-fade-in flex w-full max-w-[62.5rem] overflow-hidden rounded-[1.5rem] shadow-[0_16px_60px_rgba(0,0,0,0.14),0_0_0_1px_rgb(var(--line))] md:min-h-[34rem] dark:shadow-[0_24px_80px_rgba(0,0,0,0.7),0_0_0_1px_rgb(var(--line))]">
@@ -88,7 +88,7 @@ export function LoginPage() {
         <div className="flex w-full flex-col justify-center bg-surface px-7 py-10 sm:px-10 md:max-w-[26.25rem] md:shrink-0">
           <div className="mb-9 flex items-center gap-3.5">
             {/* ไอคอนแอป: ไล่สีทแยงกับแสงเรือง ให้เป็นวัตถุชิ้นเดียวกับลูกบาศก์ในแผงขวา */}
-            <span className="grid size-14 shrink-0 place-items-center rounded-[1.125rem] bg-[linear-gradient(140deg,#5ab6ff_0%,#1668d8_55%,#0b3f9c_100%)] font-mono text-lead font-black tracking-[-0.03em] text-white shadow-[0_6px_18px_rgba(22,104,216,0.45)]">
+            <span className="grid size-14 shrink-0 place-items-center rounded-[1.125rem] bg-brand font-mono text-lead font-black tracking-[-0.03em] text-brand-ink shadow-[0_6px_18px_rgb(var(--accent)/0.4)]">
               4G
             </span>
             <div className="min-w-0">
@@ -150,11 +150,11 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="relative mt-1 flex w-full items-center justify-center rounded-control bg-[linear-gradient(100deg,#2f8bff_0%,#1668d8_60%,#1250ad_100%)] px-4 py-3.5 text-body font-semibold text-white shadow-[0_8px_22px_rgba(22,104,216,0.35)] transition-[filter] hover:brightness-110 disabled:opacity-70"
+              className="relative mt-1 flex w-full items-center justify-center rounded-control bg-brand px-4 py-3.5 text-body font-semibold text-brand-ink shadow-[0_8px_22px_rgb(var(--accent)/0.32)] transition-[filter] hover:brightness-110 disabled:opacity-70"
             >
               {loading ? <RefreshCw size={16} className="me-2 animate-spin" /> : null}
               {T.login_submit}
-              <span className="absolute end-2 grid size-8 place-items-center rounded-full bg-white/20">
+              <span className="absolute end-2 grid size-8 place-items-center rounded-full bg-brand-ink/20">
                 <ArrowRight size={16} />
               </span>
             </button>
@@ -211,9 +211,9 @@ export function LoginPage() {
 
 /** ป้ายไอคอนที่ลอยรอบลูกบาศก์ — ตำแหน่งเป็น % ของแผง จะได้ขยับตามขนาดแผงเอง */
 const ORBIT_BADGES = [
-  { Icon: Phone, top: '25%', left: '10%', delay: '0s', x: '5px', y: '-9px' },
-  { Icon: SignalHigh, top: '16%', left: '75%', delay: '1.6s', x: '-6px', y: '-7px' },
-  { Icon: RadioTower, top: '62%', left: '79%', delay: '3.1s', x: '-4px', y: '8px' },
+  { Icon: Phone, tone: '--art-warn', top: '25%', left: '10%', delay: '0s', x: '5px', y: '-9px' },
+  { Icon: SignalHigh, tone: '--art-ok', top: '16%', left: '75%', delay: '1.6s', x: '-6px', y: '-7px' },
+  { Icon: RadioTower, tone: '--art-accent', top: '62%', left: '79%', delay: '3.1s', x: '-4px', y: '8px' },
 ] as const;
 
 /** ฝุ่นแสงที่ลอยขึ้นจากฐาน — ตำแหน่ง/คาบ/ดีเลย์ตายตัว ไม่ได้สุ่มตอน render
@@ -248,12 +248,24 @@ function LoginArtPanel() {
   const { T } = useApp();
 
   return (
-    <div className="relative flex h-full min-h-[34rem] items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_50%_38%,#123a7a_0%,#0a2350_42%,#04101f_100%)]">
+    <div
+      /* สีชุดนี้ตรึงไว้ทั้งสองธีมโดยตั้งใจ (ดูหมายเหตุหัวไฟล์) — ประกาศตรงนี้ที่เดียว
+         ลูกๆ ข้างในจึงอ้าง --art-* ได้โดยไม่ต้องพก hex ติดตัวไปทุกจุด
+         เป็นโทนเดิมของโปรเจค ไม่ใช่สีน้ำเงินเข้มจากรูปอ้างอิง */
+      style={
+        {
+          '--art-accent': '0 189 254',
+          '--art-ok': '68 193 102',
+          '--art-warn': '218 149 0',
+        } as CSSProperties
+      }
+      className="relative flex h-full min-h-[34rem] items-center justify-center overflow-hidden bg-[linear-gradient(145deg,#050e1a_0%,#071828_55%,#031020_100%)]"
+    >
       {/* พื้นหลังจุดไข่ปลา — จางมาก มีไว้ให้พื้นไม่เรียบเป็นสีเดียว */}
       <svg className="pointer-events-none absolute inset-0 size-full opacity-[0.09]" aria-hidden>
         <defs>
           <pattern id="lg-grid" width="34" height="34" patternUnits="userSpaceOnUse">
-            <circle cx="17" cy="17" r="1" fill="#7cc4ff" />
+            <circle cx="17" cy="17" r="1" fill="rgb(var(--art-accent))" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#lg-grid)" />
@@ -272,7 +284,7 @@ function LoginArtPanel() {
           rx="178"
           ry="150"
           fill="none"
-          stroke="#4da3ff"
+          stroke="rgb(var(--art-accent))"
           strokeOpacity="0.3"
           strokeWidth="1"
           strokeDasharray="4 7"
@@ -284,7 +296,7 @@ function LoginArtPanel() {
           rx="130"
           ry="188"
           fill="none"
-          stroke="#4da3ff"
+          stroke="rgb(var(--art-accent))"
           strokeOpacity="0.18"
           strokeWidth="1"
           strokeDasharray="4 9"
@@ -297,27 +309,29 @@ function LoginArtPanel() {
         {/* แสงเรืองรอบลูกบาศก์ — อยู่หลังลูกบาศก์ ไม่งั้นมันฟุ้งทับตัวอักษร */}
         <span
           aria-hidden
-          className="pointer-events-none absolute size-[18rem] rounded-full bg-[radial-gradient(circle,rgba(64,150,255,0.45)_0%,rgba(64,150,255,0)_65%)]"
+          className="pointer-events-none absolute size-[18rem] rounded-full bg-[radial-gradient(circle,rgb(var(--art-accent)/0.42)_0%,rgb(var(--art-accent)/0)_65%)]"
         />
 
         <div className="lg-cube relative" style={{ width: CUBE, height: CUBE }}>
           {/* หน้าหน้า — หันเข้าหาคนดู เป็นหน้าที่สว่างสุดและเป็นที่อยู่ของตัวอักษร */}
           <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(140deg,#7cc8ff_0%,#2f8bff_55%,#1462cf_100%)]"
+            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(140deg,#7ce3ff_0%,#00bdfe_55%,#0080b0_100%)]"
             style={{ transform: `translateZ(${CUBE / 2}px)` }}
           />
           {/* หน้าข้างกับหน้าบน เข้มกว่าหน้าหน้า จึงอ่านเป็นก้อนทึบที่มีความหนา ไม่ใช่แผ่นแบน */}
           <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(180deg,#1a5fbe_0%,#0d3a80_100%)]"
+            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(180deg,#0090c6_0%,#00516f_100%)]"
             style={{ transform: `rotateY(90deg) translateZ(${CUBE / 2}px)` }}
           />
           <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(160deg,#4f9ae8_0%,#1e63bd_100%)]"
+            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(160deg,#45d3ff_0%,#009ad4_100%)]"
             style={{ transform: `rotateX(90deg) translateZ(${CUBE / 2}px)` }}
           />
           {/* ตัวอักษรวางบนหน้าหน้า ยกขึ้นอีก 1px กันซ้อนกับพื้นผิว */}
           <span
-            className="absolute inset-0 grid place-items-center font-mono text-[2.25rem] leading-none font-black tracking-[-0.04em] text-white"
+            /* ตัวอักษรสีเข้มบนหน้าฟ้าสว่าง ไม่ใช่สีขาว — ขาวบนฟ้าสว่างคอนทราสต์ต่ำจนขอบตัวอักษรเบลอ
+               (ป้าย 4G เดิมของโปรเจคก็ใช้ตัวอักษรสีเข้มบนพื้นฟ้าเหมือนกัน) */
+            className="absolute inset-0 grid place-items-center font-mono text-[2.25rem] leading-none font-black tracking-[-0.04em] text-[#04212e]"
             style={{ transform: `translateZ(${CUBE / 2 + 1}px)` }}
           >
             4G
@@ -330,7 +344,7 @@ function LoginArtPanel() {
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="w-[3px] rounded-full bg-[linear-gradient(180deg,rgba(124,196,255,0)_0%,rgba(124,196,255,0.95)_50%,rgba(124,196,255,0)_100%)]"
+              className="w-[3px] rounded-full bg-[linear-gradient(180deg,rgb(var(--art-accent)/0)_0%,rgb(var(--art-accent)/0.95)_50%,rgb(var(--art-accent)/0)_100%)]"
               style={{
                 height: `${96 - Math.abs(i - 1) * 26}px`,
                 animation: `lg-beam ${2.4 + i * 0.35}s ease-in-out ${i * 0.4}s infinite`,
@@ -346,9 +360,13 @@ function LoginArtPanel() {
           style={{ transform: 'rotateX(72deg)' }}
         >
           {['lg-base-1', 'lg-base-2', 'lg-base-3'].map((cls) => (
-            <span key={cls} className={cn('absolute size-[14rem] rounded-full border-2 border-[#5cb0ff]', cls)} />
+            <span
+              key={cls}
+              className={cn('absolute size-[14rem] rounded-full border-2', cls)}
+              style={{ borderColor: 'rgb(var(--art-accent))' }}
+            />
           ))}
-          <span className="size-[5rem] rounded-full bg-[radial-gradient(circle,rgba(124,196,255,0.85)_0%,rgba(124,196,255,0)_70%)]" />
+          <span className="size-[5rem] rounded-full bg-[radial-gradient(circle,rgb(var(--art-accent)/0.85)_0%,rgb(var(--art-accent)/0)_70%)]" />
         </span>
       </div>
 
@@ -356,12 +374,16 @@ function LoginArtPanel() {
       {ORBIT_BADGES.map((b, i) => (
         <span
           key={i}
-          className="lg-orbit absolute z-[4] grid size-12 place-items-center rounded-full border border-[#69b6ff]/45 bg-[#0d2c5c]/80 text-[#9ed3ff] shadow-[0_0_26px_rgba(70,150,255,0.45)] backdrop-blur-sm"
+          className="lg-orbit absolute z-[4] grid size-12 place-items-center rounded-full border backdrop-blur-sm"
           style={
             {
               top: b.top,
               left: b.left,
               animationDelay: b.delay,
+              color: `rgb(var(${b.tone}))`,
+              borderColor: `rgb(var(${b.tone}) / 0.5)`,
+              backgroundColor: `rgb(var(${b.tone}) / 0.14)`,
+              boxShadow: `0 0 26px rgb(var(${b.tone}) / 0.4)`,
               '--lg-orbit-x': b.x,
               '--lg-orbit-y': b.y,
             } as CSSProperties
@@ -376,10 +398,11 @@ function LoginArtPanel() {
         <span
           key={i}
           aria-hidden
-          className="pointer-events-none absolute size-[3px] rounded-full bg-[#a9daff]"
+          className="pointer-events-none absolute size-[3px] rounded-full"
           style={{
             left: d.left,
             bottom: d.bottom,
+            backgroundColor: 'rgb(var(--art-accent))',
             animation: `lg-dust ${d.dur} linear ${d.delay} infinite`,
           }}
         />
