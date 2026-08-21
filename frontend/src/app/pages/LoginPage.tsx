@@ -34,7 +34,8 @@ import { login } from '../api/auth';
 import { ApiError, setToken } from '../api/client';
 import { Alert } from '../components/Alert';
 import { BrandMark } from '../components/BrandMark';
-import { MESH_EDGES, MESH_NODES, SURFACE_DOTS } from '../lib/globeMesh';
+import { WORLD_H, WORLD_PATHS, WORLD_W } from '../lib/worldLand';
+import { ACTIVE_LINKS, WORLD_LINKS, WORLD_NODES } from '../lib/worldNodes';
 import { useApp } from '../context/AppContext';
 
 export function LoginPage() {
@@ -263,18 +264,6 @@ const DUST = [
 ];
 
 /**
- * เส้นสัญญาณบนลูกโลก — จากจุดส่ง (110,64) ไปยังปลายทางสามจุด
- * d เป็นส่วนโค้งกำลังสอง (Q) ที่โก่งออกจากผิวโลก จึงอ่านเป็นสัญญาณที่เดินทางข้ามระยะ
- * ไม่ใช่เส้นที่ลากบนพื้นผิว — จุดควบคุมอยู่นอกวงกลมเสมอ
- * สีคนละโทนกันตามชุดสถานะของระบบ เข้าชุดกับป้ายไอคอนที่ลอยอยู่รอบๆ
- */
-const GLOBE_LINKS = [
-  { d: 'M110 64 Q52 56 62 128', x: 62, y: 128, tone: '--art-warn', dur: '3.4s', delay: '0s' },
-  { d: 'M110 64 Q176 74 158 132', x: 158, y: 132, tone: '--art-ok', dur: '3.8s', delay: '1.1s' },
-  { d: 'M110 64 Q124 128 104 172', x: 104, y: 172, tone: '--art-accent', dur: '3.1s', delay: '2.2s' },
-] as const;
-
-/**
  * แผงภาพประกอบทางขวา — ตกแต่งล้วน ไม่มีค่าไหนมาจากระบบจริง
  *
  * ตอนอยู่หน้านี้ยังไม่มี token จึงเรียก API ไม่ได้เลยแม้แต่ตัวเดียว ถ้าวันหลังอยากให้
@@ -303,7 +292,7 @@ function LoginArtPanel() {
           '--art-warn': '218 149 0',
         } as CSSProperties
       }
-      className="relative flex h-full min-h-[34rem] items-center justify-center overflow-hidden bg-[linear-gradient(145deg,#050e1a_0%,#071828_55%,#031020_100%)]"
+      className="relative flex h-full min-h-[34rem] items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_50%_45%,#0a2540_0%,#061828_50%,#030d18_100%)]"
     >
       {/* พื้นหลังจุดไข่ปลา — จางมาก มีไว้ให้พื้นไม่เรียบเป็นสีเดียว */}
       <svg className="pointer-events-none absolute inset-0 size-full opacity-[0.09]" aria-hidden>
@@ -315,205 +304,83 @@ function LoginArtPanel() {
         <rect width="100%" height="100%" fill="url(#lg-grid)" />
       </svg>
 
-      {/* วงโคจรเส้นประ — วงรีเอียง อ่านเป็นระนาบที่มองจากด้านบนเฉียงๆ เข้าชุดกับฐานข้างล่าง */}
-      <svg
-        className="pointer-events-none absolute inset-0 size-full"
-        viewBox="0 0 420 540"
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        <ellipse
-          cx="210"
-          cy="228"
-          rx="178"
-          ry="150"
+      {/* ── แผนที่โลก + เครือข่ายที่เชื่อมถึงกัน ── */}
+      <div className="relative z-[3] w-full px-8">
+        <svg
+          viewBox={`0 0 ${WORLD_W} ${WORLD_H}`}
+          className="w-full"
           fill="none"
-          stroke="rgb(var(--art-accent))"
-          strokeOpacity="0.3"
-          strokeWidth="1"
-          strokeDasharray="4 7"
-          transform="rotate(-18 210 228)"
-        />
-        <ellipse
-          cx="210"
-          cy="250"
-          rx="130"
-          ry="188"
-          fill="none"
-          stroke="rgb(var(--art-accent))"
-          strokeOpacity="0.18"
-          strokeWidth="1"
-          strokeDasharray="4 9"
-          transform="rotate(24 210 250)"
-        />
-      </svg>
-
-      {/* ── กลาง: ลูกบาศก์ + ลำแสง + ฐานวงแหวน ── */}
-      <div className="relative z-[3] grid place-items-center" style={{ perspective: '900px' }}>
-        {/* แสงเรืองรอบลูกโลก — อยู่หลังลูกโลก ไม่งั้นมันฟุ้งทับเส้นกริดจนดูขุ่น */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute size-[18rem] rounded-full bg-[radial-gradient(circle,rgb(var(--art-accent)/0.4)_0%,rgb(var(--art-accent)/0)_65%)]"
-        />
-
-        {/* ── ลูกโลก ──
-            เส้นเมริเดียนเป็นวงรีที่ค่อยๆ แคบลงเข้าหากลาง = ทรงกลมที่มองจากด้านข้าง
-            (วงรีที่กว้างเท่ากันทุกเส้นจะอ่านเป็นวงกลมซ้อนกันแบน ไม่ใช่ลูกโลก)
-
-            เส้นศูนย์สูตรใช้ dasharray + เลื่อน dashoffset ช้าๆ ให้รู้สึกว่าโลกหมุน
-            โดยไม่ต้องหมุนทั้ง SVG จริง — หมุนจริงแล้วจุดหมายปลายทางกับส่วนโค้งสัญญาณ
-            จะหมุนตามไปด้วย ซึ่งต้องคำนวณตำแหน่งใหม่ทุกเฟรม */}
-        <svg className="lg-globe-float relative" width="252" height="252" viewBox="0 0 220 220" fill="none" aria-hidden>
+          role="img"
+          aria-label={T.login_map_alt}
+        >
           <defs>
-            <radialGradient id="lg-globe-fill" cx="38%" cy="30%" r="78%">
-              <stop offset="0%" stopColor="rgb(var(--art-accent) / 0.42)" />
-              <stop offset="60%" stopColor="rgb(var(--art-accent) / 0.14)" />
-              <stop offset="100%" stopColor="rgb(var(--art-accent) / 0.03)" />
+            {/* ไล่สีบนแผ่นดิน — สว่างตรงกลางภาพ จางลงที่ขอบ ให้ภาพมีจุดโฟกัส
+                ไม่ใช่แผ่นสีเดียวเรียบทั้งผืน */}
+            <radialGradient id="lg-land" cx="50%" cy="45%" r="62%">
+              <stop offset="0%" stopColor="rgb(var(--art-accent) / 0.44)" />
+              <stop offset="100%" stopColor="rgb(var(--art-accent) / 0.18)" />
             </radialGradient>
           </defs>
 
-          {/* โครงข่ายที่ล้อมลูกโลก — วาดก่อนตัวลูกโลก ส่วนที่อยู่หลังจึงถูกลูกโลกบัง
-              ความจางไล่ตามความลึก (z) โหนดที่อยู่ไกลจางกว่า = อ่านเป็นโครงข่ายสามมิติ
-              ไม่ใช่ตาข่ายแบนที่แปะทับอยู่ */}
+          {/* แผ่นดิน — ลงพื้นจางแล้วตีเส้นชายฝั่งทับ ชายฝั่งจึงเป็นเส้นที่คมที่สุดในภาพ */}
           <g>
-            {MESH_EDGES.map((e, i) => (
+            {WORLD_PATHS.map((d, i) => (
+              <path key={i} d={d} fill="url(#lg-land)" stroke="rgb(var(--art-accent))" strokeWidth="1" />
+            ))}
+          </g>
+
+          {/* เส้นเชื่อมระหว่างเมือง */}
+          <g>
+            {WORLD_LINKS.map(([a, b], i) => (
               <line
                 key={i}
-                x1={e.x1}
-                y1={e.y1}
-                x2={e.x2}
-                y2={e.y2}
+                x1={WORLD_NODES[a].x}
+                y1={WORLD_NODES[a].y}
+                x2={WORLD_NODES[b].x}
+                y2={WORLD_NODES[b].y}
                 stroke="rgb(var(--art-accent))"
-                strokeWidth="0.6"
-                opacity={0.1 + Math.max(e.z, -0.4) * 0.22 + 0.14}
-              />
-            ))}
-            {MESH_NODES.map((n, i) => (
-              <circle
-                key={i}
-                cx={n.x}
-                cy={n.y}
-                r={n.z > 0 ? 1.5 : 1}
-                fill="rgb(var(--art-accent))"
-                opacity={0.3 + Math.max(n.z, -0.5) * 0.5}
+                strokeWidth="0.8"
+                opacity="0.5"
               />
             ))}
           </g>
 
-          <circle cx="110" cy="110" r="82" fill="url(#lg-globe-fill)" />
-          <circle cx="110" cy="110" r="82" stroke="rgb(var(--art-accent) / 0.75)" strokeWidth="1.4" />
-
-          {/* เส้นขนาน (แนวนอน) — บางลงกว่าเดิม เพราะตอนนี้มีเม็ดจุดบนผิวช่วยบอกความโค้งแล้ว */}
-          {[-52, -27, 0, 27, 52].map((dy) => (
-            <ellipse
-              key={dy}
-              cx="110"
-              cy={110 + dy}
-              rx={Math.sqrt(Math.max(82 * 82 - dy * dy, 0))}
-              ry={dy === 0 ? 15 : 11}
-              stroke="rgb(var(--art-accent) / 0.22)"
-              strokeWidth="0.8"
-            />
-          ))}
-
-          {/* เส้นเมริเดียน (แนวตั้ง) */}
-          {[82, 55, 26].map((rx) => (
-            <ellipse
-              key={rx}
-              cx="110"
-              cy="110"
-              rx={rx}
-              ry="82"
-              stroke="rgb(var(--art-accent) / 0.2)"
-              strokeWidth="0.8"
-            />
-          ))}
-
-          {/* เม็ดจุดบนผิวลูกโลก — ขนาดกับความจางไล่ตามความลึก ขอบนอกจึงดูจมลงไป
-              ไม่ใช่จุดขนาดเท่ากันหมดที่อ่านเป็นแผ่นกลมแบน */}
+          {/* จุดสัญญาณที่วิ่งไปตามเส้น — มีเฉพาะบางเส้น (ดู ACTIVE_LINKS)
+              ใช้ animateMotion ของ SVG ไม่ใช่ CSS เพราะแต่ละเส้นทิศทางไม่เหมือนกัน
+              ถ้าใช้ CSS ต้องคำนวณ translate ของทุกเส้นเอง */}
           <g>
-            {SURFACE_DOTS.map((d, i) => (
-              <circle
-                key={i}
-                cx={d.x}
-                cy={d.y}
-                r={0.6 + Math.max(d.z, 0) * 1.1}
-                fill="rgb(var(--art-accent))"
-                opacity={0.25 + Math.max(d.z, 0) * 0.6}
-              />
-            ))}
+            {ACTIVE_LINKS.map((li, i) => {
+              const [a, b] = WORLD_LINKS[li];
+              return (
+                <circle key={li} r="2.6" fill="rgb(var(--art-accent))">
+                  <animateMotion
+                    dur={`${2.8 + i * 0.5}s`}
+                    begin={`${i * 0.7}s`}
+                    repeatCount="indefinite"
+                    path={`M${WORLD_NODES[a].x},${WORLD_NODES[a].y} L${WORLD_NODES[b].x},${WORLD_NODES[b].y}`}
+                  />
+                </circle>
+              );
+            })}
           </g>
 
-          {/* เส้นศูนย์สูตรเรืองแสง เลื่อนเส้นประช้าๆ = โลกหมุน */}
-          <ellipse
-            className="lg-globe-spin"
-            cx="110"
-            cy="110"
-            rx="82"
-            ry="15"
-            stroke="rgb(var(--art-accent))"
-            strokeWidth="1.6"
-            strokeDasharray="10 6"
-          />
-
-          {/* ── สัญญาณยิงจากจุดส่งไปยังจุดหมายบนผิวโลก ──
-              จุดส่ง (110,64) = ที่ตั้งเกตเวย์ ส่วนสามจุดที่เหลือคือปลายทาง
-              ส่วนโค้งโก่งขึ้นจากผิวโลก อ่านเป็น "สัญญาณที่เดินทางข้ามระยะ" ไม่ใช่เส้นตรงบนแผนที่ */}
-          {GLOBE_LINKS.map((g, i) => (
-            <g key={i}>
-              <path
-                d={g.d}
-                stroke={`rgb(var(${g.tone}))`}
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeDasharray="200"
-                style={{ animation: `lg-arc ${g.dur} ease-in-out ${g.delay} infinite` }}
-              />
-              <circle
-                cx={g.x}
-                cy={g.y}
-                r="4"
-                fill={`rgb(var(${g.tone}))`}
-                style={{ animation: `lg-target 2.6s ease-in-out ${g.delay} infinite` }}
-              />
-            </g>
-          ))}
-
-          {/* จุดส่ง — วงในทึบ วงนอกจาง ให้ต่างจากจุดปลายทางที่เป็นวงเดียว */}
-          <circle cx="110" cy="64" r="8" fill="rgb(var(--art-accent) / 0.25)" />
-          <circle cx="110" cy="64" r="4" fill="rgb(var(--art-accent))" />
+          {/* จุดเมือง — วงในทึบ วงนอกจาง ให้เห็นเป็นจุดเรืองแสง ไม่ใช่จุดทึบแข็ง */}
+          <g>
+            {WORLD_NODES.map((n, i) => (
+              <g key={i}>
+                <circle cx={n.x} cy={n.y} r="5.5" fill="rgb(var(--art-accent) / 0.2)" />
+                <circle
+                  cx={n.x}
+                  cy={n.y}
+                  r="2.2"
+                  fill="rgb(var(--art-accent))"
+                  className="lg-blink"
+                  style={{ animationDelay: `${(i % 5) * 0.6}s` }}
+                />
+              </g>
+            ))}
+          </g>
         </svg>
-
-        {/* ลำแสงลงฐาน — เส้นกลางยาวสุด สองข้างสั้นลง อ่านเป็นลำแสงทรงกรวย */}
-        {/* top ต้องพ้นครึ่งล่างของลูกบาศก์ ไม่งั้นลำแสงโผล่อยู่หลังตัวลูกบาศก์แล้วมองไม่เห็น */}
-        <span aria-hidden className="pointer-events-none absolute top-[calc(50%+3.75rem)] flex gap-2.5">
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="w-[3px] rounded-full bg-[linear-gradient(180deg,rgb(var(--art-accent)/0)_0%,rgb(var(--art-accent)/0.95)_50%,rgb(var(--art-accent)/0)_100%)]"
-              style={{
-                height: `${96 - Math.abs(i - 1) * 26}px`,
-                animation: `lg-beam ${2.4 + i * 0.35}s ease-in-out ${i * 0.4}s infinite`,
-              }}
-            />
-          ))}
-        </span>
-
-        {/* ฐานวงแหวน — เอียงด้วย rotateX ให้เป็นวงรีที่มองจากด้านบนเฉียง */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute top-[calc(50%+7rem)] grid place-items-center"
-          style={{ transform: 'rotateX(72deg)' }}
-        >
-          {['lg-base-1', 'lg-base-2', 'lg-base-3'].map((cls) => (
-            <span
-              key={cls}
-              className={cn('absolute size-[14rem] rounded-full border-2', cls)}
-              style={{ borderColor: 'rgb(var(--art-accent))' }}
-            />
-          ))}
-          <span className="size-[5rem] rounded-full bg-[radial-gradient(circle,rgb(var(--art-accent)/0.85)_0%,rgb(var(--art-accent)/0)_70%)]" />
-        </span>
       </div>
 
       {/* ── ป้ายไอคอนโคจร ── */}
