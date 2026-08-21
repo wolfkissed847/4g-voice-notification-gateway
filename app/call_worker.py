@@ -26,7 +26,7 @@ from app.config import settings as env_settings  # ใช้แค่ fallback �
 from app.config_service import EffectiveConfig, get_effective_config, get_or_create_app_settings
 from app.contacts_service import get_ordered_phone_numbers
 from app.database import CallJob, CallLog, CallStatus, SessionLocal
-from app.gsm_module import GSMModule
+from app.gsm_module import UART_PORT, GSMModule
 from app.gsm_power import GsmPower
 from app.queue_manager import claim_next_job, recover_orphaned_jobs, update_job_status
 from app.tts_service import text_to_speech
@@ -232,9 +232,16 @@ def _poll_gsm_status(gsm: GSMModule, power: GsmPower | None = None):
     # โดยไม่ได้ข้อมูลเพิ่มเลย (บรรทัดที่ 2 เป็นต้นไปบอกเรื่องเดิมกับบรรทัดแรกทุกประการ)
     was_connected = worker_state.get_state().gsm_connected
 
+    # ── ขา GPIO ใช้ได้เฉพาะกับโมดูลที่ต่อผ่านหัว GPIO เท่านั้น ──────────────────
+    # ระบบสลับพอร์ตเองได้ (ดู GSMModule._autodetect_port) ถ้าตอนนี้กำลังคุยกับโมดูลที่
+    # เสียบผ่าน USB อยู่ ขา PWRKEY/STATUS ที่ตั้งไว้ก็ไม่ได้ต่อกับอะไรของมันเลย
+    # กดไปก็ไม่มีผล และค่า STATUS ที่อ่านได้ก็ไม่ได้บอกอะไรเกี่ยวกับโมดูลตัวนั้น
+    #
+    # ตัดสินจากพอร์ตที่ "ใช้งานอยู่จริง" ไม่ใช่จากค่าใน .env เพราะพอร์ตเปลี่ยนเองได้
+    gpio = power if (power is not None and gsm.port == UART_PORT) else None
+
     # อ่านขา STATUS ไว้แสดงบนหน้าเว็บ — แยกแยะ "ดับ" ออกจาก "ค้าง" ได้ ซึ่ง AT ทำไม่ได้
-    if power is not None:
-        worker_state.set_gsm_power_on(power.is_on())
+    worker_state.set_gsm_power_on(gpio.is_on() if gpio is not None else None)
 
     if gsm.is_responsive():
         # กันสายโทรกลับ — จุดนี้เรียกเฉพาะตอน worker ว่าง (ไม่มีสายที่ระบบโทรออกค้างอยู่)
@@ -273,7 +280,7 @@ def _poll_gsm_status(gsm: GSMModule, power: GsmPower | None = None):
     # การกด PWRKEY ตอนโมดูลติดอยู่แล้วไม่มีผลเสียอะไร แต่การไม่กดตอนมันตายคือระบบเงียบไปเฉยๆ
     #
     # คูลดาวน์ 60 วิกันกดรัว: ถ้าโมดูลเสียจริงหรือสายหลุด การกดทุกวินาทีไม่ได้ช่วยอะไร
-    if power is not None and power.available:
+    if gpio is not None and gpio.available:
         now = time.monotonic()
         last = getattr(_poll_gsm_status, "_last_power_on_try", 0.0)
         if now - last >= AUTO_POWER_ON_COOLDOWN:
@@ -291,7 +298,7 @@ def _poll_gsm_status(gsm: GSMModule, power: GsmPower | None = None):
             # แต่ log รายงานว่า "เปิดโมดูลไม่สำเร็จ" เพราะ STATUS ไม่ขึ้นใน 25 วิ
             #
             # ตัวชี้ขาดว่าปลุกสำเร็จหรือไม่มีอย่างเดียวคือ "AT ตอบไหม" จึงลองต่อเสมอ
-            power.power_on()
+            gpio.power_on()
             if _reconnect_after_power(gsm):
                 _poll_gsm_status._power_on_fail_streak = 0
                 logger.warning("ปลุกโมดูลกลับมาได้เองแล้ว")

@@ -37,6 +37,10 @@ AUDIO_PLAY_STOP = "+AUDIOSTATE: audio play stop"
 # กันพื้นที่เก็บของโมดูลเต็มในระยะยาวถ้าใช้ชื่อไม่ซ้ำทุกครั้ง
 MODULE_AUDIO_PATH = "C:/tts.mp3"
 
+# พอร์ต UART ของ SoC เอง — ปลายทางของโมดูลที่ต่อผ่านหัว GPIO
+# ต่างจาก /dev/ttyUSB* ตรงที่ไฟล์นี้มีอยู่เสมอแม้ไม่มีโมดูลต่ออยู่ จึงเช็คด้วยการเปิดพอร์ตไม่ได้
+UART_PORT = "/dev/serial0"
+
 # เบอร์ที่ยอมให้ต่อท้าย ATD ได้ — ตัวเลขล้วน (ใส่ + นำหน้าได้) เท่านั้น
 _DIALABLE = re.compile(r"^\+?\d{8,15}$")
 
@@ -61,45 +65,93 @@ class GSMModule:
         #  พร้อม log อีก 8 พันบรรทัดโดยไม่ได้อะไรเพิ่ม)
         self._gsmbusy_unsupported = False
 
+    def _is_alive(self) -> bool:
+        """ถาม AT บน session ที่เปิดอยู่แล้ว — ใช้ตอน connect เพื่อดูว่าพอร์ตนี้มีโมดูลจริง"""
+        try:
+            self.ser.reset_input_buffer()
+            self.ser.write(b"AT\r\n")
+            time.sleep(0.5)
+            return b"OK" in self.ser.read(self.ser.in_waiting or 64)
+        except Exception:
+            return False
+
+    def _candidate_ports(self) -> list[str]:
+        """
+        พอร์ตที่อาจมีโมดูลอยู่ เรียงตามลำดับที่ควรลอง — ครอบคลุมทั้งสองแบบที่โปรเจกต์รองรับ
+
+            /dev/ttyUSB*   บอร์ดที่เสียบผ่าน USB (Waveshare A7670E)
+            /dev/serial0   โมดูลที่ต่อผ่านหัว GPIO ของ Pi (A7670C)
+
+        เอา ttyUSB ขึ้นก่อนเมื่อมีทั้งคู่ เพราะบอร์ด USB มีวงจรไฟครบในตัวและไม่ต้องพึ่ง
+        การเดินสายเอง จึงเป็นตัวที่น่าจะใช้งานได้แน่นอนกว่า
+        """
+        return sorted(glob.glob("/dev/ttyUSB*")) + [UART_PORT]
+
+    def _port_answers_at(self, path: str) -> bool:
+        """พอร์ตนี้มีโมดูลที่ตอบ AT อยู่จริงไหม — เปิดถาม-ปิด ไม่ยุ่งกับ session หลัก"""
+        try:
+            with serial.Serial(path, self.baudrate, timeout=1) as probe:
+                probe.reset_input_buffer()
+                probe.write(b"AT\r\n")
+                time.sleep(0.4)
+                return b"OK" in probe.read(probe.in_waiting or 64)
+        except Exception:
+            return False
+
     def _autodetect_port(self) -> str | None:
         """
-        ไล่ถามทุก /dev/ttyUSB* ว่าตัวไหนตอบคำสั่ง AT — คืน path ตัวแรกที่ตอบ
+        ไล่ถามทุกพอร์ตว่าตัวไหนมีโมดูลตอบคำสั่ง AT — คืน path ตัวแรกที่ตอบ
 
-        ที่ต้องมีเพราะเลขท้าย ttyUSB ไม่ใช่ค่าคงที่ มันคือ "ลำดับที่เคอร์เนลเจออุปกรณ์"
-        ถอดเสียบใหม่ เสียบคนละพอร์ต หรือโมดูลรีเซ็ตตัวเองหลังไฟตก แล้วเลขเปลี่ยนได้หมด
-        โมดูล SIMCOM หนึ่งตัวยังสร้างหลายพอร์ตพร้อมกัน (diag/nmea/at/modem) ซึ่งมีพอร์ตเดียว
-        ที่รับคำสั่ง AT จริง การไล่ถามจึงตรงกว่าการจำเลขไว้ล่วงหน้า
+        มีสองเหตุผลที่ต้องมี:
 
-        ถามเฉพาะตอนพอร์ตที่ตั้งไว้ใน .env ใช้ไม่ได้เท่านั้น ปกติจึงไม่มีค่าใช้จ่ายอะไรเพิ่ม
+        1. เลขท้าย ttyUSB ไม่ใช่ค่าคงที่ มันคือ "ลำดับที่เคอร์เนลเจออุปกรณ์" ถอดเสียบใหม่
+           เสียบคนละพอร์ต หรือโมดูลรีเซ็ตตัวเองหลังไฟตก แล้วเลขเปลี่ยนได้หมด
+           โมดูล SIMCOM หนึ่งตัวยังสร้างหลายพอร์ตพร้อมกัน (diag/nmea/at/modem) ซึ่งมีพอร์ตเดียว
+           ที่รับคำสั่ง AT จริง การไล่ถามจึงตรงกว่าการจำเลขไว้ล่วงหน้า
+
+        2. **สลับระหว่างโมดูล USB กับโมดูลที่ต่อ GPIO ได้เองโดยไม่ต้องแก้ .env** —
+           ย้ายฮาร์ดแวร์แล้วเสียบใหม่ ระบบหาเจอเองในรอบกู้คืนถัดไป (ทุกวินาทีตอนโมดูลหาย)
+
+        ถามเฉพาะตอนพอร์ตที่ตั้งไว้ใช้ไม่ได้เท่านั้น ปกติจึงไม่มีค่าใช้จ่ายอะไรเพิ่ม
         """
-        candidates = sorted(glob.glob("/dev/ttyUSB*"))
-        if not candidates:
-            return None
-        for path in candidates:
+        for path in self._candidate_ports():
             if path == self.port:
                 continue  # ลองไปแล้วก่อนเรียกฟังก์ชันนี้
-            try:
-                with serial.Serial(path, self.baudrate, timeout=1) as probe:
-                    probe.reset_input_buffer()
-                    probe.write(b"AT\r\n")
-                    time.sleep(0.4)
-                    if b"OK" in probe.read(probe.in_waiting or 64):
-                        logger.warning("โมดูลย้ายไปอยู่ที่ %s แล้ว (ตั้งไว้ว่า %s)", path, self.port)
-                        return path
-            except Exception:
-                continue  # พอร์ตนี้ไม่ใช่ ลองตัวถัดไป
+            if self._port_answers_at(path):
+                logger.warning("เจอโมดูลที่ %s (เดิมตั้งไว้ %s) — สลับไปใช้พอร์ตนี้", path, self.port)
+                return path
         return None
 
     def connect(self):
+        """
+        เปิดพอร์ตและตั้งค่าโมดูลให้พร้อมใช้ — สลับไปพอร์ตอื่นเองถ้าพอร์ตที่ตั้งไว้ไม่มีโมดูล
+
+        ── ทำไมต้องเช็คว่า "ตอบ AT" ไม่ใช่แค่ "เปิดพอร์ตได้" ────────────────────
+        /dev/serial0 เป็นของ SoC เอง มันจึง **เปิดได้เสมอ** แม้ไม่มีอะไรต่ออยู่เลย
+        ต่างจาก /dev/ttyUSB* ที่หายไปจากระบบเมื่อถอดโมดูลออก
+
+        ถ้าเช็คแค่ "เปิดพอร์ตได้ไหม" แบบเดิม เครื่องที่ตั้งไว้เป็น serial0 แล้วเปลี่ยนไปใช้
+        โมดูล USB แทน จะเปิด serial0 สำเร็จทุกครั้งแล้วค้างอยู่ตรงนั้นตลอดไป
+        ไม่มีวันไปเจอโมดูล USB ที่เสียบอยู่จริง
+        """
         try:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
         except serial.SerialException:
-            # พอร์ตที่ตั้งไว้ใช้ไม่ได้ — ลองหาว่าโมดูลย้ายไปอยู่พอร์ตไหนแทน
+            # พอร์ตที่ตั้งไว้เปิดไม่ได้เลย — หาพอร์ตอื่นที่มีโมดูลอยู่
             found = self._autodetect_port()
             if found is None:
                 raise
             self.port = found
             self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+        else:
+            # เปิดได้ แต่ยังไม่รู้ว่ามีโมดูลอยู่ปลายสายจริงไหม — ต้องถามก่อน
+            time.sleep(0.5)
+            if not self._is_alive():
+                found = self._autodetect_port()
+                if found is not None:
+                    self.ser.close()
+                    self.port = found
+                    self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
         time.sleep(1)
         # เคลียร์ byte ค้างเก่าในบัฟเฟอร์ก่อนเริ่ม — ถ้าโมดูลเพิ่ง reset/power-cycle มา อาจมี
         # boot banner (manufacturer/model/IMEI ฯลฯ) ค้างอยู่ใน OS buffer ที่ Python ยังไม่ได้อ่าน
