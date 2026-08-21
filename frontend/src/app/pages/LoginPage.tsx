@@ -27,7 +27,7 @@
  */
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, Eye, EyeOff, Lock, Moon, Phone, RadioTower, RefreshCw, SignalHigh, Sun, User } from 'lucide-react';
+import { Eye, EyeOff, Lock, Moon, Phone, RadioTower, RefreshCw, SignalHigh, Sun, User } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { login } from '../api/auth';
@@ -145,8 +145,6 @@ export function LoginPage() {
               </span>
             </label>
 
-            {/* ลูกศรอยู่ในวงกลมชิดขวา ไม่ใช่ต่อท้ายข้อความ — ข้อความไทยกับอังกฤษยาวไม่เท่ากัน
-                ถ้าลูกศรเกาะข้อความ ตำแหน่งมันจะขยับตามภาษาทุกครั้งที่สลับ */}
             <button
               type="submit"
               disabled={loading}
@@ -154,9 +152,6 @@ export function LoginPage() {
             >
               {loading ? <RefreshCw size={16} className="me-2 animate-spin" /> : null}
               {T.login_submit}
-              <span className="absolute end-2 grid size-8 place-items-center rounded-full bg-brand-ink/20">
-                <ArrowRight size={16} />
-              </span>
             </button>
           </form>
 
@@ -209,11 +204,49 @@ export function LoginPage() {
   );
 }
 
-/** ป้ายไอคอนที่ลอยรอบลูกบาศก์ — ตำแหน่งเป็น % ของแผง จะได้ขยับตามขนาดแผงเอง */
+/**
+ * ป้ายไอคอนที่ลอยรอบลูกบาศก์ — ตำแหน่งเป็น % ของแผง จะได้ขยับตามขนาดแผงเอง
+ *
+ * side บอกว่าข้อความไปอยู่ข้างไหนของไอคอน: ตัวที่อยู่ชิดขวาของแผงต้องให้ข้อความ
+ * ไปทางซ้าย ไม่งั้นมันทะลุขอบแผงออกไป (และได้เป็นคู่กระจกกับตัวฝั่งซ้ายพอดี)
+ *
+ * ข้อความเป็นของตายตัวที่วนแอนิเมชันอยู่ ไม่ใช่สถานะจริงของเกตเวย์ — ตอนอยู่หน้านี้
+ * ยังไม่มี token จึงเรียก API ไม่ได้เลยแม้แต่ตัวเดียว
+ */
 const ORBIT_BADGES = [
-  { Icon: Phone, tone: '--art-warn', top: '25%', left: '10%', delay: '0s', x: '5px', y: '-9px' },
-  { Icon: SignalHigh, tone: '--art-ok', top: '16%', left: '75%', delay: '1.6s', x: '-6px', y: '-7px' },
-  { Icon: RadioTower, tone: '--art-accent', top: '62%', left: '79%', delay: '3.1s', x: '-4px', y: '8px' },
+  {
+    Icon: Phone,
+    tone: '--art-warn',
+    labelKey: 'login_panel_dialing',
+    side: 'right',
+    top: '25%',
+    left: '10%',
+    delay: '0s',
+    x: '5px',
+    y: '-9px',
+  },
+  {
+    Icon: SignalHigh,
+    tone: '--art-ok',
+    labelKey: 'login_panel_signal',
+    side: 'left',
+    top: '16%',
+    left: '62%',
+    delay: '1.6s',
+    x: '-6px',
+    y: '-7px',
+  },
+  {
+    Icon: RadioTower,
+    tone: '--art-accent',
+    labelKey: 'login_panel_sent',
+    side: 'left',
+    top: '64%',
+    left: '66%',
+    delay: '3.1s',
+    x: '-4px',
+    y: '8px',
+  },
 ] as const;
 
 /** ฝุ่นแสงที่ลอยขึ้นจากฐาน — ตำแหน่ง/คาบ/ดีเลย์ตายตัว ไม่ได้สุ่มตอน render
@@ -315,23 +348,22 @@ function LoginArtPanel() {
         <div className="lg-cube relative" style={{ width: CUBE, height: CUBE }}>
           {/* หน้าหน้า — หันเข้าหาคนดู เป็นหน้าที่สว่างสุดและเป็นที่อยู่ของตัวอักษร */}
           <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(140deg,#7ce3ff_0%,#00bdfe_55%,#0080b0_100%)]"
+            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(140deg,#57cdf0_0%,#0e9ed2_52%,#0b7099_100%)]"
             style={{ transform: `translateZ(${CUBE / 2}px)` }}
           />
           {/* หน้าข้างกับหน้าบน เข้มกว่าหน้าหน้า จึงอ่านเป็นก้อนทึบที่มีความหนา ไม่ใช่แผ่นแบน */}
           <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(180deg,#0090c6_0%,#00516f_100%)]"
+            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(180deg,#0c7fae_0%,#075978_100%)]"
             style={{ transform: `rotateY(90deg) translateZ(${CUBE / 2}px)` }}
           />
           <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(160deg,#45d3ff_0%,#009ad4_100%)]"
+            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(160deg,#31bbe4_0%,#0d8cbe_100%)]"
             style={{ transform: `rotateX(90deg) translateZ(${CUBE / 2}px)` }}
           />
           {/* ตัวอักษรวางบนหน้าหน้า ยกขึ้นอีก 1px กันซ้อนกับพื้นผิว */}
           <span
-            /* ตัวอักษรสีเข้มบนหน้าฟ้าสว่าง ไม่ใช่สีขาว — ขาวบนฟ้าสว่างคอนทราสต์ต่ำจนขอบตัวอักษรเบลอ
-               (ป้าย 4G เดิมของโปรเจคก็ใช้ตัวอักษรสีเข้มบนพื้นฟ้าเหมือนกัน) */
-            className="absolute inset-0 grid place-items-center font-mono text-[2.25rem] leading-none font-black tracking-[-0.04em] text-[#04212e]"
+            /* พื้นหน้าเข้มลงแล้ว ตัวอักษรจึงกลับมาเป็นสีขาวได้ คอนทราสต์ดีกว่าสีเข้มบนฟ้าสว่าง */
+            className="absolute inset-0 grid place-items-center font-mono text-[2.25rem] leading-none font-black tracking-[-0.04em] text-white"
             style={{ transform: `translateZ(${CUBE / 2 + 1}px)` }}
           >
             4G
@@ -374,22 +406,42 @@ function LoginArtPanel() {
       {ORBIT_BADGES.map((b, i) => (
         <span
           key={i}
-          className="lg-orbit absolute z-[4] grid size-12 place-items-center rounded-full border backdrop-blur-sm"
+          className={cn('lg-orbit absolute z-[4] flex items-center gap-2', b.side === 'left' && 'flex-row-reverse')}
           style={
             {
               top: b.top,
               left: b.left,
               animationDelay: b.delay,
-              color: `rgb(var(${b.tone}))`,
-              borderColor: `rgb(var(${b.tone}) / 0.5)`,
-              backgroundColor: `rgb(var(${b.tone}) / 0.14)`,
-              boxShadow: `0 0 26px rgb(var(${b.tone}) / 0.4)`,
               '--lg-orbit-x': b.x,
               '--lg-orbit-y': b.y,
             } as CSSProperties
           }
         >
-          <b.Icon size={20} />
+          <span
+            className="grid size-12 shrink-0 place-items-center rounded-full border backdrop-blur-sm"
+            style={{
+              color: `rgb(var(${b.tone}))`,
+              borderColor: `rgb(var(${b.tone}) / 0.5)`,
+              backgroundColor: `rgb(var(${b.tone}) / 0.14)`,
+              boxShadow: `0 0 26px rgb(var(${b.tone}) / 0.4)`,
+            }}
+          >
+            <b.Icon size={20} />
+          </span>
+          {/* จุดกะพริบสีเดียวกับไอคอน อยู่ด้านที่ติดกับไอคอนเสมอ (flex-row-reverse
+              สลับทั้งป้ายและข้างในป้าย) ทั้งสองฝั่งจึงเป็นคู่กระจกกันพอดี */}
+          <span
+            className={cn(
+              'flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1 whitespace-nowrap backdrop-blur-md',
+              b.side === 'left' && 'flex-row-reverse',
+            )}
+          >
+            <span
+              className="lg-blink size-[0.4375rem] shrink-0 rounded-full"
+              style={{ backgroundColor: `rgb(var(${b.tone}))`, animationDelay: b.delay }}
+            />
+            <span className="text-micro font-medium text-white/85">{T[b.labelKey]}</span>
+          </span>
         </span>
       ))}
 
