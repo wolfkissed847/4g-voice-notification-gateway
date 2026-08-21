@@ -596,6 +596,7 @@ def update_api_key(
             name=request.name,
             event_type_ids=request.event_type_ids,
             event_links=[l.model_dump() for l in request.event_links] if request.event_links is not None else None,
+            is_active=request.is_active,
         )
     except (api_key_service.UnknownEventTypeError, api_key_service.UnknownContactError) as exc:
         # เบอร์/เหตุการณ์ที่อ้างถึงไม่มีอยู่จริง = ข้อมูลที่ส่งมาผิด ไม่ใช่ระบบพัง

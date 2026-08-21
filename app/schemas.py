@@ -150,6 +150,9 @@ class ApiKeyUpdateRequest(BaseModel):
     # (event_type_ids ยังรับอยู่เพื่อความเข้ากันได้ — ตีความว่าใช้กลุ่มเริ่มต้นทุกอัน)
     event_type_ids: list[int] | None = None
     event_links: list[ApiKeyEventLink] | None = None
+    # ปิดชั่วคราวโดยไม่ลบทิ้ง — key ยังอยู่ในระบบแต่ยิงเข้ามาแล้วโดนปฏิเสธ
+    # (ใช้ตอนถอดบอร์ดไปซ่อม/ย้ายที่ ไม่ต้องออก key ใหม่แล้วไปแฟลชบอร์ดใหม่ตอนเอากลับมา)
+    is_active: bool | None = None
 
 
 class PickedContactRef(BaseModel):

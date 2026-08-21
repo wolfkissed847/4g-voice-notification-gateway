@@ -158,6 +158,8 @@ export interface ApiKeyUpdate {
   name?: string;
   event_type_ids?: number[];
   event_links?: ApiKeyEventLink[];
+  /** ปิดชั่วคราวโดยไม่ลบทิ้ง — key ยังอยู่ แต่ยิงเข้ามาแล้วถูกปฏิเสธ */
+  is_active?: boolean;
 }
 
 export interface ApiKeyReveal {

@@ -193,6 +193,7 @@ def update_api_key(
     name: str | None = None,
     event_type_ids: list[int] | None = None,
     event_links: list[dict] | None = None,
+    is_active: bool | None = None,
 ) -> ApiKey | None:
     """
     แก้ชื่ออุปกรณ์ / รายการ event type ที่ยิงได้ — โดยที่ key ตัวเดิมยังใช้งานได้เหมือนเดิม
@@ -205,6 +206,10 @@ def update_api_key(
         return None
     if name is not None:
         api_key.name = name
+    # เก็บเป็น string "true"/"false" ตามรูปแบบเดิมของคอลัมน์นี้ (ดู database.py)
+    # verify_api_key กรอง is_active == "true" อยู่แล้ว การปิดจึงมีผลทันทีกับคำขอถัดไป
+    if is_active is not None:
+        api_key.is_active = "true" if is_active else "false"
     # event_links ละเอียดกว่า (มีกลุ่มรายเหตุการณ์) จึงชนะถ้าส่งมาทั้งคู่
     if event_links is not None:
         set_event_links(db, api_key, event_links)
