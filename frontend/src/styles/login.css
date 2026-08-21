@@ -199,3 +199,24 @@
     animation: none !important;
   }
 }
+
+/* ลูกโลกลอยขึ้นลงช้าๆ — คาบยาวกว่าป้ายไอคอน จะได้ไม่ขยับพร้อมกันเป็นจังหวะเดียว */
+@keyframes lg-globe-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.lg-globe-float {
+  animation: lg-globe-float 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-globe-float {
+    animation: none !important;
+  }
+}

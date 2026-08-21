@@ -34,8 +34,7 @@ import { login } from '../api/auth';
 import { ApiError, setToken } from '../api/client';
 import { Alert } from '../components/Alert';
 import { BrandMark } from '../components/BrandMark';
-import { WORLD_H, WORLD_PATHS, WORLD_W } from '../lib/worldLand';
-import { ACTIVE_LINKS, WORLD_LINKS, WORLD_NODES } from '../lib/worldNodes';
+import { GLOBE_CX, GLOBE_CY, GLOBE_LINKS, GLOBE_NODES, GLOBE_PATHS, GLOBE_R, GLOBE_SIZE } from '../lib/worldGlobe';
 import { useApp } from '../context/AppContext';
 
 export function LoginPage() {
@@ -304,75 +303,108 @@ function LoginArtPanel() {
         <rect width="100%" height="100%" fill="url(#lg-grid)" />
       </svg>
 
-      {/* ── แผนที่โลก + เครือข่ายที่เชื่อมถึงกัน ── */}
-      <div className="relative z-[3] w-full px-8">
+      {/* ── ลูกโลก + เครือข่ายที่เชื่อมถึงกัน ── */}
+      <div className="lg-globe-float relative z-[3]">
         <svg
-          viewBox={`0 0 ${WORLD_W} ${WORLD_H}`}
-          className="w-full"
+          viewBox={`0 0 ${GLOBE_SIZE} ${GLOBE_SIZE}`}
+          className="w-[19rem]"
           fill="none"
           role="img"
           aria-label={T.login_map_alt}
         >
           <defs>
-            {/* ไล่สีบนแผ่นดิน — สว่างตรงกลางภาพ จางลงที่ขอบ ให้ภาพมีจุดโฟกัส
-                ไม่ใช่แผ่นสีเดียวเรียบทั้งผืน */}
-            <radialGradient id="lg-land" cx="50%" cy="45%" r="62%">
-              <stop offset="0%" stopColor="rgb(var(--art-accent) / 0.44)" />
-              <stop offset="100%" stopColor="rgb(var(--art-accent) / 0.18)" />
+            {/* ไล่สีของทรงกลม — สว่างบนซ้าย มืดล่างขวา คือแสงตกกระทบจากมุมเดียว
+                ทรงกลมที่สีเรียบทั้งใบจะอ่านเป็นวงกลมแบน ไม่ใช่ลูกกลม */}
+            <radialGradient id="lg-sphere" cx="35%" cy="28%" r="78%">
+              <stop offset="0%" stopColor="rgb(var(--art-accent) / 0.28)" />
+              <stop offset="65%" stopColor="rgb(var(--art-accent) / 0.1)" />
+              <stop offset="100%" stopColor="rgb(var(--art-accent) / 0.02)" />
             </radialGradient>
+            {/* หน้ากากตัดทุกอย่างให้อยู่ในวงกลม — เส้นเชื่อมระหว่างเมืองลากเป็นเส้นตรง
+                บางเส้นจึงเลยขอบโลกออกไป ถ้าไม่ตัดจะเห็นเส้นโผล่นอกลูกโลก */}
+            <clipPath id="lg-sphere-clip">
+              <circle cx={GLOBE_CX} cy={GLOBE_CY} r={GLOBE_R} />
+            </clipPath>
           </defs>
 
-          {/* แผ่นดิน — ลงพื้นจางแล้วตีเส้นชายฝั่งทับ ชายฝั่งจึงเป็นเส้นที่คมที่สุดในภาพ */}
-          <g>
-            {WORLD_PATHS.map((d, i) => (
-              <path key={i} d={d} fill="url(#lg-land)" stroke="rgb(var(--art-accent))" strokeWidth="1" />
-            ))}
-          </g>
+          <circle cx={GLOBE_CX} cy={GLOBE_CY} r={GLOBE_R} fill="url(#lg-sphere)" />
 
-          {/* เส้นเชื่อมระหว่างเมือง */}
-          <g>
-            {WORLD_LINKS.map(([a, b], i) => (
+          <g clipPath="url(#lg-sphere-clip)">
+            {/* เส้นละติจูด/ลองจิจูด — วงรีที่แคบลงเข้าหาขอบ คือเส้นบนผิวทรงกลมที่มองจากไกล */}
+            {[-140, -75, 0, 75, 140].map((dy) => (
+              <ellipse
+                key={dy}
+                cx={GLOBE_CX}
+                cy={GLOBE_CY + dy}
+                rx={Math.sqrt(Math.max(GLOBE_R * GLOBE_R - dy * dy, 0))}
+                ry={Math.abs(dy) > 100 ? 8 : 16}
+                stroke="rgb(var(--art-accent) / 0.16)"
+                strokeWidth="1"
+              />
+            ))}
+            {[GLOBE_R, 138, 72].map((rx) => (
+              <ellipse
+                key={rx}
+                cx={GLOBE_CX}
+                cy={GLOBE_CY}
+                rx={rx}
+                ry={GLOBE_R}
+                stroke="rgb(var(--art-accent) / 0.14)"
+                strokeWidth="1"
+              />
+            ))}
+
+            {/* แผ่นดิน — ลงพื้นจางแล้วตีเส้นชายฝั่งทับ ชายฝั่งจึงเป็นเส้นที่คมที่สุดในภาพ */}
+            {GLOBE_PATHS.map((d, i) => (
+              <path
+                key={i}
+                d={d}
+                fill="rgb(var(--art-accent) / 0.34)"
+                stroke="rgb(var(--art-accent))"
+                strokeWidth="1"
+              />
+            ))}
+
+            {/* เส้นเชื่อมระหว่างเมือง */}
+            {GLOBE_LINKS.map(([a, b], i) => (
               <line
                 key={i}
-                x1={WORLD_NODES[a].x}
-                y1={WORLD_NODES[a].y}
-                x2={WORLD_NODES[b].x}
-                y2={WORLD_NODES[b].y}
+                x1={GLOBE_NODES[a].x}
+                y1={GLOBE_NODES[a].y}
+                x2={GLOBE_NODES[b].x}
+                y2={GLOBE_NODES[b].y}
                 stroke="rgb(var(--art-accent))"
-                strokeWidth="0.8"
+                strokeWidth="1"
                 opacity="0.5"
               />
             ))}
-          </g>
 
-          {/* จุดสัญญาณที่วิ่งไปตามเส้น — มีเฉพาะบางเส้น (ดู ACTIVE_LINKS)
-              ใช้ animateMotion ของ SVG ไม่ใช่ CSS เพราะแต่ละเส้นทิศทางไม่เหมือนกัน
-              ถ้าใช้ CSS ต้องคำนวณ translate ของทุกเส้นเอง */}
-          <g>
-            {ACTIVE_LINKS.map((li, i) => {
-              const [a, b] = WORLD_LINKS[li];
+            {/* จุดสัญญาณวิ่งไปตามเส้น — มีแค่บางเส้น ของขยับพร้อมกันทุกเส้นจะรบกวนสายตา
+                ใช้ animateMotion ของ SVG ไม่ใช่ CSS เพราะแต่ละเส้นทิศทางไม่เหมือนกัน */}
+            {[1, 3, 7, 11, 13].map((li, i) => {
+              const link = GLOBE_LINKS[li];
+              if (!link) return null;
+              const [a, b] = link;
               return (
-                <circle key={li} r="2.6" fill="rgb(var(--art-accent))">
+                <circle key={li} r="3" fill="rgb(var(--art-accent))">
                   <animateMotion
-                    dur={`${2.8 + i * 0.5}s`}
+                    dur={`${2.6 + i * 0.5}s`}
                     begin={`${i * 0.7}s`}
                     repeatCount="indefinite"
-                    path={`M${WORLD_NODES[a].x},${WORLD_NODES[a].y} L${WORLD_NODES[b].x},${WORLD_NODES[b].y}`}
+                    path={`M${GLOBE_NODES[a].x},${GLOBE_NODES[a].y} L${GLOBE_NODES[b].x},${GLOBE_NODES[b].y}`}
                   />
                 </circle>
               );
             })}
-          </g>
 
-          {/* จุดเมือง — วงในทึบ วงนอกจาง ให้เห็นเป็นจุดเรืองแสง ไม่ใช่จุดทึบแข็ง */}
-          <g>
-            {WORLD_NODES.map((n, i) => (
+            {/* จุดเมือง — วงในทึบ วงนอกจาง ให้เห็นเป็นจุดเรืองแสง ไม่ใช่จุดทึบแข็ง */}
+            {GLOBE_NODES.map((n, i) => (
               <g key={i}>
-                <circle cx={n.x} cy={n.y} r="5.5" fill="rgb(var(--art-accent) / 0.2)" />
+                <circle cx={n.x} cy={n.y} r="7" fill="rgb(var(--art-accent) / 0.22)" />
                 <circle
                   cx={n.x}
                   cy={n.y}
-                  r="2.2"
+                  r="2.8"
                   fill="rgb(var(--art-accent))"
                   className="lg-blink"
                   style={{ animationDelay: `${(i % 5) * 0.6}s` }}
@@ -380,6 +412,9 @@ function LoginArtPanel() {
               </g>
             ))}
           </g>
+
+          {/* ขอบโลก วาดทับสุดท้ายให้เป็นเส้นคมรอบวง ไม่โดนอะไรทับ */}
+          <circle cx={GLOBE_CX} cy={GLOBE_CY} r={GLOBE_R} stroke="rgb(var(--art-accent) / 0.8)" strokeWidth="1.5" />
         </svg>
       </div>
 
