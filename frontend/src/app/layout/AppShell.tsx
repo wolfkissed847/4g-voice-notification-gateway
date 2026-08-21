@@ -36,6 +36,9 @@ import { Dot } from '../components/primitives';
 
 const SIDEBAR_W = 240;
 
+/** สาม path ที่ชี้ไปหน้าตั้งค่าเดียวกัน ต่างกันแค่แท็บ (ดู App.tsx) */
+const SETUP_TAB_PATHS = ['/contacts', '/event-types', '/devices'];
+
 type NavItem = {
   path: string;
   label: string;
@@ -47,6 +50,13 @@ type NavItem = {
 export function AppShell() {
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  /* คีย์ของ "หน้า" ที่ใช้สั่งแอนิเมชันตอนเปลี่ยนหน้า — ไม่ใช่ pathname ดิบๆ
+     สาม path นี้เป็นหน้าเดียวกัน (SetupPage) ต่างกันแค่แท็บที่เปิดอยู่ ถ้าใช้ pathname
+     ตรงๆ การกดสลับแท็บจะถูกนับเป็น "เปลี่ยนหน้า" แล้วเล่นแอนิเมชันจางเข้าใหม่ทั้งหน้า
+     ทั้งที่หัวข้อกับแถบแท็บอยู่ที่เดิมไม่ได้เปลี่ยนอะไรเลย — ตาเห็นเป็นการกระพริบ
+     เทียบเท่าเป๊ะ ไม่ใช่ startsWith เพราะ /devices/:id เป็นคนละหน้าจริงๆ (ตั้งค่าอุปกรณ์) */
+  const pageKey = SETUP_TAB_PATHS.includes(location.pathname) ? 'setup' : location.pathname;
 
   // ปิดลิ้นชักทันทีที่เปลี่ยนหน้า ไม่งั้นมันจะค้างทับเนื้อหาที่เพิ่งกดเข้าไปดู
   useEffect(() => setDrawerOpen(false), [location.pathname]);
@@ -86,11 +96,14 @@ export function AppShell() {
         <MobileBar onOpen={() => setDrawerOpen(true)} />
 
         {/* เนื้อหากินเต็มความกว้าง ไม่มีเพดาน — ตารางประวัติ/คิวยิ่งกว้างยิ่งอ่านง่าย */}
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-4 md:px-7">
-          {/* key={pathname} บังคับให้ React มองเป็น element ใหม่ตอนเปลี่ยนหน้า
-              animate-fade-up เลยเล่นซ้ำทุกครั้งที่สลับเมนู
+        {/* pb มากกว่า pt เล็กน้อยโดยตั้งใจ — หน้าที่ยาวเกินจอจะได้มีที่ว่างคั่นก่อนถึงขอบล่าง
+            ไม่ใช่การ์ดใบสุดท้ายไปแปะติดขอบหน้าต่างพอดีจนดูเหมือนถูกตัด */}
+        <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-6 md:px-7 md:pb-7">
+          {/* key ที่เปลี่ยนบังคับให้ React มองเป็น element ใหม่ animate-fade-up จึงเล่นซ้ำ
+              ตอนสลับเมนู — แต่ใช้ pageKey ไม่ใช่ pathname เพื่อไม่ให้สลับแท็บในหน้าตั้งค่า
+              ไปเข้าเงื่อนไขด้วย (ดูหมายเหตุตรงที่ประกาศ pageKey)
               h-full ส่งความสูงต่อให้หน้าที่อยากพอดีจอใช้ได้ (หน้าที่ยาวกว่านั้นก็ล้นแล้วเลื่อนตามปกติ) */}
-          <div key={location.pathname} className="animate-fade-up h-full">
+          <div key={pageKey} className="animate-fade-up h-full">
             <Outlet />
           </div>
         </main>

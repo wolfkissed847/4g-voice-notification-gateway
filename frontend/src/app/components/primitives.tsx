@@ -66,9 +66,28 @@ const toneDot: Record<Tone, string> = {
 };
 
 /** badge สถานะ — ข้อความไทยสั้น ใช้ nowrap ได้ */
-export function Pill({ tone = 'muted', children }: { tone?: Tone; children: ReactNode }) {
+/**
+ * className มีไว้สำหรับป้ายที่มีไอคอนอยู่ข้างในโดยเฉพาะ — ส่ง "inline-flex items-center gap-1.5"
+ * เข้ามา ไม่งั้นถ้าเอา flex ไปครอบเนื้อหาข้างในแทน กล่อง inline ของป้ายจะถูกตัดเป็นสองท่อน
+ * แล้วเส้นขอบมนวาดออกมาเป็นเสี้ยววงกลมสองอันแทนที่จะเป็นแคปซูลใบเดียว
+ */
+export function Pill({
+  tone = 'muted',
+  className,
+  children,
+}: {
+  tone?: Tone;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <span className={cn('rounded-full border px-2.5 py-0.5 text-micro font-medium whitespace-nowrap', toneRing[tone])}>
+    <span
+      className={cn(
+        'rounded-full border px-2.5 py-0.5 text-micro font-medium whitespace-nowrap',
+        toneRing[tone],
+        className,
+      )}
+    >
       {children}
     </span>
   );
@@ -106,7 +125,11 @@ export function StatTile({
       )}
     >
       <p className="text-caption text-ink-2">{label}</p>
-      <p className="mt-1 font-mono text-h2 font-bold break-words">{value}</p>
+      {/* ตัวเลขหลักใช้ฟอนต์ sans ไม่ใช่ mono — mono ให้ทุกหลักกว้างเท่ากับเลข 0
+          ซึ่งดีตอนตัวเลขต้องเรียงตรงกันเป็นคอลัมน์ (ตาราง, แกนกราฟ) แต่กับเลขเดี่ยว
+          ตัวใหญ่ๆ มันทำให้เลขอย่าง 121 ดูโหว่เป็นช่องๆ ตรงนี้ไม่มีอะไรให้เรียงตรง
+          จึงใช้ความกว้างตามธรรมชาติของแต่ละหลัก */}
+      <p className="mt-1 text-h2 font-semibold break-words">{value}</p>
       {foot ? <div className="mt-2 font-mono text-micro break-words text-ink-2">{foot}</div> : null}
     </div>
   );
@@ -251,4 +274,4 @@ export function CodePanel({
  *  ตารางคอลัมน์แน่นให้ห่อด้วย <div className="overflow-x-auto"> แล้วใส่ min-w ที่แถว */
 export const apiGridCls = 'grid gap-2.5 grid-cols-[minmax(88px,1.1fr)_minmax(58px,0.7fr)_minmax(120px,2.2fr)]';
 export const logGridCls =
-  'grid gap-2.5 min-w-[560px] grid-cols-[minmax(96px,0.8fr)_minmax(110px,1.1fr)_minmax(110px,1.1fr)_minmax(96px,0.9fr)_minmax(70px,0.6fr)]';
+  'grid gap-2.5 min-w-[35rem] grid-cols-[minmax(96px,0.8fr)_minmax(110px,1.1fr)_minmax(110px,1.1fr)_minmax(96px,0.9fr)_minmax(70px,0.6fr)]';

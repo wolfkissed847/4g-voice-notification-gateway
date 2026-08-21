@@ -23,15 +23,12 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement, ReactNode, SVGProps } from 'react';
-import { createPortal } from 'react-dom';
-import { Pause, Play, X } from 'lucide-react';
-
 import { cn } from '@/app/components/ui/utils';
 import { getHistory } from '../api/history';
 import { getQueueStatus } from '../api/queue';
 import { getGsmDetail } from '../api/system';
 import { useApp } from '../context/AppContext';
-import type { CallStatus, CallStep, HistoryItem, QueueStatusItem } from '../types';
+import type { CallStep, HistoryItem, QueueStatusItem } from '../types';
 
 /* ── โครงข้อมูล ──────────────────────────────────────────────────────────── */
 
@@ -169,37 +166,21 @@ function segFill(index: number, snap: Snapshot, currentStep: CallStep | null, pr
 
 /* ── การ์ด ───────────────────────────────────────────────────────────────── */
 
-/**
- * ค่าที่การ์ดใช้วาดทั้งหมด — ปกติมาจากการ poll API แต่ป๊อปอัพทดสอบป้อนเองได้
- * เพื่อดูทุกสถานะโดยไม่ต้องรอให้มีสายจริงเกิดขึ้น (ดู SignalFlowTestDialog ท้ายไฟล์)
- */
-export type FlowDemoState = {
-  pending: QueueStatusItem[];
-  latest: HistoryItem | null;
-  currentStep: CallStep | null;
-  progress: number | null;
-  gsmConnected: boolean | null;
-  apiFlash: boolean;
-};
-
-export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
+export function SignalFlowMonitor() {
   const { T } = useApp();
-  const [livePending, setPending] = useState<QueueStatusItem[]>([]);
-  const [liveLatest, setLatest] = useState<HistoryItem | null>(null);
+  const [pending, setPending] = useState<QueueStatusItem[]>([]);
+  const [latest, setLatest] = useState<HistoryItem | null>(null);
   // null = ยังไม่รู้ (โหลดรอบแรกยังไม่เสร็จ) ต่างจาก false ที่แปลว่ารู้แล้วว่าโมดูลหลุด
   // เดิมเริ่มที่ false ป้ายแดง "โมดูลยังไม่เชื่อมต่อ" จึงโผล่แวบหนึ่งทุกครั้งที่เข้าหน้า
-  const [liveGsmConnected, setGsmConnected] = useState<boolean | null>(null);
-  const [liveStep, setCurrentStep] = useState<CallStep | null>(null);
-  const [liveProgress, setProgress] = useState<number | null>(null);
+  const [gsmConnected, setGsmConnected] = useState<boolean | null>(null);
+  const [currentStep, setCurrentStep] = useState<CallStep | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   // กะพริบโหนด API ตอนมีงานใหม่เข้ามา — ตรวจจากเลขงานล่าสุดที่เพิ่มขึ้นจริง
   // ไม่ใช่ตั้งเวลาให้กะพริบเอง จะได้ไม่หลอกว่ามีงานเข้าทั้งที่ไม่มี
-  const [liveApiFlash, setApiFlash] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
+  const [apiFlash, setApiFlash] = useState(false);
   const lastJobId = useRef<number | null>(null);
 
   useEffect(() => {
-    // โหมดทดสอบป้อนค่ามาเองแล้ว ไม่ต้อง poll ซ้อน — ไม่งั้นค่าจริงจะทับค่าที่กำลังดูอยู่
-    if (demo) return;
     let cancelled = false;
     const load = async () => {
       const [queue, history, gsm] = await Promise.all([
@@ -226,15 +207,7 @@ export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [demo]);
-
-  // จากตรงนี้ลงไปโค้ดวาดการ์ดไม่รู้เลยว่าค่ามาจากไหน — อ่านของจริงหรือของที่ป้อนมาก็เหมือนกัน
-  const pending = demo ? demo.pending : livePending;
-  const latest = demo ? demo.latest : liveLatest;
-  const currentStep = demo ? demo.currentStep : liveStep;
-  const progress = demo ? demo.progress : liveProgress;
-  const gsmConnected = demo ? demo.gsmConnected : liveGsmConnected;
-  const apiFlash = demo ? demo.apiFlash : liveApiFlash;
+  }, []);
 
   const snap = snapshotFrom(pending, latest, currentStep, progress);
   const busy = snap.nodeIndex !== null && !snap.failed;
@@ -302,14 +275,16 @@ export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
 
   return (
     <article
-      className="font-sans"
+      /* h-full + flex column: การ์ดนี้อยู่ในแถวที่ยืดได้ ถ้าไม่รับความสูงมาใช้
+         มันจะสูงตามเนื้อหาแล้วเหลือพื้นที่ว่างใต้การ์ดเป็นแถบยาว */
+      className="flex h-full flex-col font-sans"
       style={{
         background: 'var(--sfm-surface)',
         color: 'var(--sfm-ink)',
         border: '1px solid var(--sfm-border)',
         borderRadius: 'var(--sfm-radius)',
         boxShadow: 'var(--sfm-shadow)',
-        padding: 20,
+        padding: 14,
       }}
       aria-label={`${T.flow_title} — ${headline}`}
     >
@@ -334,30 +309,14 @@ export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
         <span className="ms-auto font-mono text-micro" style={{ color: 'var(--sfm-muted)' }}>
           {busy || snap.failed ? headline : T.flow_state_idle}
         </span>
-
-        {/* ปุ่มดูตัวอย่างแอนิเมชัน — การ์ดนี้ส่วนใหญ่ของเวลาจะว่าง สถานะที่เหลืออีก 8 แบบ
-            จึงไม่มีทางเห็นเลยถ้าไม่มีสายเข้าจริงพอดีตอนเปิดหน้าอยู่
-            ซ่อนตัวเองในโหมดทดสอบ ไม่งั้นจะเปิดป๊อปอัพซ้อนป๊อปอัพได้ */}
-        {!demo ? (
-          <button
-            type="button"
-            onClick={() => setTestOpen(true)}
-            title={T.flow_test_title}
-            aria-label={T.flow_test_title}
-            className="grid size-6 shrink-0 place-items-center rounded-full border transition-opacity hover:opacity-70"
-            style={{ borderColor: 'var(--sfm-border)', color: 'var(--sfm-muted)' }}
-          >
-            <Play size={11} />
-          </button>
-        ) : null}
       </div>
 
-      <p className="mb-3 font-mono text-micro" style={{ color: 'var(--sfm-muted)' }}>
+      <p className="mb-2 font-mono text-micro" style={{ color: 'var(--sfm-muted)' }}>
         {T.flow_signal_step} · {shownStep}/4
       </p>
 
       {/* ── แถบความคืบหน้า 4 ช่วง กว้างตามเวลาที่ใช้จริง ──────────────────── */}
-      <div className="mb-6 flex gap-1" style={{ height: 3 }} aria-hidden="true">
+      <div className="mb-4 flex gap-1" style={{ height: 3 }} aria-hidden="true">
         {NODE_IDS.map((id, i) => {
           const state = nodeStateAt(i, snap);
           const fill = segFill(i, snap, currentStep, progress);
@@ -393,8 +352,13 @@ export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
       </div>
 
       {/* ── โหนดกับเส้นเชื่อม ─────────────────────────────────────────────── */}
-      <div style={{ overflowX: 'auto', margin: '0 -4px' }} className="overscroll-x-contain pb-1">
-        <div className="flex items-start px-1" style={{ minWidth: 300 }}>
+      {/* flex-1 + จัดกึ่งกลาง: แผนภาพคือของชิ้นหลักของการ์ด จึงให้มันกินที่ว่างที่เหลือ
+          แล้วลอยอยู่กลางแทนที่จะเกาะขอบบนโดยมีที่ว่างค้างอยู่ใต้กล่องรายละเอียด */}
+      <div
+        style={{ overflowX: 'auto', margin: '0 -4px' }}
+        className="flex min-h-0 flex-1 items-center overscroll-x-contain pb-1"
+      >
+        <div className="flex w-full items-start px-1" style={{ minWidth: 300 }}>
           {NODE_IDS.map((id, i) => {
             const state = nodeStateAt(i, snap);
             const last = i === NODE_IDS.length - 1;
@@ -428,14 +392,7 @@ export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
       </div>
 
       {/* ── ท้ายการ์ด: ดัชนีโหนด + คำอธิบายสี ────────────────────────────── */}
-      <div className="mt-4 flex flex-col gap-2 pt-3" style={{ borderTop: '1px solid var(--sfm-hairline)' }}>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {NODE_IDS.map((id, i) => (
-            <span key={id} className="text-micro" style={{ color: 'var(--sfm-muted)' }}>
-              <span className="font-mono">{ORDINALS[i]}</span> {labels[id]}
-            </span>
-          ))}
-        </div>
+      <div className="mt-3 flex flex-col gap-2 pt-2.5" style={{ borderTop: '1px solid var(--sfm-hairline)' }}>
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {legend.map((l) => (
             <span key={l.label} className="flex items-center gap-1.5">
@@ -455,7 +412,7 @@ export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
           ขั้นอัปโหลดยังเป็นขั้นเดียวที่วัดความคืบหน้าได้ จึงต่อเปอร์เซ็นต์ท้ายข้อความ
           เฉพาะขั้นนั้น — ไม่งั้นคนดูจะนึกว่าค้างเพราะมันกินเวลาราว 40% ของทั้งสาย */}
       <p
-        className="mt-3 flex flex-wrap items-baseline gap-x-1.5 rounded-control px-3 py-1.5"
+        className="mt-2 flex flex-wrap items-baseline gap-x-1.5 rounded-control px-3 py-1.5"
         style={{ background: 'var(--sfm-surface-sunk)' }}
       >
         <span className="text-caption" style={{ color: 'var(--sfm-ink)' }}>
@@ -469,196 +426,7 @@ export function SignalFlowMonitor({ demo }: { demo?: FlowDemoState } = {}) {
           </span>
         ) : null}
       </p>
-
-      {/* !demo กันวนไม่รู้จบ — การ์ดในป๊อปอัพต้องไม่เปิดป๊อปอัพของตัวเองซ้อนเข้าไปอีก
-          (ปุ่มเปิดถูกซ่อนไว้แล้วก็จริง แต่ตรงนี้เป็นด่านที่ทำให้ผิดพลาดไม่ได้จริงๆ) */}
-      {testOpen && !demo ? <SignalFlowTestDialog onClose={() => setTestOpen(false)} /> : null}
     </article>
-  );
-}
-
-/* ── ป๊อปอัพดูตัวอย่างแอนิเมชัน ─────────────────────────────────────────────
- *
- * ทำไมต้องมี: การ์ดนี้ 99% ของเวลาอยู่ในสถานะ "ว่าง" อีก 8 สถานะที่เหลือจะโผล่
- * เฉพาะตอนมีสายจริงกำลังเดินอยู่ ซึ่งกินเวลารวมไม่ถึงนาทีต่อสาย และต้องบังเอิญ
- * เปิดหน้าค้างไว้พอดี — จะตรวจว่าสีถูก ตัวหนังสือถูก เส้นวิ่งถูกไหม แทบเป็นไปไม่ได้
- *
- * ป๊อปอัพนี้ป้อนค่าเข้า SignalFlowMonitor ตรงๆ ผ่าน prop demo ไม่ได้แตะ backend
- * ไม่ได้สร้างงานในคิว และไม่ได้โทรออก — เป็นภาพจำลองล้วน
- *
- * ใช้ createPortal ด้วยเหตุผลเดียวกับกล่องยืนยันในหน้าระบบ: AppShell ห่อทุกหน้าไว้ด้วย
- * div ที่มี transform (animate-fade-up) ซึ่งทำให้ position:fixed ข้างในไปอ้างอิงกับ
- * กล่องนั้นแทนขอบจอ กล่องเลยไม่อยู่กลางจอจริง
- */
-
-const nowIso = () => new Date().toISOString();
-
-function fakeJob(status: CallStatus, group: string): QueueStatusItem {
-  return { job_id: 9001, status, priority_group: group, retry_count: 0, created_at: nowIso() };
-}
-
-function fakeHistory(status: CallStatus, lastResult: string | null, group: string): HistoryItem {
-  return {
-    job_id: 9001,
-    event_type_code: 'demo',
-    event_type_display_name: null,
-    group_name: group,
-    source_device: null,
-    message: '',
-    status,
-    retry_count: 0,
-    contact_index: 0,
-    created_at: nowIso(),
-    // ต้องเป็นเวลาปัจจุบัน — snapshotFrom โชว์ผลลัพธ์เฉพาะช่วง RESULT_LINGER_MS หลังงานจบ
-    updated_at: nowIso(),
-    last_result: lastResult,
-    last_phone_masked: null,
-    last_detail: null,
-  };
-}
-
-function SignalFlowTestDialog({ onClose }: { onClose: () => void }) {
-  const { T } = useApp();
-  const [index, setIndex] = useState(0);
-  const [playing, setPlaying] = useState(true);
-
-  const base = { gsmConnected: true as boolean | null, apiFlash: false };
-  const group = T.flow_test_title;
-
-  const scenes: { label: string; state: FlowDemoState }[] = [
-    {
-      label: T.flow_state_idle,
-      state: { ...base, pending: [], latest: null, currentStep: null, progress: null },
-    },
-    {
-      label: T.flow_cap_received,
-      // apiFlash true = โหนด API กะพริบรับงาน ซึ่งของจริงเห็นแค่ 1.5 วิตอนงานเข้า
-      state: { ...base, apiFlash: true, pending: [fakeJob('queued', group)], latest: null, currentStep: null, progress: null },
-    },
-    {
-      label: T.flow_step_preparing,
-      state: { ...base, pending: [fakeJob('in_progress', group)], latest: null, currentStep: 'preparing_audio', progress: null },
-    },
-    {
-      label: `${T.flow_step_uploading} 30%`,
-      state: { ...base, pending: [fakeJob('in_progress', group)], latest: null, currentStep: 'uploading_audio', progress: 0.3 },
-    },
-    {
-      label: `${T.flow_step_uploading} 80%`,
-      state: { ...base, pending: [fakeJob('in_progress', group)], latest: null, currentStep: 'uploading_audio', progress: 0.8 },
-    },
-    {
-      label: T.flow_step_dialing,
-      state: { ...base, pending: [fakeJob('in_progress', group)], latest: null, currentStep: 'dialing', progress: null },
-    },
-    {
-      label: T.flow_step_playing,
-      state: { ...base, pending: [fakeJob('in_progress', group)], latest: null, currentStep: 'playing', progress: null },
-    },
-    {
-      label: T.flow_state_success,
-      state: { ...base, pending: [], latest: fakeHistory('connected', null, group), currentStep: null, progress: null },
-    },
-    {
-      label: T.flow_step_waiting_retry,
-      state: {
-        ...base,
-        pending: [fakeJob('retrying', group)],
-        latest: fakeHistory('retrying', 'no_answer', group),
-        currentStep: 'waiting_retry',
-        progress: null,
-      },
-    },
-    {
-      label: T.flow_state_failed,
-      state: { ...base, pending: [], latest: fakeHistory('failed', 'no_answer', group), currentStep: null, progress: null },
-    },
-    {
-      label: T.flow_gsm_offline,
-      state: { ...base, gsmConnected: false, pending: [], latest: null, currentStep: null, progress: null },
-    },
-  ];
-
-  // เดินหน้าเองทีละฉาก 1.8 วิ — พอให้ตาจับการเปลี่ยนสีและจุดที่วิ่งบนเส้นทัน
-  useEffect(() => {
-    if (!playing) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % scenes.length), 1800);
-    return () => clearInterval(id);
-  }, [playing, scenes.length]);
-
-  // ปิดด้วย Esc ตามที่คนคาดหวังจากกล่องแบบนี้
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const scene = scenes[index];
-
-  return createPortal(
-    <div
-      // ไม่ใส่ backdrop-blur ที่ฉากหลังเต็มจอ — dashboard นี้เปิดบน Raspberry Pi ด้วย
-      // ซึ่งเบลอทั้งจอแบบ software rendering แล้วหนืดจนกล่องเปิดช้าเห็นได้ชัด
-      className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-black/60 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={T.flow_test_title}
-      onClick={onClose}
-    >
-      <div
-        className="flex w-full max-w-[760px] flex-col gap-3 rounded-card border border-line bg-surface p-4 shadow-card"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lead font-bold">{T.flow_test_title}</h2>
-          <button
-            type="button"
-            onClick={() => setPlaying((v) => !v)}
-            className="ms-auto flex items-center gap-1.5 rounded-control border border-line bg-surface-2 px-2.5 py-1.5 text-micro font-medium transition-colors hover:border-brand-strong"
-          >
-            {playing ? <Pause size={12} /> : <Play size={12} />}
-            {playing ? T.flow_test_pause : T.flow_test_play}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={T.flow_test_close}
-            className="grid size-[30px] place-items-center rounded-control border border-line bg-surface-2 transition-colors hover:border-brand-strong"
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        {/* เลือกฉากเองได้ทีละอัน — กดแล้วหยุดเล่นอัตโนมัติ ไม่งั้นตัวจับเวลาจะแย่งเปลี่ยนฉากทิ้ง */}
-        <div className="flex flex-wrap gap-1.5">
-          {scenes.map((sc, i) => (
-            <button
-              key={sc.label}
-              type="button"
-              onClick={() => {
-                setPlaying(false);
-                setIndex(i);
-              }}
-              className={cn(
-                'rounded-full border px-2.5 py-1 text-micro whitespace-nowrap transition-colors',
-                i === index
-                  ? 'border-brand bg-brand font-semibold text-brand-ink'
-                  : 'border-line bg-surface text-ink-2 hover:border-brand-strong hover:text-ink',
-              )}
-            >
-              {sc.label}
-            </button>
-          ))}
-        </div>
-
-        <SignalFlowMonitor demo={scene.state} />
-
-        <p className="text-micro leading-[1.7] text-ink-2">{T.flow_test_hint}</p>
-      </div>
-    </div>,
-    document.body,
   );
 }
 

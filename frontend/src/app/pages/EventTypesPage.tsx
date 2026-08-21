@@ -27,6 +27,7 @@ import { listApiKeys } from "../api/apiKeys";
 import { listEventTypes, createEventType, updateEventType, deleteEventType } from "../api/eventTypes";
 import { ApiError } from "../api/client";
 import { Btn, PageHeader, inputCls } from "../components/primitives";
+import { SNAP, readSnapshot, writeSnapshot } from "../lib/snapshot";
 import type { EventType } from "../types";
 
 interface FormState {
@@ -40,13 +41,18 @@ interface FormState {
 const EMPTY_FORM: FormState = { code: "", display_name: "", message_template: "", is_active: true };
 
 /** embedded = ถูกฝังอยู่ในหน้า SetupPage ที่มีหัวข้อของตัวเองแล้ว จึงไม่ต้องขึ้นหัวข้อซ้ำ */
+/** ข้อมูลที่ฝากไว้ให้รอบหน้าหยิบไปวาดทันที (ดู lib/snapshot.ts) */
+type EventSnap = { eventTypes: EventType[]; usage: Record<number, number> };
+
 export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { T } = useApp();
-  const [eventTypes, setEventTypes] = useState<EventType[]>([]);
+  const cached = readSnapshot<EventSnap>(SNAP.eventTypes);
+  const [eventTypes, setEventTypes] = useState<EventType[]>(cached?.eventTypes ?? []);
   // นับว่าเหตุการณ์แต่ละอันถูกอุปกรณ์กี่ตัวหยิบไปใช้ — แทนคอลัมน์ "กลุ่ม" ที่ตัดทิ้งไป
   // ตอบคำถามที่มีประโยชน์กว่าตอนจะลบ: ลบอันนี้แล้วจะกระทบอุปกรณ์ไหนบ้าง
-  const [usage, setUsage] = useState<Record<number, number>>({});
-  const [loading, setLoading] = useState(true);
+  const [usage, setUsage] = useState<Record<number, number>>(cached?.usage ?? {});
+  // มีของเก่าอยู่แล้ว = ไม่ต้องขึ้น "กำลังโหลด" ให้วาดของเก่าไปก่อนแล้วโหลดทับเงียบๆ
+  const [loading, setLoading] = useState(!cached);
   const [saving, setSaving] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -66,6 +72,12 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
     });
 
   useEffect(() => { void load().finally(() => setLoading(false)); }, []);
+
+  // ฝากของชุดล่าสุดไว้ทุกครั้งที่มันเปลี่ยน ไม่ใช่แค่ตอนโหลดเสร็จ — การเพิ่ม/แก้/ลบ
+  // อัปเดต state ตรงๆ โดยไม่โหลดใหม่ ถ้าเขียนแคชแค่ใน load() รอบหน้าจะได้ของก่อนแก้
+  useEffect(() => {
+    if (!loading) writeSnapshot<EventSnap>(SNAP.eventTypes, { eventTypes, usage });
+  }, [loading, eventTypes, usage]);
 
   const openCreate = () => { setForm(EMPTY_FORM); setFormErr(""); setFormOpen(true); };
   const openEdit = (et: EventType) => {
@@ -179,7 +191,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
           <div className="overflow-x-auto overscroll-x-contain">
             {/* min-w เท่ากับตารางหน้าอื่น (คิว/ประวัติ) — เดิมมีแค่ w-full ตารางเลยถูกบีบ
                 จน 5 คอลัมน์เบียดกันอ่านไม่ออกบนมือถือ แทนที่จะเลื่อนดูแนวนอนได้ */}
-            <table className="w-full min-w-[560px]">
+            <table className="w-full min-w-[35rem]">
               <thead>
                 <tr className="border-b border-line bg-surface-2">
                   {[T.col_code, T.col_name, T.et_used_by, T.col_active, T.col_actions].map((h) => (
@@ -197,14 +209,16 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
                     </td>
                     <td className="px-4 py-3"><Toggle on={et.is_active} onChange={() => toggleActive(et)} /></td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
+                      {/* ขนาดปุ่มและระยะห่างชุดเดียวกับแท็บกลุ่มผู้รับ — 32px และเว้นช่อง
+                          ก่อนปุ่มลบ สามแท็บนี้อยู่หน้าเดียวกัน ปุ่มแก้/ลบต้องกดเหมือนกันหมด */}
+                      <div className="flex items-center">
                         <button onClick={() => openEdit(et)} title={T.edit}
-                          className="p-1.5 rounded-control hover:bg-surface-2 text-ink-2 hover:text-ink transition-colors">
-                          <Pencil size={14} />
+                          className="grid size-8 place-items-center rounded-control hover:bg-surface-2 text-ink-2 hover:text-ink transition-colors">
+                          <Pencil size={15} />
                         </button>
                         <button onClick={() => setDeleteTarget(et)} title={T.delete}
-                          className="p-1.5 rounded-control hover:bg-bad-soft text-ink-2 hover:text-bad-strong transition-colors">
-                          <Trash2 size={14} />
+                          className="ms-1 grid size-8 place-items-center rounded-control hover:bg-bad-soft text-ink-2 hover:text-bad-strong transition-colors">
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>

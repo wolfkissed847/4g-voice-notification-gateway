@@ -206,7 +206,7 @@ export function ApiGuidePage({ embedded = false }: { embedded?: boolean } = {}) 
                   <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand font-mono text-micro font-bold text-brand-ink">
                     {s.n}
                   </span>
-                  <span className="min-w-0 flex-1 basis-[180px] text-caption leading-[1.8]">{s.text}</span>
+                  <span className="min-w-0 flex-1 basis-[11.25rem] text-caption leading-[1.8]">{s.text}</span>
                   {s.to ? (
                     <Link to={s.to} className="text-caption font-medium whitespace-nowrap text-brand-strong">
                       {T.dash_view_all} ›
@@ -233,7 +233,7 @@ export function ApiGuidePage({ embedded = false }: { embedded?: boolean } = {}) 
             {statusRows.map((r) => (
               <div key={r.code} className="flex flex-wrap items-start gap-2.5 rounded-card border border-line bg-surface px-3.5 py-3">
                 <Pill tone={r.tone}>{r.code}</Pill>
-                <span className="flex min-w-0 flex-1 basis-[200px] flex-col gap-0.5">
+                <span className="flex min-w-0 flex-1 basis-[12.5rem] flex-col gap-0.5">
                   <span className="text-caption font-bold">{r.name}</span>
                   <span className="text-caption leading-[1.8] text-ink-2">{r.desc}</span>
                 </span>

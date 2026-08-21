@@ -29,6 +29,7 @@ import {
 } from '../api/groups';
 import { Btn, Card, PageHeader, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
+import { SNAP, readSnapshot, writeSnapshot } from '../lib/snapshot';
 import type { Contact, Group } from '../types';
 
 /** ค่าที่กำลังพิมพ์อยู่ในแถวเพิ่มเบอร์ของแต่ละกลุ่ม */
@@ -39,17 +40,33 @@ interface DraftContact {
 
 const EMPTY_DRAFT: DraftContact = { phone: '', name: '' };
 
+/** ชื่อ 3 คนแรกของกลุ่มไว้โชว์ในแถว — คนที่ไม่ได้ตั้งชื่อใช้เบอร์แทน
+ *  เกินนั้นสรุปเป็น "+N" เพราะแถวมีที่จำกัดและรายชื่อเต็มอยู่ในส่วนที่กางออกมาแล้ว */
+const PREVIEW_NAMES = 3;
+
+function memberPreview(contacts: Contact[] | undefined): string {
+  if (!contacts || contacts.length === 0) return '';
+  const shown = contacts.slice(0, PREVIEW_NAMES).map((c) => c.name?.trim() || c.phone_number);
+  const rest = contacts.length - shown.length;
+  return rest > 0 ? `${shown.join(', ')} +${rest}` : shown.join(', ');
+}
+
+/** ข้อมูลที่ฝากไว้ให้รอบหน้าหยิบไปวาดทันที (ดู lib/snapshot.ts) */
+type ContactsSnap = { groups: Group[]; contactsByGroup: Record<number, Contact[]> };
+
 /** embedded = ถูกฝังอยู่ในหน้า SetupPage ที่มีหัวข้อของตัวเองแล้ว จึงไม่ต้องขึ้นหัวข้อซ้ำ */
 export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { T } = useApp();
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [contactsByGroup, setContactsByGroup] = useState<Record<number, Contact[]>>({});
+  const cached = readSnapshot<ContactsSnap>(SNAP.contacts);
+  const [groups, setGroups] = useState<Group[]>(cached?.groups ?? []);
+  const [contactsByGroup, setContactsByGroup] = useState<Record<number, Contact[]>>(cached?.contactsByGroup ?? {});
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [adding, setAdding] = useState<Record<number, DraftContact>>({});
   const [newName, setNewName] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  // มีของเก่าอยู่แล้ว = ไม่ต้องขึ้น "กำลังโหลด" ให้วาดของเก่าไปก่อนแล้วโหลดทับเงียบๆ
+  const [loading, setLoading] = useState(!cached);
 
   // แก้ไขทีละรายการ เก็บ id ที่กำลังแก้ + ค่าที่พิมพ์ค้างไว้
   const [editingContact, setEditingContact] = useState<number | null>(null);
@@ -60,8 +77,32 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
   const loadGroups = () => listGroups().then(setGroups);
 
   useEffect(() => {
-    void loadGroups().finally(() => setLoading(false));
+    /* ดึงเบอร์ของทุกกลุ่มมาตั้งแต่แรก ไม่ใช่รอตอนกางกลุ่ม
+       เดิมโหลดตอนกางเท่านั้น ซึ่งประหยัดคำขอจริง แต่แลกมาด้วยการที่หน้านี้ตอบคำถาม
+       ที่คนเปิดมาถามบ่อยที่สุดไม่ได้เลย — "ช่างต้นอยู่กลุ่มไหน" ต้องกางทีละกลุ่มจนครบ 6 ครั้ง
+       ตอนนี้เอาชื่อ 3 คนแรกมาโชว์ในแถวเลย ตอบได้ด้วยการกวาดตารอบเดียว
+       (กลุ่มมีไม่กี่กลุ่มและแต่ละคำขอเล็กมาก ต่างกับหน้าประวัติที่ข้อมูลโตไม่จำกัด) */
+    void listGroups()
+      .then((gs) => {
+        setGroups(gs);
+        return Promise.all(
+          gs.map((g) =>
+            listContacts(g.id)
+              .then((cs) => [g.id, cs] as const)
+              .catch(() => [g.id, [] as Contact[]] as const),
+          ),
+        );
+      })
+      .then((pairs) => setContactsByGroup(Object.fromEntries(pairs)))
+      .catch(() => toast.error(T.error_generic))
+      .finally(() => setLoading(false));
   }, []);
+
+  // ฝากของชุดล่าสุดไว้ทุกครั้งที่มันเปลี่ยน ไม่ใช่แค่ตอนโหลดเสร็จ — การเพิ่ม/แก้/ลบ/สลับลำดับ
+  // อัปเดต state ตรงๆ โดยไม่โหลดใหม่ ถ้าเขียนแคชแค่ตอนโหลด รอบหน้าจะได้ของก่อนแก้
+  useEffect(() => {
+    if (!loading) writeSnapshot<ContactsSnap>(SNAP.contacts, { groups, contactsByGroup });
+  }, [loading, groups, contactsByGroup]);
 
   const loadContacts = (groupId: number) => {
     listContacts(groupId)
@@ -211,7 +252,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           <p className="text-caption font-semibold">{T.new_group}</p>
           <div className="flex flex-wrap gap-2">
             <input
-              className={cn(inputCls, 'min-w-0 flex-1 basis-[180px]')}
+              className={cn(inputCls, 'min-w-0 flex-1 basis-[11.25rem]')}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addGroup()}
@@ -239,17 +280,42 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
         </div>
       ) : null}
 
-      {/* การ์ดกลุ่มเรียงลงมาทีละใบเต็มความกว้าง ตามดีไซน์ — เดิมเป็น grid auto-fill 320px
-          ซึ่งบนจอกว้างจะได้การ์ดผอม ~350px ลอยชิดซ้ายโดยมีที่ว่างครึ่งจอ และฟอร์ม
-          "เพิ่มเบอร์" ข้างในที่มีช่องกรอกสองช่องเรียงกันก็แคบจนพิมพ์ชื่อไม่เห็น */}
-      <div className="flex flex-col gap-3">
+      {/* กลุ่มทั้งหมดอยู่ใน "กล่องเดียว" คั่นแต่ละกลุ่มด้วยเส้น ไม่ใช่การ์ดลอยใบละกลุ่ม
+          เป็นรูปแบบเดียวกับตารางคิว ตารางประวัติ และรายการอุปกรณ์บนหน้าภาพรวม
+          หน้านี้เคยเป็นหน้าเดียวในเว็บที่เนื้อหาลอยอยู่บนพื้นหลังโดยไม่มีกรอบ
+          จึงดูเหมือนคนละเว็บกับหน้าอื่นทั้งที่ใช้สีชุดเดียวกัน */}
+      <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
         {groups.map((g) => {
           const phones = contactsByGroup[g.id] || [];
           const pending = pendingDelete === g.id;
           const renaming = editingGroup === g.id;
           return (
-            <Card key={g.id} className="min-w-0 overflow-hidden">
-              <div className="flex w-full items-center gap-2.5 px-4 py-3.5">
+            <div key={g.id} className="min-w-0 border-b border-line-2 last:border-b-0">
+              {/* ทั้งแถวกดกางได้ ไม่ใช่เฉพาะช่วงชื่อกับลูกศร (ตามไฟล์ดีไซน์)
+                  ของเดิมพื้นที่ว่างกลางแถวกดไม่ติด ทั้งที่ตาเห็นเป็นแถบเดียวกันหมด
+                  กดแล้วไม่มีอะไรเกิดขึ้นอ่านได้ว่าเว็บค้าง มากกว่าจะเดาว่ากดผิดที่
+
+                  ปุ่มข้างในต้อง stopPropagation ไม่งั้นกดแก้ชื่อแล้วแถวกางออกมาด้วย */
+              }
+              <div
+                role={renaming ? undefined : 'button'}
+                tabIndex={renaming ? undefined : 0}
+                onClick={renaming ? undefined : () => toggleExpand(g.id)}
+                onKeyDown={
+                  renaming
+                    ? undefined
+                    : (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleExpand(g.id);
+                        }
+                      }
+                }
+                className={cn(
+                  'flex w-full items-center gap-2.5 px-4 py-3.5',
+                  !renaming && 'cursor-pointer transition-colors hover:bg-surface-2',
+                )}
+              >
                 {renaming ? (
                   <>
                     <input
@@ -282,44 +348,55 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                   </>
                 ) : (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => toggleExpand(g.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
-                    >
+                    <span className="flex min-w-0 flex-1 items-center gap-2.5 text-start">
                       <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft">
                         <Users size={15} className="text-brand-strong" strokeWidth={1.8} />
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-caption font-semibold">{g.name}</span>
-                        <span className="block font-mono text-micro text-ink-2">{T.phones_count(g.contact_count)}</span>
+                        <span className="block truncate text-micro text-ink-2">
+                          <span className="font-mono">{T.phones_count(g.contact_count)}</span>
+                          {memberPreview(contactsByGroup[g.id]) ? ` · ${memberPreview(contactsByGroup[g.id])}` : ''}
+                        </span>
                       </span>
-                    </button>
+                    </span>
 
+                    {/* ปุ่มไอคอนขนาด 32px ไม่ใช่ ~24px แบบเดิม และเว้นช่องก่อนปุ่มลบ
+                        ของเดิมดินสอกับถังขยะติดกันเกือบชิด ทั้งคู่เล็กและไม่มีข้อความกำกับ
+                        พลาดไปหนึ่งช่องคือลบทั้งกลุ่ม (มียืนยันสองจังหวะก็จริง แต่การกดพลาด
+                        ไม่ควรเริ่มต้นที่ปุ่มทำลายตั้งแต่แรก) */}
                     <button
                       type="button"
-                      onClick={() => { setEditingGroup(g.id); setGroupDraft(g.name); }}
-                      className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-ink"
+                      onClick={(e) => { e.stopPropagation(); setEditingGroup(g.id); setGroupDraft(g.name); }}
+                      className="grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
                       aria-label={T.edit_group_name}
                       title={T.edit_group_name}
                     >
-                      <Pencil size={14} />
+                      <Pencil size={15} />
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => (pending ? removeGroup(g.id) : setPendingDelete(g.id))}
+                      onClick={(e) => { e.stopPropagation(); pending ? removeGroup(g.id) : setPendingDelete(g.id); }}
+                      title={T.device_remove}
                       className={cn(
-                        'shrink-0 rounded-control px-2 py-1.5 text-micro transition-colors',
-                        pending ? 'bg-bad-strong text-status-ink' : 'text-ink-2 hover:text-bad-strong',
+                        'ms-1 shrink-0 rounded-control text-micro transition-colors',
+                        pending
+                          ? 'bg-bad-strong px-2.5 py-1.5 text-status-ink'
+                          : 'grid size-8 place-items-center text-ink-2 hover:bg-bad-soft hover:text-bad-strong',
                       )}
                     >
-                      {pending ? T.device_remove_confirm : <Trash2 size={14} />}
+                      {pending ? T.device_remove_confirm : <Trash2 size={15} />}
                     </button>
 
-                    <button type="button" onClick={() => toggleExpand(g.id)} className="shrink-0 text-ink-2">
+                    {/* ลูกศรเป็นแค่สัญลักษณ์บอกว่ากางได้ — ทั้งแถวรับคลิกอยู่แล้ว
+                        จึงไม่ต้องเป็นปุ่มซ้อนปุ่ม (และไม่ต้องมี tab stop ของตัวเอง) */}
+                    <span
+                      aria-hidden="true"
+                      className="grid size-8 shrink-0 place-items-center text-ink-2"
+                    >
                       {expanded[g.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
+                    </span>
                   </>
                 )}
               </div>
@@ -343,7 +420,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                           </span>
                           <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
                             <input
-                              className={cn(inputCls, 'min-w-0 flex-1 basis-[130px] py-1.5 font-mono text-caption')}
+                              className={cn(inputCls, 'min-w-0 flex-1 basis-[8.125rem] py-1.5 font-mono text-caption')}
                               value={contactDraft.phone}
                               onChange={(e) => setContactDraft((d) => ({ ...d, phone: e.target.value }))}
                               onKeyDown={(e) => {
@@ -354,7 +431,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                               autoFocus
                             />
                             <input
-                              className={cn(inputCls, 'min-w-0 flex-1 basis-[100px] py-1.5 text-caption')}
+                              className={cn(inputCls, 'min-w-0 flex-1 basis-[6.25rem] py-1.5 text-caption')}
                               value={contactDraft.name}
                               onChange={(e) => setContactDraft((d) => ({ ...d, name: e.target.value }))}
                               onKeyDown={(e) => {
@@ -441,7 +518,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
                   <div className="flex flex-wrap gap-2 bg-surface-2 px-4 py-3">
                     <input
-                      className={cn(inputCls, 'min-w-0 flex-1 basis-[130px] bg-surface font-mono')}
+                      className={cn(inputCls, 'min-w-0 flex-1 basis-[8.125rem] bg-surface font-mono')}
                       value={adding[g.id]?.phone ?? ''}
                       onChange={(e) =>
                         setAdding((a) => ({ ...a, [g.id]: { ...(a[g.id] ?? EMPTY_DRAFT), phone: e.target.value } }))
@@ -450,7 +527,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                       placeholder={T.phone_ph}
                     />
                     <input
-                      className={cn(inputCls, 'min-w-0 flex-1 basis-[100px] bg-surface')}
+                      className={cn(inputCls, 'min-w-0 flex-1 basis-[6.25rem] bg-surface')}
                       value={adding[g.id]?.name ?? ''}
                       onChange={(e) =>
                         setAdding((a) => ({ ...a, [g.id]: { ...(a[g.id] ?? EMPTY_DRAFT), name: e.target.value } }))
@@ -464,7 +541,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                   </div>
                 </div>
               ) : null}
-            </Card>
+            </div>
           );
         })}
       </div>

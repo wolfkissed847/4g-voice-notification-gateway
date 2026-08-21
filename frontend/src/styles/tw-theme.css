@@ -56,6 +56,15 @@
 }
 @keyframes spinSweep { to { transform: rotate(360deg); } }
 
+/* วงแสงรอบแผ่นไอคอนอุปกรณ์ — ขยายออกแล้วจางหาย เหมือนคลื่นที่แผ่ออกจากตัวเครื่อง
+   ค้างที่ opacity 0 ยาวๆ ท้ายคาบโดยตั้งใจ ให้เป็นจังหวะ "เต้นทีนึงแล้วพัก"
+   ไม่ใช่ขยายไม่หยุด — การ์ดหลายใบเรียงกันเป็นกริด ถ้าทุกใบกระเพื่อมตลอดเวลาจะรบกวนสายตา */
+@keyframes deviceHalo {
+  0%   { transform: scale(1);    opacity: 0.5; }
+  60%  { transform: scale(1.35); opacity: 0; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
 /* ทั่วไป */
 @keyframes softPulse {
   0%, 100% { opacity: 1;    transform: scale(1); }
@@ -98,7 +107,12 @@
   --text-h2: 1.188rem;
   --text-h2--line-height: 1.5;
   --text-page: clamp(1.5rem, 3.6vw, 2rem);
-  --text-page--line-height: 1.45;
+  /* 1.6 ไม่ใช่ 1.45 — หัวข้อหน้าเป็นภาษาไทยที่มีวรรณยุกต์ซ้อนได้สองชั้น
+     ("ตั้งค่าการแจ้งเตือน" มีทั้งไม้หันอากาศและไม้โท ซ้อนกันบนตัว ต)
+     ซึ่งพุ่งสูงเกินความสูงตัวอักษรที่ line-height คำนวณไว้ หมึกเลยไปชิดขอบบนของกล่อง
+     ดูแล้วเหมือนหัวข้อหน้านั้นวางสูงกว่าหน้าอื่น ทั้งที่โครงเหมือนกันทุกอย่าง
+     เผื่อความสูงให้วรรณยุกต์แล้วทุกหน้ากลับมาอยู่ระดับเดียวกัน */
+  --text-page--line-height: 1.6;
 
   /* ── สี semantic ของดีไซน์ ──
    * ค่าใน theme.css เป็น rgb triplet ต้องห่อ rgb() ตรงนี้
@@ -190,6 +204,7 @@
   --animate-offset-move: offsetMove 1.25s linear infinite, fadeTrip 1.25s linear infinite;
   --animate-sweep: spinSweep 3.2s linear infinite;
   --animate-soft-pulse: softPulse 2s ease-in-out infinite;
+  --animate-device-halo: deviceHalo 3s ease-out infinite;
   --animate-pop: pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both;
   --animate-fade-up: fadeUp 0.25s ease both;
   --animate-slide-in: slideIn 0.4s ease both;

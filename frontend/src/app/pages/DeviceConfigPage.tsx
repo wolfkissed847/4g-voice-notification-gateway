@@ -31,6 +31,10 @@ import { Btn, Card, Field, inputCls } from '../components/primitives';
 import { useApp } from '../context/AppContext';
 import type { ApiKey, AppConfig, Contact, EventType, Group } from '../types';
 
+/** ต่ำกว่านี้ช่องค้นหาเป็นแค่ของรก — กวาดตาหาเองเร็วกว่าพิมพ์
+ *  (ใช้เกณฑ์เดียวกับช่องค้นหาอุปกรณ์ในหน้ารายการ) */
+const EVENT_FILTER_THRESHOLD = 6;
+
 /**
  * ผู้รับของคู่ (อุปกรณ์ + เหตุการณ์) — เป็น union ไม่ใช่สองฟิลด์ที่อยู่ด้วยกันได้
  * ตั้งใจให้ "มีสองค่าพร้อมกัน" เป็นสถานะที่เขียนออกมาไม่ได้ตั้งแต่ระดับ type
@@ -53,6 +57,8 @@ export function DeviceConfigPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   const [name, setName] = useState('');
+  /** คำค้นของรายการเหตุการณ์ — ดูเหตุผลที่กล่องรายการข้างล่าง */
+  const [eventQuery, setEventQuery] = useState('');
   const [links, setLinks] = useState<Record<number, LinkTarget>>({});
   const [fullKey, setFullKey] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState(false);
@@ -179,6 +185,17 @@ export function DeviceConfigPage() {
 
   const pickedTypes = eventTypes.filter((e) => picked.includes(e.id));
 
+  /* ค้นจากทั้งชื่อที่แสดงและรหัส — คนตั้งค่ามาจากสองทาง: เปิดจากหน้าเว็บก็จำชื่อไทย
+     ส่วนคนที่มาจากฝั่งอุปกรณ์มีแต่รหัสในโค้ดของบอร์ด
+     แถวที่ติ๊กไว้แล้วไม่ถูกกรองออกไม่ว่าค้นด้วยคำอะไร — ไม่งั้นพิมพ์ค้นหาแล้วของที่
+     เลือกไว้หายจากจอ ดูเหมือนโดนยกเลิกไปแล้ว ทั้งที่ยังติ๊กอยู่ */
+  const shownEvents = eventTypes.filter((e) => {
+    if (picked.includes(e.id)) return true;
+    const q = eventQuery.trim().toLowerCase();
+    if (!q) return true;
+    return e.display_name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q);
+  });
+
   /** เบอร์ที่จะถูกโทรจริงของเหตุการณ์นี้ ตามลำดับ — ใช้ทั้งกล่องสรุปและการเตือนว่าตั้งค่าไม่ครบ */
   const resolveRecipients = (etId: number): { label: string; rows: Contact[] } => {
     const t = links[etId];
@@ -263,26 +280,61 @@ export function DeviceConfigPage() {
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-lead font-bold">{T.allowed_events_pick}</h2>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 className="text-lead font-bold">{T.allowed_events_pick}</h2>
+              <span className="ms-auto font-mono text-micro text-ink-2">
+                {T.event_picked_count(picked.length, eventTypes.length)}
+              </span>
+            </div>
+
             {eventTypes.length === 0 ? (
               <p className="text-caption leading-[1.8] text-warn-strong">{T.allowed_events_empty_hint}</p>
             ) : (
-              <div className="flex flex-col gap-2">
-                {eventTypes.map((e) => (
-                  <EventTargetRow
-                    key={e.id}
-                    eventType={e}
-                    target={links[e.id]}
-                    groups={groups}
-                    contactsByGroup={contactsByGroup}
-                    onToggleEvent={() => toggleEvent(e.id)}
-                    onSetTarget={(t) => setTarget(e.id, t)}
-                    onToggleContact={(cid) => toggleContact(e.id, cid)}
-                    onMoveContact={(index, delta) => moveContact(e.id, index, delta)}
-                    contactById={contactById}
+              <>
+                {/* ช่องค้นหา + กล่องเลื่อน แทนการกางทุกเหตุการณ์ต่อกันลงไปเรื่อยๆ
+                    ตอนนี้มี 9 ประเภทก็ยาวเกินหนึ่งจอแล้ว และจำนวนนี้โตได้ไม่จำกัด
+                    (เพิ่มประเภทใหม่ได้จากแท็บประเภทเหตุการณ์) — ยิ่งแถวที่ติ๊กแล้วกาง
+                    ส่วนเลือกผู้รับออกมาด้วย ยิ่งหาแถวที่กำลังจะติ๊กไม่เจอ
+
+                    โผล่เฉพาะตอนมีหลายรายการ ต่ำกว่านั้นกวาดตาหาเองเร็วกว่าพิมพ์ */}
+                {eventTypes.length > EVENT_FILTER_THRESHOLD ? (
+                  <input
+                    type="search"
+                    value={eventQuery}
+                    onChange={(e) => setEventQuery(e.target.value)}
+                    placeholder={T.event_filter}
+                    aria-label={T.event_filter}
+                    className={inputCls}
                   />
-                ))}
-              </div>
+                ) : null}
+
+                {/* -me-4 คู่กับ pe-2 = แถวข้างในกว้างเท่ากับช่องชื่ออุปกรณ์ ช่องค้นหา
+                    และกล่องหมายเหตุข้างล่างพอดี ไม่สั้นกว่าเพื่อนเป็นขั้นบันไดที่ขอบขวา
+
+                    ทำไมต้อง 16px ทั้งที่แถบเลื่อนกว้าง 8px: แถบเลื่อนแบบปกติ (ไม่ใช่ overlay)
+                    กินที่จาก "กล่องเนื้อหา" ไม่ใช่ทับบนเนื้อหา ขอบขวาของเนื้อหาจึงถอยเข้ามา
+                    ทั้งความกว้างแถบเลื่อน (8) และ padding ที่เว้นกันแถบเลื่อนชนแถว (8)
+                    ต้องดันกล่องออกไปเท่ากับผลรวม การ์ดมี p-4 (16px) พอดีสำหรับยืม */}
+                <div className="-me-4 flex max-h-[21.25rem] flex-col gap-2 overflow-y-auto overscroll-contain pe-2">
+                  {shownEvents.map((e) => (
+                    <EventTargetRow
+                      key={e.id}
+                      eventType={e}
+                      target={links[e.id]}
+                      groups={groups}
+                      contactsByGroup={contactsByGroup}
+                      onToggleEvent={() => toggleEvent(e.id)}
+                      onSetTarget={(t) => setTarget(e.id, t)}
+                      onToggleContact={(cid) => toggleContact(e.id, cid)}
+                      onMoveContact={(index, delta) => moveContact(e.id, index, delta)}
+                      contactById={contactById}
+                    />
+                  ))}
+                  {shownEvents.length === 0 ? (
+                    <p className="px-1 py-3 text-caption text-ink-2">{T.event_filter_none}</p>
+                  ) : null}
+                </div>
+              </>
             )}
             {picked.length === 0 ? (
               <p className="text-caption leading-[1.8] text-warn-strong">{T.allowed_events_none}</p>
@@ -380,9 +432,13 @@ export function DeviceConfigPage() {
               <p className="text-caption leading-[1.8] text-warn-strong">{T.dev_api_no_event}</p>
             ) : null}
 
+            {/* เหลือคำสั่งเดียวที่ต้องก๊อปไปใช้จริง
+                เดิมมีสามกล่องโค้ด (คำสั่งยิง + ตัวอย่างคำตอบตอนสำเร็จ + ตอนพลาด) ต่อด้วย
+                รหัสสถานะห้าบรรทัด รวมแล้วยาวกว่าฝั่งซ้ายที่เป็นของที่ต้องตั้งค่าจริงๆ
+                ทั้งที่สองกล่องหลังเป็นของที่ "อ่านผ่านตาแล้วก็จบ" ไม่ได้เอาไปทำอะไรต่อ
+                — ย้ายไปหน้าคู่มือ API ซึ่งมีครบกว่าและมีลิงก์ไปให้แล้ว
+                เหลือไว้แค่รหัสที่บอร์ดยิงแล้วเจอบ่อยจริงๆ สามตัว */}
             <CodeBlock label={T.payload_title} code={curlCode} onCopy={copy} copied={copiedKey === 'curl'} ck="curl" />
-            <CodeBlock label={T.dev_api_ok} code={OK_RESPONSE} onCopy={copy} copied={copiedKey === 'ok'} ck="ok" />
-            <CodeBlock label={T.dev_api_err} code={ERR_RESPONSE} onCopy={copy} copied={copiedKey === 'err'} ck="err" />
 
             <p className="text-micro leading-[1.7] text-warn-strong">{T.dev_api_key_note}</p>
 
@@ -392,14 +448,15 @@ export function DeviceConfigPage() {
                 ['400', T.dev_api_status_400],
                 ['401', T.dev_api_status_401],
                 ['403', T.dev_api_status_403],
-                ['404', T.dev_api_status_404],
-                ['422', T.dev_api_status_422],
               ].map(([code, desc]) => (
                 <p key={code} className="flex gap-2 text-micro leading-[1.7]">
                   <b className="shrink-0 font-mono text-bad-strong">{code}</b>
                   <span className="text-ink-2">{desc}</span>
                 </p>
               ))}
+              <Link to="/api-guide" className="mt-1 text-micro font-medium text-brand-strong">
+                {T.dev_api_more} →
+              </Link>
             </div>
           </Card>
         </div>
@@ -491,7 +548,7 @@ function EventTargetRow({
               onChange={(ev) => onSetTarget({ mode: 'group', groupId: ev.target.value ? Number(ev.target.value) : null })}
               className={cn(
                 inputCls,
-                'w-auto min-w-[180px] py-1.5 text-caption [color-scheme:light] dark:[color-scheme:dark]',
+                'w-auto min-w-[11.25rem] py-1.5 text-caption [color-scheme:light] dark:[color-scheme:dark]',
                 groupId == null && 'border-warn',
               )}
             >
@@ -508,7 +565,7 @@ function EventTargetRow({
               {totalContacts === 0 ? (
                 <p className="text-caption leading-[1.8] text-warn-strong">{T.dev_no_contacts_at_all}</p>
               ) : (
-                <div className="flex max-h-[260px] flex-col gap-2 overflow-y-auto rounded-control border border-line bg-surface p-2.5">
+                <div className="flex max-h-[16.25rem] flex-col gap-2 overflow-y-auto rounded-control border border-line bg-surface p-2.5">
                   {groups.map((g) => {
                     const rows = contactsByGroup[g.id] ?? [];
                     if (rows.length === 0) return null;
@@ -598,15 +655,6 @@ function EventTargetRow({
   );
 }
 
-const OK_RESPONSE = `{
-  "job_id": 42,
-  "status": "queued",
-  "message": "เข้าคิวเรียบร้อยแล้ว"
-}`;
-
-const ERR_RESPONSE = `{
-  "detail": "อุปกรณ์ 'ปั๊มน้ำอาคาร A' ไม่ได้รับอนุญาตให้ยิง event type 'pump_fail'"
-}`;
 
 /** โค้ดบล็อกพร้อมปุ่มคัดลอก — ปุ่มลอยมุมขวาบนเพื่อไม่กินความกว้างของโค้ด */
 function CodeBlock({

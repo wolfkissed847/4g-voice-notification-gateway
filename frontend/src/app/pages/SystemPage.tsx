@@ -401,8 +401,21 @@ export function SystemPage() {
                   พื้นที่ที่เหลือเอาไปอธิบายว่าค่านั้นทำอะไร ซึ่งมีค่ากับคนใช้มากกว่าช่องกรอกยาวๆ */}
               {/* สามค่านี้เรียงเป็นคอลัมน์ ไม่ใช่แถวซ้อนกันแบบเดิม — แบบแถวกินความสูงเกิน 500px
                   ทำให้หน้านี้ต้องเลื่อนทั้งที่มีของอยู่แค่ 4 กล่อง และทั้งสามค่าคูณกันเป็นเวลารวม
-                  ต่อเบอร์อยู่แล้ว วางเรียงข้างกันจึงเทียบกันได้ในสายตาเดียว */}
-              <div className="grid gap-x-6 gap-y-4 md:grid-cols-3 md:divide-x md:divide-line-2 md:[&>*:not(:first-child)]:ps-6">
+                  ต่อเบอร์อยู่แล้ว วางเรียงข้างกันจึงเทียบกันได้ในสายตาเดียว
+
+                  ระยะห่างจากเส้นคั่นคุมด้วย padding ของแต่ละคอลัมน์ ไม่ใช่ gap — เดิมใช้
+                  gap-x-6 คู่กับ ps-6 เฉพาะคอลัมน์ที่ 2-3 ทำให้ระยะสองข้างของเส้นไม่เท่ากัน
+                  ฝั่งซ้ายของเส้นแทบชิดกล่องตัวอย่างที่มีพื้นหลัง ส่วนฝั่งขวาเว้นเยอะกว่า
+                  px-7 ทุกคอลัมน์ (แล้วตัดขอบนอกสุดทิ้ง) ให้ระยะเท่ากันทั้งสองข้างทุกเส้น */}
+              {/* grid-rows-[...] + subgrid ที่ลูก: ทั้งสามคอลัมน์ใช้ "แถว" ชุดเดียวกัน
+                  ป้ายชื่อ / ช่องกรอก / ช่วงค่า / คำอธิบาย / ตัวอย่าง จึงอยู่ระดับเดียวกันเป๊ะ
+                  ไม่ว่าข้อความในแต่ละคอลัมน์จะยาวไม่เท่ากันแค่ไหน
+
+                  เดิมแต่ละคอลัมน์เป็น flex ของตัวเองแล้วดันกล่องตัวอย่างลงล่างด้วย mt-auto
+                  ซึ่งจัดให้ "ก้น" ตรงกันได้ก็จริง แต่คอลัมน์ที่ตัวอย่างสั้นกว่าจะเริ่มต่ำกว่า
+                  เพื่อนหนึ่งบรรทัด — ตาไปสะดุดตรงนั้นก่อนจะได้อ่านอะไร
+                  1fr อยู่ที่แถวคำอธิบาย เพราะเป็นแถวเดียวที่ยืดแล้วไม่เสียอะไร */}
+              <div className="grid gap-y-5 md:grid-cols-3 md:grid-rows-[auto_auto_auto_1fr_auto] md:gap-x-0 md:divide-x md:divide-line-2 md:[&>*]:px-7 md:[&>*:first-child]:ps-0 md:[&>*:last-child]:pe-0">
                 <ConfigRow
                   label={T.retry_count}
                   unit={T.unit_times}
@@ -544,7 +557,7 @@ function ConfirmDialog({
       onClick={onCancel}
     >
       <div
-        className="animate-fade-up flex w-full max-w-[420px] flex-col gap-3 rounded-card border border-line bg-surface p-5 shadow-card"
+        className="animate-fade-up flex w-full max-w-[26.25rem] flex-col gap-3 rounded-card border border-line bg-surface p-5 shadow-card"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lead font-bold">{title}</h2>
@@ -631,8 +644,9 @@ function Meter({
  * เดิมแต่ละช่องมีบรรทัดไม่เท่ากัน (ช่อง "จำนวนครั้ง" ไม่มีบรรทัดบอกช่วงค่า) คำอธิบาย
  * ของสามช่องเลยเริ่มคนละระดับ อ่านแล้วสายตาต้องไล่หาว่าอันไหนคู่กับอันไหน
  *
- * mt-auto ที่กล่องตัวอย่าง = ดันลงชิดขอบล่างเสมอ ช่องที่คำอธิบายสั้นกว่าจึงยังมีกล่อง
- * ตัวอย่างอยู่ระดับเดียวกับช่องอื่น (grid ยืดทุกช่องสูงเท่ากันอยู่แล้ว)
+ * ตอนนี้ทุกช่องเป็น subgrid ของกริดแม่ = ใช้แถวชุดเดียวกัน ทั้ง 5 บรรทัดจึงตรงระดับกัน
+ * เองโดยไม่ต้องไล่ปรับ margin ทีละอัน (ดูคอมเมนต์ที่กริดแม่ประกอบ)
+ * บนจอแคบที่กริดแม่เหลือคอลัมน์เดียว subgrid ไม่ทำงาน จึงถอยไปใช้ flex column ตามเดิม
  */
 function SettingCell({
   label,
@@ -649,14 +663,14 @@ function SettingCell({
 }) {
   const { T } = useApp();
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2 md:row-span-5 md:grid md:grid-rows-subgrid md:gap-y-2">
       <label className="text-caption font-semibold">{label}</label>
       {children}
       <p className="text-micro leading-[1.5] text-ink-2">{range}</p>
       <p className="text-micro leading-[1.75]">{help}</p>
       {/* ตัวอย่างอยู่ในกล่องพื้นจมพร้อมป้ายกำกับ — เดิมเป็นย่อหน้าธรรมดาที่มีแค่ลูกศรนำ
           จึงอ่านปนกับคำอธิบายด้านบนจนแยกไม่ออกว่าอันไหนคือคำอธิบาย อันไหนคือตัวอย่าง */}
-      <p className="mt-auto rounded-control bg-surface-2 px-2.5 py-1.5 text-micro leading-[1.65] text-ink-2">
+      <p className="rounded-control bg-surface-2 px-2.5 py-1.5 text-micro leading-[1.65] text-ink-2">
         <span className="font-semibold text-ink">{T.cfg_example_label} · </span>
         {example}
       </p>
@@ -693,12 +707,12 @@ function ConfigRow({
       help={help}
       example={example}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 self-start">
         <input
           type="number"
           min={min}
           max={max}
-          className={cn(inputCls, "w-[90px] font-mono")}
+          className={cn(inputCls, "w-[5.625rem] font-mono")}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
           // บันทึกทันทีตอนคลิกออกจากช่อง ไม่ต้องรอครบ 700ms — กันค่าหายถ้ารีบเปลี่ยนหน้าต่อ
@@ -751,11 +765,11 @@ function DurationRow({
   example: string;
 }) {
   const { minutes, seconds } = toMinSec(value);
-  const boxCls = cn(inputCls, "w-[64px] font-mono");
+  const boxCls = cn(inputCls, "w-[4rem] font-mono");
 
   return (
     <SettingCell label={label} range={rangeHint} help={help} example={example}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 self-start">
         <input
           type="number"
           min={0}

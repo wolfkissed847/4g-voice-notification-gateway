@@ -20,6 +20,7 @@ import { cn } from '@/app/components/ui/utils';
 import { Card, PageHeader } from '../components/primitives';
 import { StatusBadge } from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
+import { statusMeanings } from '../lib/callStatus';
 import type { CallStatus } from '../types';
 import { ApiGuidePage } from './ApiGuidePage';
 
@@ -99,16 +100,7 @@ function UsageGuide() {
     },
   ];
 
-  const statusRows: { status: CallStatus; meaning: string }[] = [
-    { status: 'queued', meaning: th ? 'รับคำขอแล้ว รออยู่ในคิว ยังไม่ได้โทร' : 'Accepted, waiting in the queue' },
-    { status: 'in_progress', meaning: th ? 'กำลังโทรอยู่ตอนนี้' : 'Dialing right now' },
-    { status: 'connected', meaning: th ? 'ปลายสายรับและได้ยินข้อความจนจบ = สำเร็จ' : 'Answered and the message played through' },
-    { status: 'no_answer', meaning: th ? 'ปล่อยดังจนครบเวลาแล้วไม่มีใครรับ' : 'Rang the full timeout with no answer' },
-    { status: 'busy', meaning: th ? 'ปลายสายกำลังคุยสายอื่นอยู่' : 'The line was busy' },
-    { status: 'retrying', meaning: th ? 'รอโทรซ้ำเบอร์เดิม ตามค่าที่ตั้งไว้' : 'Waiting to redial the same number' },
-    { status: 'escalated', meaning: th ? 'เบอร์นี้หมดโควตาแล้ว กำลังเลื่อนไปเบอร์ถัดไป' : 'Moving on to the next contact' },
-    { status: 'failed', meaning: th ? 'ไล่ครบทุกเบอร์แล้วไม่มีใครรับ หรือมีข้อผิดพลาดระหว่างโทร' : 'All contacts exhausted, or an error occurred' },
-  ];
+  const statusRows = statusMeanings(th);
 
   const troubles = [
     {
@@ -252,7 +244,7 @@ function UsageGuide() {
                 <span className="shrink-0">
                   <StatusBadge status={r.status} />
                 </span>
-                <span className="min-w-0 flex-1 basis-[190px] text-caption leading-[1.8] text-ink-2">{r.meaning}</span>
+                <span className="min-w-0 flex-1 basis-[11.875rem] text-caption leading-[1.8] text-ink-2">{r.meaning}</span>
               </div>
             ))}
           </div>

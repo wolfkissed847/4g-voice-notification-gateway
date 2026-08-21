@@ -1,6 +1,8 @@
 // ─── Fetch wrapper ────────────────────────────────────────────────────────────
 // Base URL, JWT header injection, FastAPI {detail} error handling, 401 redirect.
 
+import { clearSnapshots } from "../lib/snapshot";
+
 /**
  * ที่อยู่ของ API
  *
@@ -38,6 +40,9 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
+  // ข้อมูลที่หน้าต่างๆ แคชไว้เป็นของ session ที่เพิ่งจบ ต้องทิ้งไปพร้อมกัน
+  // ไม่งั้นคนที่ login รอบถัดไปจะเห็นรายการของรอบก่อนแวบหนึ่งก่อนโหลดใหม่
+  clearSnapshots();
 }
 
 export class ApiError extends Error {
