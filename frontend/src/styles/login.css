@@ -264,3 +264,74 @@
     display: none;
   }
 }
+
+/* ── ลูกโลก (แทนลูกบาศก์รอบก่อน) ─────────────────────────────────────────
+   หมุนช้ามาก 40 วิต่อรอบ — เร็วกว่านี้จะกลายเป็นของหมุนที่ดึงสายตาไปจากฟอร์ม
+   ซึ่งเป็นสิ่งที่คนมาหน้านี้ต้องใช้จริง */
+@keyframes lg-globe-spin {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -240;
+  }
+}
+
+.lg-globe-spin {
+  animation: lg-globe-spin 40s linear infinite;
+}
+
+/* ลูกโลกลอยขึ้นลงทั้งใบ */
+@keyframes lg-globe-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.lg-globe-float {
+  animation: lg-globe-float 7s ease-in-out infinite;
+}
+
+/* จุดหมายปลายทางบนผิวโลก — กะพริบเป็นจังหวะรับกับสัญญาณที่ยิงมาถึง */
+@keyframes lg-target {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+/* เส้นสัญญาณที่วิ่งไปตามส่วนโค้ง — วาดเส้นออกมาแล้วค่อยจางหาย
+   ใช้ stroke-dasharray ทั้งเส้น จึงได้เอฟเฟกต์ "เส้นถูกลากออกมา" ไม่ใช่แค่จางเข้า */
+@keyframes lg-arc {
+  0% {
+    stroke-dashoffset: 200;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  60% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: -200;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-globe-spin,
+  .lg-globe-float {
+    animation: none !important;
+  }
+}

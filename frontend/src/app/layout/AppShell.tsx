@@ -29,6 +29,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { clearToken } from '../api/client';
+import { BrandMark } from '../components/BrandMark';
 import { getSystemInfo } from '../api/system';
 import { useApp } from '../context/AppContext';
 import { usePolling } from '../lib/usePolling';
@@ -152,8 +153,8 @@ function SideNav({ onClose }: { onClose?: () => void }) {
     >
       {/* ── หัวแถบ ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2.5 border-b border-line px-4 py-4">
-        <span className="grid size-7 shrink-0 place-items-center rounded-control bg-brand font-mono text-micro font-bold text-brand-ink">
-          4G
+        <span className="grid size-7 shrink-0 place-items-center rounded-control bg-brand text-brand-ink">
+          <BrandMark size={17} />
         </span>
         <span className="min-w-0 flex-1 truncate text-caption font-bold">{T.app_name}</span>
 
@@ -292,8 +293,8 @@ function MobileBar({ onOpen }: { onOpen: () => void }) {
       >
         <Menu size={18} />
       </button>
-      <span className="grid size-6 shrink-0 place-items-center rounded-control bg-brand font-mono text-[9px] font-bold text-brand-ink">
-        4G
+      <span className="grid size-6 shrink-0 place-items-center rounded-control bg-brand text-brand-ink">
+        <BrandMark size={15} />
       </span>
       <span className="min-w-0 truncate text-caption font-bold">{T.app_name}</span>
       <NavLink

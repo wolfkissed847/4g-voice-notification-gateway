@@ -6,7 +6,7 @@ import type { Lang } from "../types";
 
 export const TR = {
   th: {
-    app_name: "Voice Alert", app_version: (v: string) => `เวอร์ชัน ${v}`,
+    app_name: "4G Gateway", app_version: (v: string) => `เวอร์ชัน ${v}`,
     nav_overview: "ภาพรวม", nav_queue: "คิวการโทร", nav_history: "ประวัติการโทร",
     nav_settings: "การตั้งค่า", nav_contacts: "กลุ่มผู้รับ", nav_api: "คู่มือ", nav_logout: "ออกจากระบบ",
     nav_event_types: "ประเภทเหตุการณ์", nav_api_keys: "API keys",
@@ -384,7 +384,7 @@ export const TR = {
     escalate_summary: "ครบรอบแล้วยังไม่รับ → ไล่โทรเบอร์ถัดไปในกลุ่ม",
   },
   en: {
-    app_name: "Voice Alert", app_version: (v: string) => `Version ${v}`,
+    app_name: "4G Gateway", app_version: (v: string) => `Version ${v}`,
     nav_overview: "Overview", nav_queue: "Call Queue", nav_history: "Call History",
     nav_settings: "Settings", nav_contacts: "Contacts", nav_api: "Guide", nav_logout: "Log out",
     nav_event_types: "Event Types", nav_api_keys: "API Keys",

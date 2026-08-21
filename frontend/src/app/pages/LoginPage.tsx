@@ -33,6 +33,7 @@ import { cn } from '@/app/components/ui/utils';
 import { login } from '../api/auth';
 import { ApiError, setToken } from '../api/client';
 import { Alert } from '../components/Alert';
+import { BrandMark } from '../components/BrandMark';
 import { useApp } from '../context/AppContext';
 
 export function LoginPage() {
@@ -87,9 +88,9 @@ export function LoginPage() {
         {/* ── ซ้าย: ฟอร์ม ── */}
         <div className="flex w-full flex-col justify-center bg-surface px-7 py-10 sm:px-10 md:max-w-[26.25rem] md:shrink-0">
           <div className="mb-9 flex items-center gap-3.5">
-            {/* ไอคอนแอป: ไล่สีทแยงกับแสงเรือง ให้เป็นวัตถุชิ้นเดียวกับลูกบาศก์ในแผงขวา */}
-            <span className="grid size-14 shrink-0 place-items-center rounded-[1.125rem] bg-brand font-mono text-lead font-black tracking-[-0.03em] text-brand-ink shadow-[0_6px_18px_rgb(var(--accent)/0.4)]">
-              4G
+            {/* โลโก้ตัวเดียวกับที่ใช้บนแถบเมนูและไอคอนแท็บเบราว์เซอร์ (ดู BrandMark.tsx) */}
+            <span className="grid size-14 shrink-0 place-items-center rounded-[1.125rem] bg-brand text-brand-ink shadow-[0_6px_18px_rgb(var(--accent)/0.4)]">
+              <BrandMark size={32} />
             </span>
             <div className="min-w-0">
               <p className="text-h2 leading-[1.15] font-bold">{T.app_name}</p>
@@ -260,8 +261,17 @@ const DUST = [
   { left: '84%', bottom: '15%', dur: '8.4s', delay: '2.1s' },
 ];
 
-/** ความยาวด้านของลูกบาศก์ (px) — ต้องเป็นตัวเลข เพราะเอาไปหารครึ่งใช้กับ translateZ */
-const CUBE = 128;
+/**
+ * เส้นสัญญาณบนลูกโลก — จากจุดส่ง (110,64) ไปยังปลายทางสามจุด
+ * d เป็นส่วนโค้งกำลังสอง (Q) ที่โก่งออกจากผิวโลก จึงอ่านเป็นสัญญาณที่เดินทางข้ามระยะ
+ * ไม่ใช่เส้นที่ลากบนพื้นผิว — จุดควบคุมอยู่นอกวงกลมเสมอ
+ * สีคนละโทนกันตามชุดสถานะของระบบ เข้าชุดกับป้ายไอคอนที่ลอยอยู่รอบๆ
+ */
+const GLOBE_LINKS = [
+  { d: 'M110 64 Q52 56 62 128', x: 62, y: 128, tone: '--art-warn', dur: '3.4s', delay: '0s' },
+  { d: 'M110 64 Q176 74 158 132', x: 158, y: 132, tone: '--art-ok', dur: '3.8s', delay: '1.1s' },
+  { d: 'M110 64 Q124 128 104 172', x: 104, y: 172, tone: '--art-accent', dur: '3.1s', delay: '2.2s' },
+] as const;
 
 /**
  * แผงภาพประกอบทางขวา — ตกแต่งล้วน ไม่มีค่าไหนมาจากระบบจริง
@@ -339,36 +349,89 @@ function LoginArtPanel() {
 
       {/* ── กลาง: ลูกบาศก์ + ลำแสง + ฐานวงแหวน ── */}
       <div className="relative z-[3] grid place-items-center" style={{ perspective: '900px' }}>
-        {/* แสงเรืองรอบลูกบาศก์ — อยู่หลังลูกบาศก์ ไม่งั้นมันฟุ้งทับตัวอักษร */}
+        {/* แสงเรืองรอบลูกโลก — อยู่หลังลูกโลก ไม่งั้นมันฟุ้งทับเส้นกริดจนดูขุ่น */}
         <span
           aria-hidden
-          className="pointer-events-none absolute size-[18rem] rounded-full bg-[radial-gradient(circle,rgb(var(--art-accent)/0.42)_0%,rgb(var(--art-accent)/0)_65%)]"
+          className="pointer-events-none absolute size-[18rem] rounded-full bg-[radial-gradient(circle,rgb(var(--art-accent)/0.4)_0%,rgb(var(--art-accent)/0)_65%)]"
         />
 
-        <div className="lg-cube relative" style={{ width: CUBE, height: CUBE }}>
-          {/* หน้าหน้า — หันเข้าหาคนดู เป็นหน้าที่สว่างสุดและเป็นที่อยู่ของตัวอักษร */}
-          <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(140deg,#57cdf0_0%,#0e9ed2_52%,#0b7099_100%)]"
-            style={{ transform: `translateZ(${CUBE / 2}px)` }}
+        {/* ── ลูกโลก ──
+            เส้นเมริเดียนเป็นวงรีที่ค่อยๆ แคบลงเข้าหากลาง = ทรงกลมที่มองจากด้านข้าง
+            (วงรีที่กว้างเท่ากันทุกเส้นจะอ่านเป็นวงกลมซ้อนกันแบน ไม่ใช่ลูกโลก)
+
+            เส้นศูนย์สูตรใช้ dasharray + เลื่อน dashoffset ช้าๆ ให้รู้สึกว่าโลกหมุน
+            โดยไม่ต้องหมุนทั้ง SVG จริง — หมุนจริงแล้วจุดหมายปลายทางกับส่วนโค้งสัญญาณ
+            จะหมุนตามไปด้วย ซึ่งต้องคำนวณตำแหน่งใหม่ทุกเฟรม */}
+        <svg className="lg-globe-float relative" width="220" height="220" viewBox="0 0 220 220" fill="none" aria-hidden>
+          <defs>
+            <radialGradient id="lg-globe-fill" cx="38%" cy="30%" r="78%">
+              <stop offset="0%" stopColor="rgb(var(--art-accent) / 0.42)" />
+              <stop offset="60%" stopColor="rgb(var(--art-accent) / 0.14)" />
+              <stop offset="100%" stopColor="rgb(var(--art-accent) / 0.03)" />
+            </radialGradient>
+          </defs>
+
+          <circle cx="110" cy="110" r="82" fill="url(#lg-globe-fill)" />
+          <circle cx="110" cy="110" r="82" stroke="rgb(var(--art-accent) / 0.75)" strokeWidth="1.4" />
+
+          {/* เส้นขนาน (แนวนอน) */}
+          {[-52, -27, 0, 27, 52].map((dy) => (
+            <ellipse
+              key={dy}
+              cx="110"
+              cy={110 + dy}
+              rx={Math.sqrt(Math.max(82 * 82 - dy * dy, 0))}
+              ry={dy === 0 ? 15 : 11}
+              stroke="rgb(var(--art-accent) / 0.32)"
+              strokeWidth="1"
+            />
+          ))}
+
+          {/* เส้นเมริเดียน (แนวตั้ง) */}
+          {[82, 55, 26].map((rx) => (
+            <ellipse key={rx} cx="110" cy="110" rx={rx} ry="82" stroke="rgb(var(--art-accent) / 0.3)" strokeWidth="1" />
+          ))}
+          <line x1="110" y1="28" x2="110" y2="192" stroke="rgb(var(--art-accent) / 0.3)" strokeWidth="1" />
+
+          {/* เส้นศูนย์สูตรเรืองแสง เลื่อนเส้นประช้าๆ = โลกหมุน */}
+          <ellipse
+            className="lg-globe-spin"
+            cx="110"
+            cy="110"
+            rx="82"
+            ry="15"
+            stroke="rgb(var(--art-accent))"
+            strokeWidth="1.6"
+            strokeDasharray="10 6"
           />
-          {/* หน้าข้างกับหน้าบน เข้มกว่าหน้าหน้า จึงอ่านเป็นก้อนทึบที่มีความหนา ไม่ใช่แผ่นแบน */}
-          <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(180deg,#0c7fae_0%,#075978_100%)]"
-            style={{ transform: `rotateY(90deg) translateZ(${CUBE / 2}px)` }}
-          />
-          <span
-            className="absolute inset-0 rounded-[1.25rem] bg-[linear-gradient(160deg,#31bbe4_0%,#0d8cbe_100%)]"
-            style={{ transform: `rotateX(90deg) translateZ(${CUBE / 2}px)` }}
-          />
-          {/* ตัวอักษรวางบนหน้าหน้า ยกขึ้นอีก 1px กันซ้อนกับพื้นผิว */}
-          <span
-            /* พื้นหน้าเข้มลงแล้ว ตัวอักษรจึงกลับมาเป็นสีขาวได้ คอนทราสต์ดีกว่าสีเข้มบนฟ้าสว่าง */
-            className="absolute inset-0 grid place-items-center font-mono text-[2.25rem] leading-none font-black tracking-[-0.04em] text-white"
-            style={{ transform: `translateZ(${CUBE / 2 + 1}px)` }}
-          >
-            4G
-          </span>
-        </div>
+
+          {/* ── สัญญาณยิงจากจุดส่งไปยังจุดหมายบนผิวโลก ──
+              จุดส่ง (110,64) = ที่ตั้งเกตเวย์ ส่วนสามจุดที่เหลือคือปลายทาง
+              ส่วนโค้งโก่งขึ้นจากผิวโลก อ่านเป็น "สัญญาณที่เดินทางข้ามระยะ" ไม่ใช่เส้นตรงบนแผนที่ */}
+          {GLOBE_LINKS.map((g, i) => (
+            <g key={i}>
+              <path
+                d={g.d}
+                stroke={`rgb(var(${g.tone}))`}
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeDasharray="200"
+                style={{ animation: `lg-arc ${g.dur} ease-in-out ${g.delay} infinite` }}
+              />
+              <circle
+                cx={g.x}
+                cy={g.y}
+                r="4"
+                fill={`rgb(var(${g.tone}))`}
+                style={{ animation: `lg-target 2.6s ease-in-out ${g.delay} infinite` }}
+              />
+            </g>
+          ))}
+
+          {/* จุดส่ง — วงในทึบ วงนอกจาง ให้ต่างจากจุดปลายทางที่เป็นวงเดียว */}
+          <circle cx="110" cy="64" r="8" fill="rgb(var(--art-accent) / 0.25)" />
+          <circle cx="110" cy="64" r="4" fill="rgb(var(--art-accent))" />
+        </svg>
 
         {/* ลำแสงลงฐาน — เส้นกลางยาวสุด สองข้างสั้นลง อ่านเป็นลำแสงทรงกรวย */}
         {/* top ต้องพ้นครึ่งล่างของลูกบาศก์ ไม่งั้นลำแสงโผล่อยู่หลังตัวลูกบาศก์แล้วมองไม่เห็น */}

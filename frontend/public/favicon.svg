@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- ไอคอนแท็บเบราว์เซอร์ — รูปทรงเดียวกับ src/app/components/BrandMark.tsx
+       ถ้าแก้รูปทรงที่นั่น ต้องมาแก้ที่นี่ด้วย (เบราว์เซอร์รับได้แค่ไฟล์ ไม่ใช่ component)
+
+       พื้นทึบ + เส้นขาว เพราะแท็บเบราว์เซอร์มีทั้งธีมสว่างและมืด ถ้าใช้เส้นสีเดียว
+       ลอยๆ ไม่มีพื้น มันจะหายไปกับพื้นแท็บในธีมใดธีมหนึ่งเสมอ -->
+  <rect width="32" height="32" rx="8" fill="#0b84d6"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="14" cy="17" r="9"/>
+    <path d="M5 17h18"/>
+    <ellipse cx="14" cy="17" rx="4.1" ry="9"/>
+    <path d="M23.6 8.4a4.1 4.1 0 0 1 0 4.4"/>
+    <path d="M26.1 5.9a7.7 7.7 0 0 1 0 9.4"/>
+  </g>
+  <circle cx="21.1" cy="10.6" r="1.6" fill="#ffffff"/>
+</svg>
