@@ -34,6 +34,7 @@ import { login } from '../api/auth';
 import { ApiError, setToken } from '../api/client';
 import { Alert } from '../components/Alert';
 import { BrandMark } from '../components/BrandMark';
+import { MESH_EDGES, MESH_NODES, SURFACE_DOTS } from '../lib/globeMesh';
 import { useApp } from '../context/AppContext';
 
 export function LoginPage() {
@@ -362,7 +363,7 @@ function LoginArtPanel() {
             เส้นศูนย์สูตรใช้ dasharray + เลื่อน dashoffset ช้าๆ ให้รู้สึกว่าโลกหมุน
             โดยไม่ต้องหมุนทั้ง SVG จริง — หมุนจริงแล้วจุดหมายปลายทางกับส่วนโค้งสัญญาณ
             จะหมุนตามไปด้วย ซึ่งต้องคำนวณตำแหน่งใหม่ทุกเฟรม */}
-        <svg className="lg-globe-float relative" width="220" height="220" viewBox="0 0 220 220" fill="none" aria-hidden>
+        <svg className="lg-globe-float relative" width="252" height="252" viewBox="0 0 220 220" fill="none" aria-hidden>
           <defs>
             <radialGradient id="lg-globe-fill" cx="38%" cy="30%" r="78%">
               <stop offset="0%" stopColor="rgb(var(--art-accent) / 0.42)" />
@@ -371,10 +372,38 @@ function LoginArtPanel() {
             </radialGradient>
           </defs>
 
+          {/* โครงข่ายที่ล้อมลูกโลก — วาดก่อนตัวลูกโลก ส่วนที่อยู่หลังจึงถูกลูกโลกบัง
+              ความจางไล่ตามความลึก (z) โหนดที่อยู่ไกลจางกว่า = อ่านเป็นโครงข่ายสามมิติ
+              ไม่ใช่ตาข่ายแบนที่แปะทับอยู่ */}
+          <g>
+            {MESH_EDGES.map((e, i) => (
+              <line
+                key={i}
+                x1={e.x1}
+                y1={e.y1}
+                x2={e.x2}
+                y2={e.y2}
+                stroke="rgb(var(--art-accent))"
+                strokeWidth="0.6"
+                opacity={0.1 + Math.max(e.z, -0.4) * 0.22 + 0.14}
+              />
+            ))}
+            {MESH_NODES.map((n, i) => (
+              <circle
+                key={i}
+                cx={n.x}
+                cy={n.y}
+                r={n.z > 0 ? 1.5 : 1}
+                fill="rgb(var(--art-accent))"
+                opacity={0.3 + Math.max(n.z, -0.5) * 0.5}
+              />
+            ))}
+          </g>
+
           <circle cx="110" cy="110" r="82" fill="url(#lg-globe-fill)" />
           <circle cx="110" cy="110" r="82" stroke="rgb(var(--art-accent) / 0.75)" strokeWidth="1.4" />
 
-          {/* เส้นขนาน (แนวนอน) */}
+          {/* เส้นขนาน (แนวนอน) — บางลงกว่าเดิม เพราะตอนนี้มีเม็ดจุดบนผิวช่วยบอกความโค้งแล้ว */}
           {[-52, -27, 0, 27, 52].map((dy) => (
             <ellipse
               key={dy}
@@ -382,16 +411,38 @@ function LoginArtPanel() {
               cy={110 + dy}
               rx={Math.sqrt(Math.max(82 * 82 - dy * dy, 0))}
               ry={dy === 0 ? 15 : 11}
-              stroke="rgb(var(--art-accent) / 0.32)"
-              strokeWidth="1"
+              stroke="rgb(var(--art-accent) / 0.22)"
+              strokeWidth="0.8"
             />
           ))}
 
           {/* เส้นเมริเดียน (แนวตั้ง) */}
           {[82, 55, 26].map((rx) => (
-            <ellipse key={rx} cx="110" cy="110" rx={rx} ry="82" stroke="rgb(var(--art-accent) / 0.3)" strokeWidth="1" />
+            <ellipse
+              key={rx}
+              cx="110"
+              cy="110"
+              rx={rx}
+              ry="82"
+              stroke="rgb(var(--art-accent) / 0.2)"
+              strokeWidth="0.8"
+            />
           ))}
-          <line x1="110" y1="28" x2="110" y2="192" stroke="rgb(var(--art-accent) / 0.3)" strokeWidth="1" />
+
+          {/* เม็ดจุดบนผิวลูกโลก — ขนาดกับความจางไล่ตามความลึก ขอบนอกจึงดูจมลงไป
+              ไม่ใช่จุดขนาดเท่ากันหมดที่อ่านเป็นแผ่นกลมแบน */}
+          <g>
+            {SURFACE_DOTS.map((d, i) => (
+              <circle
+                key={i}
+                cx={d.x}
+                cy={d.y}
+                r={0.6 + Math.max(d.z, 0) * 1.1}
+                fill="rgb(var(--art-accent))"
+                opacity={0.25 + Math.max(d.z, 0) * 0.6}
+              />
+            ))}
+          </g>
 
           {/* เส้นศูนย์สูตรเรืองแสง เลื่อนเส้นประช้าๆ = โลกหมุน */}
           <ellipse
