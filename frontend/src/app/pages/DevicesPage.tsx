@@ -292,8 +292,14 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                     <Cpu size={16} />
                   </span>
                   <span className="ms-auto shrink-0">
-                    <Pill tone={ready.tone} className="inline-flex items-center gap-1 px-2">
-                      <ready.Icon size={11} />
+                    {/* ขนาดเดียวกับป้ายสถานะในตารางประวัติการโทร (11px / px-2 py-px)
+                        — ป้ายบนการ์ดเป็นของประกอบ ไม่ใช่หัวเรื่อง ชื่ออุปกรณ์ต้องเด่นกว่า
+                        ไอคอนวัดเป็น em จึงโตตามตัวอักษรเองเวลาไปอยู่บนจอใหญ่ */}
+                    <Pill
+                      tone={ready.tone}
+                      className="inline-flex items-center gap-1 px-2 py-px text-[0.6875rem]"
+                    >
+                      <ready.Icon size="1em" />
                       {ready.label}
                     </Pill>
                   </span>
