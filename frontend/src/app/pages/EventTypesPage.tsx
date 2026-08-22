@@ -40,6 +40,79 @@ interface FormState {
 
 const EMPTY_FORM: FormState = { code: "", display_name: "", message_template: "", is_active: true };
 
+/**
+ * กล่องช่วยตอนพิมพ์ข้อความ — อ่าน {ชื่อตัวแปร} จากสิ่งที่พิมพ์อยู่แล้วบอกว่า
+ * อุปกรณ์ต้องส่งอะไรมาบ้าง พร้อมตัวอย่าง JSON ที่ประกอบจากตัวแปรจริงในข้อความนั้น
+ *
+ * ── ทำไมต้องมี ────────────────────────────────────────────────────────────
+ * กลไก {ตัวแปร} มีมาตั้งแต่แรกแต่ไม่เคยเขียนไว้ที่ไหนในเว็บ คนตั้งค่าจึงไม่รู้ว่าทำได้
+ * และคำถามที่ถูกถามบ่อยที่สุดหลังตั้งค่าเสร็จคือ "ถ้าอยากให้บอกอุณหภูมิด้วยล่ะ"
+ *
+ * ── ทำไมอ่านจากข้อความจริง ไม่ใช่เขียนตัวอย่างตายตัว ─────────────────────
+ * ตัวอย่างตายตัวบอกได้แค่ว่า "ทำได้นะ" แต่ไม่ได้บอกว่า "ของคุณต้องส่งอะไร"
+ * พออ่านจากข้อความที่กำลังพิมพ์ มันจะตอบคำถามที่คนกำลังมีอยู่ตรงหน้าพอดี
+ * และจับได้ทันทีถ้าพิมพ์ชื่อตัวแปรผิด (เห็นชื่อที่ไม่ได้ตั้งใจโผล่ในรายการ)
+ */
+function TemplateVarsHelp({ template, code }: { template: string; code: string }) {
+  const { T } = useApp();
+
+  // ตัวแปรที่ Python .format() รับ = ตัวอักษร/ตัวเลข/ขีดล่าง เท่านั้น
+  const found = Array.from(template.matchAll(/\{(\w+)\}/g)).map((m) => m[1]);
+  const unique = Array.from(new Set(found));
+  // {device} ไม่ต้องส่งมา ระบบเติมจากชื่ออุปกรณ์เจ้าของ key ที่ยิงเข้ามา
+  const needed = unique.filter((v) => v !== "device");
+  const hasDevice = unique.includes("device");
+
+  const body =
+    `{ "event_type_code": "${code || "your_code"}"` +
+    (needed.length
+      ? `,
+  "variables": { ${needed.map((v) => `"${v}": "..."`).join(", ")} } }`
+      : " }");
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 rounded-control border border-dashed border-line bg-surface-2 px-3 py-2.5">
+      <p className="text-micro font-medium text-ink-2">{T.et_vars_title}</p>
+
+      {unique.length === 0 ? (
+        <p className="text-micro leading-[1.7] text-ink-2">{T.et_vars_none}</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {hasDevice ? (
+              <span className="rounded-full border border-ok bg-ok-soft px-2 py-px font-mono text-[0.6875rem] text-ok-strong">
+                {"{device}"} · {T.et_vars_auto}
+              </span>
+            ) : null}
+            {needed.map((v) => (
+              <span
+                key={v}
+                className="rounded-full border border-brand-strong bg-brand-soft px-2 py-px font-mono text-[0.6875rem] text-brand-strong"
+              >
+                {`{${v}}`}
+              </span>
+            ))}
+            {needed.length ? <span className="text-[0.6875rem] text-ink-2">← {T.et_vars_send}</span> : null}
+          </div>
+
+          <div className="min-w-0">
+            <p className="mb-1 text-[0.6875rem] text-ink-2">{T.et_vars_example}</p>
+            <pre className="min-w-0 rounded-control border border-line bg-surface px-2.5 py-2 font-mono text-[0.6875rem] leading-[1.8] break-all whitespace-pre-wrap text-ink-2">
+              {body}
+            </pre>
+          </div>
+
+          {needed.length ? (
+            <p className="text-[0.6875rem] leading-[1.7] text-warn-strong">{T.et_vars_missing}</p>
+          ) : null}
+        </>
+      )}
+
+      <p className="font-mono text-[0.6875rem] leading-[1.7] text-ink-2">{T.et_vars_limits}</p>
+    </div>
+  );
+}
+
 /** embedded = ถูกฝังอยู่ในหน้า SetupPage ที่มีหัวข้อของตัวเองแล้ว จึงไม่ต้องขึ้นหัวข้อซ้ำ */
 /** ข้อมูลที่ฝากไว้ให้รอบหน้าหยิบไปวาดทันที (ดู lib/snapshot.ts) */
 type EventSnap = { eventTypes: EventType[]; usage: Record<number, number> };
@@ -232,7 +305,11 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
 
       {/* Create/edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent>
+        {/* max-h + scroll: กล่องนี้ยาวขึ้นหลังใส่ตัวช่วยเรื่องตัวแปร ถ้าไม่จำกัดความสูง
+            บนจอเตี้ยปุ่มบันทึกจะหลุดออกนอกจอโดยที่เลื่อนลงไปกดไม่ได้
+            [&>*]:min-w-0 — DialogContent เป็น grid ลูกทุกตัวย่อเล็กกว่าเนื้อหาไม่ได้
+            ตัวอย่าง JSON ที่บรรทัดยาวจึงดันทั้งกล่องจนล้นขอบถ้าไม่ปลดตรงนี้ */}
+        <DialogContent className="max-h-[85vh] overflow-y-auto [&>*]:min-w-0">
           <DialogHeader>
             <DialogTitle>{form.id ? T.edit_event_type : T.new_event_type}</DialogTitle>
           </DialogHeader>
@@ -254,6 +331,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
               <textarea value={form.message_template} onChange={(e) => setForm((f) => ({ ...f, message_template: e.target.value }))}
                 placeholder={T.message_template_ph} rows={3} className={inputCls} />
               <p className="text-micro text-ink-2 mt-1">{T.message_template_hint}</p>
+              <TemplateVarsHelp template={form.message_template} code={form.code} />
             </div>
             {form.id && (
               <div className="flex items-center justify-between">

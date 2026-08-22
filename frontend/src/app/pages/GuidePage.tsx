@@ -209,6 +209,55 @@ function UsageGuide() {
 
       {/* ── คอลัมน์ขวา ── */}
       <div className="flex min-w-0 flex-col gap-3.5">
+        {/* ── ส่งค่าที่วัดได้เข้ามาในข้อความ ──
+            คำถามที่ถูกถามบ่อยที่สุดหลังตั้งค่าเสร็จคือ "แล้วถ้าอยากให้บอกอุณหภูมิด้วยล่ะ"
+            ซึ่งระบบทำได้อยู่แล้วแต่ไม่เคยเขียนไว้ที่ไหนในเว็บเลย */}
+        <Card className="flex flex-col gap-3 p-4">
+          <h2 className="text-lead font-bold">
+            {th ? 'ให้ข้อความบอกค่าที่วัดได้ด้วย' : 'Put live readings in the message'}
+          </h2>
+          <p className="text-caption leading-[1.8] text-ink-2">
+            {th
+              ? 'เขียน {ชื่อตัวแปร} ไว้ในข้อความที่จะพูด แล้วให้อุปกรณ์ส่งค่ามาตอนยิง ระบบจะแทนค่าให้ก่อนพูด'
+              : 'Write {name} in the spoken message and have the device send the value. It is substituted before the call.'}
+          </p>
+
+          <div className="flex flex-col gap-1.5">
+            <p className="text-micro font-medium text-ink-2">
+              {th ? '1. ข้อความในประเภทเหตุการณ์' : '1. The event type message'}
+            </p>
+            <code className="rounded-control border border-line bg-surface-2 px-3 py-2 text-caption leading-[1.8] break-all">
+              {th
+                ? 'แจ้งเตือนจาก {device} อุณหภูมิ {temp} องศา เกินค่าที่ตั้งไว้'
+                : 'Alert from {device}: temperature {temp} degrees, above the limit'}
+            </code>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <p className="text-micro font-medium text-ink-2">{th ? '2. อุปกรณ์ยิงเข้ามา' : '2. The device sends'}</p>
+            <pre className="rounded-control border border-line bg-surface-2 px-3 py-2 font-mono text-micro leading-[1.9] break-all whitespace-pre-wrap text-ink-2">
+              {`{ "event_type_code": "temp_high",
+  "variables": { "temp": "78" } }`}
+            </pre>
+          </div>
+
+          <p className="rounded-control border border-dashed border-line px-3 py-2.5 text-caption leading-[1.8] text-ink-2">
+            {th
+              ? '{device} ไม่ต้องส่งมา — ระบบเติมชื่ออุปกรณ์ให้เองจาก key ที่ยิงเข้ามา ย้ายจุดติดตั้งแล้วแก้ชื่อที่หน้าอุปกรณ์ได้เลย ไม่ต้องแฟลชบอร์ดใหม่'
+              : '{device} is filled in automatically from the key that sent the request — rename the device on the web and the wording follows, no reflash needed.'}
+          </p>
+          <p className="text-caption leading-[1.8] text-warn-strong">
+            {th
+              ? 'ถ้าข้อความมี {temp} แต่ไม่ได้ส่งค่ามา จะถูกปฏิเสธทันที (400) ไม่เข้าคิว — ฝั่งที่ยิงจะได้รู้เลยว่าพลาด'
+              : 'If the message needs {temp} but none is sent, the request is rejected right away (400) instead of failing silently later.'}
+          </p>
+          <p className="font-mono text-micro leading-[1.9] text-ink-2">
+            {th
+              ? 'เพดาน: ข้อความ 500 ตัวอักษร · ตัวแปร 20 ตัว · ค่าละ 200 ตัวอักษร'
+              : 'Limits: 500 chars per message · 20 variables · 200 chars each'}
+          </p>
+        </Card>
+
         <Card className="flex flex-col gap-3 p-4">
           <h2 className="text-lead font-bold">{th ? 'ค่าการโทรและงบเวลา' : 'Call settings and time budget'}</h2>
           <p className="text-caption leading-[1.8] text-ink-2">
