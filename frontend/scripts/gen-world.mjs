@@ -21,9 +21,11 @@ const R = 200;
 const CX = SIZE / 2;
 const CY = SIZE / 2;
 
-/** มุมที่มองลูกโลก — เลือกให้เห็นทวีปที่มีเมืองในรายการมากที่สุด */
-const LON0 = 34;
-const LAT0 = 18;
+/** มุมที่มองลูกโลก — หันด้านที่มีประเทศไทยเข้าหาคนดู (กรุงเทพฯ 100.5°E 13.75°N)
+ *  ตั้งไว้ตรงกับกรุงเทพฯ พอดี ไทยจึงอยู่กลางลูกโลกซึ่งเป็นจุดที่บิดเบี้ยวน้อยที่สุด
+ *  (การฉายแบบ orthographic ยิ่งใกล้ขอบยิ่งถูกบีบ) */
+const LON0 = 100.5;
+const LAT0 = 13.75;
 
 /** วงที่เล็กกว่านี้เป็นเกาะเม็ดเล็กที่ขนาดนี้มองไม่เห็น — ตัดทิ้งเพื่อลดขนาดไฟล์ */
 const MIN_AREA = 2;
@@ -42,11 +44,27 @@ function project(lon, lat) {
   const dLon = rad(lon - LON0);
   const la = rad(lat);
   const cosC = sinLat0 * Math.sin(la) + cosLat0 * Math.cos(la) * Math.cos(dLon);
-  if (cosC < 0) return null; // อยู่ด้านหลังลูกโลก
-  return {
-    x: CX + R * Math.cos(la) * Math.sin(dLon),
-    y: CY - R * (cosLat0 * Math.sin(la) - sinLat0 * Math.cos(la) * Math.cos(dLon)),
-  };
+  let x = CX + R * Math.cos(la) * Math.sin(dLon);
+  let y = CY - R * (cosLat0 * Math.sin(la) - sinLat0 * Math.cos(la) * Math.cos(dLon));
+
+  /* จุดที่อยู่อีกซีกของโลก: ดันออกไปวางบนขอบโลกแทนที่จะตัดทิ้ง
+     ────────────────────────────────────────────────────────────
+     ตอนแรกตัดทิ้งแล้วขึ้นเส้นใหม่ ซึ่งทำให้ทวีปที่ยื่นพ้นขอบโลก (เอเชีย แอฟริกา)
+     ถูกปิดวงด้วยเส้นตรงลากพาดข้ามลูกโลก — เห็นเป็นลิ่มสามเหลี่ยมสว่างกลางลูกโลก
+     ดันออกไปขอบแทน วงจึงยังต่อเนื่องและไปแนบขอบโลกพอดี ซึ่งเป็นสิ่งที่ตาเห็นจริง
+     เวลามองลูกโลก (แผ่นดินที่โค้งหายไปหลังขอบ)
+
+     ทิศทางจากจุดศูนย์กลางไม่เปลี่ยน เปลี่ยนแค่ระยะให้เท่ารัศมี จุดจึงไปอยู่บนขอบ
+     ตรงมุมที่ถูกต้อง ไม่ใช่มุมมั่ว */
+  if (cosC < 0) {
+    const dx = x - CX;
+    const dy = y - CY;
+    const len = Math.hypot(dx, dy) || 1;
+    x = CX + (dx / len) * R;
+    y = CY + (dy / len) * R;
+    return { x, y, back: true };
+  }
+  return { x, y, back: false };
 }
 
 /** พื้นที่ของรูปหลายเหลี่ยม (shoelace) ใช้ตัดวงเล็กๆ ทิ้ง */
@@ -69,34 +87,21 @@ for (const f of land.features) {
       // แอนตาร์กติกาที่มุมมองนี้เหลือเป็นแถบบางๆ ขอบล่าง ไม่ได้เพิ่มอะไรให้ภาพ
       if (ring.some(([, lat]) => lat < -60)) continue;
 
-      /* จุดที่อยู่อีกซีกของโลกต้อง "ตัดเส้น" ไม่ใช่ "ข้ามไปต่อจุดถัดไป" —
-         ถ้าข้ามไปต่อเลย เส้นจะลากพาดหน้าลูกโลกจากขอบหนึ่งไปอีกขอบหนึ่ง
-         (ปัญหาเดียวกับตอนทำแผนที่แบนแล้วเจอเส้นพาดตรงเส้นแบ่งวันสากล) */
-      let run = [];
-      const runs = [];
-      for (const [lon, lat] of ring) {
-        const p = project(lon, lat);
-        if (p) run.push(p);
-        else if (run.length) {
-          runs.push(run);
-          run = [];
-        }
-      }
-      if (run.length) runs.push(run);
+      const projected = ring.map(([lon, lat]) => project(lon, lat));
+      // อยู่หลังโลกทั้งวง = มองไม่เห็นเลย ถ้าวาดจะได้เส้นบางๆ เลื้อยตามขอบโลกเปล่าๆ
+      if (projected.every((p) => p.back)) continue;
 
-      for (const seg of runs) {
-        const pts = seg.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }));
-        if (pts.length < 4) continue;
-        if (area(pts) < MIN_AREA) continue;
-        // ทิ้งจุดที่ชิดจุดก่อนหน้ามากเกินไป — ที่ขนาดแสดงผลจริงมันทับกันอยู่แล้ว
-        const thin = [pts[0]];
-        for (const pt of pts.slice(1)) {
-          const last = thin[thin.length - 1];
-          if (Math.hypot(pt.x - last.x, pt.y - last.y) >= MIN_STEP) thin.push(pt);
-        }
-        if (thin.length < 4) continue;
-        paths.push('M' + thin.map((p) => `${p.x} ${p.y}`).join('L') + 'Z');
+      const pts = projected.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 }));
+      if (pts.length < 4) continue;
+      if (area(pts) < MIN_AREA) continue;
+      // ทิ้งจุดที่ชิดจุดก่อนหน้ามากเกินไป — ที่ขนาดแสดงผลจริงมันทับกันอยู่แล้ว
+      const thin = [pts[0]];
+      for (const pt of pts.slice(1)) {
+        const last = thin[thin.length - 1];
+        if (Math.hypot(pt.x - last.x, pt.y - last.y) >= MIN_STEP) thin.push(pt);
       }
+      if (thin.length < 4) continue;
+      paths.push('M' + thin.map((p) => `${p.x} ${p.y}`).join('L') + 'Z');
     }
   }
 }
@@ -108,46 +113,53 @@ for (const f of land.features) {
  */
 const CITIES = [
   { name: 'กรุงเทพฯ', lon: 100.5, lat: 13.75 },
-  { name: 'โตเกียว', lon: 139.7, lat: 35.7 },
-  { name: 'ปักกิ่ง', lon: 116.4, lat: 39.9 },
+  { name: 'เชียงใหม่', lon: 98.98, lat: 18.79 },
+  { name: 'หาดใหญ่', lon: 100.47, lat: 7.01 },
+  { name: 'ฮานอย', lon: 105.85, lat: 21.03 },
   { name: 'สิงคโปร์', lon: 103.8, lat: 1.35 },
+  { name: 'จาการ์ตา', lon: 106.85, lat: -6.2 },
+  { name: 'มะนิลา', lon: 121.0, lat: 14.6 },
+  { name: 'ฮ่องกง', lon: 114.17, lat: 22.32 },
+  { name: 'ปักกิ่ง', lon: 116.4, lat: 39.9 },
+  { name: 'โซล', lon: 127.0, lat: 37.55 },
+  { name: 'โตเกียว', lon: 139.7, lat: 35.7 },
   { name: 'เดลี', lon: 77.2, lat: 28.6 },
+  { name: 'มุมไบ', lon: 72.88, lat: 19.08 },
   { name: 'ดูไบ', lon: 55.3, lat: 25.2 },
-  { name: 'ลอนดอน', lon: -0.13, lat: 51.5 },
-  { name: 'เบอร์ลิน', lon: 13.4, lat: 52.5 },
-  { name: 'มอสโก', lon: 37.6, lat: 55.75 },
-  { name: 'ลากอส', lon: 3.4, lat: 6.5 },
-  { name: 'ไคโร', lon: 31.2, lat: 30.0 },
-  { name: 'โจฮันเนสเบิร์ก', lon: 28.0, lat: -26.2 },
   { name: 'ซิดนีย์', lon: 151.2, lat: -33.9 },
-  { name: 'ไนโรบี', lon: 36.8, lat: -1.3 },
-  { name: 'อิสตันบูล', lon: 29.0, lat: 41.0 },
+  { name: 'เพิร์ท', lon: 115.86, lat: -31.95 },
 ];
 
 /** คู่ที่ลากเส้นเชื่อม อ้างด้วยชื่อ — ถ้าปลายทางฝั่งใดอยู่หลังโลก คู่นั้นถูกตัดออกเอง */
 const LINK_NAMES = [
-  ['กรุงเทพฯ', 'โตเกียว'],
+  // กรุงเทพฯ เป็นศูนย์กลาง — เกตเวย์ตั้งอยู่ที่นี่ เส้นจึงแผ่ออกจากจุดนี้
+  ['กรุงเทพฯ', 'เชียงใหม่'],
+  ['กรุงเทพฯ', 'หาดใหญ่'],
+  ['กรุงเทพฯ', 'ฮานอย'],
   ['กรุงเทพฯ', 'สิงคโปร์'],
+  ['กรุงเทพฯ', 'ฮ่องกง'],
   ['กรุงเทพฯ', 'เดลี'],
   ['กรุงเทพฯ', 'ดูไบ'],
-  ['ปักกิ่ง', 'มอสโก'],
-  ['สิงคโปร์', 'ซิดนีย์'],
-  ['เดลี', 'ดูไบ'],
-  ['ดูไบ', 'ไคโร'],
-  ['ลอนดอน', 'เบอร์ลิน'],
-  ['เบอร์ลิน', 'มอสโก'],
-  ['อิสตันบูล', 'ไคโร'],
-  ['ไคโร', 'ลากอส'],
-  ['ลากอส', 'โจฮันเนสเบิร์ก'],
-  ['ไนโรบี', 'โจฮันเนสเบิร์ก'],
-  ['ไคโร', 'ลอนดอน'],
-  ['เดลี', 'ปักกิ่ง'],
+  ['กรุงเทพฯ', 'โตเกียว'],
+  ['กรุงเทพฯ', 'จาการ์ตา'],
+  // เส้นระหว่างเมืองอื่น ให้โครงข่ายไม่ได้แผ่ออกจากจุดเดียวอย่างเดียว
+  ['สิงคโปร์', 'จาการ์ตา'],
+  ['สิงคโปร์', 'เพิร์ท'],
+  ['ฮ่องกง', 'มะนิลา'],
+  ['ฮ่องกง', 'ปักกิ่ง'],
+  ['ปักกิ่ง', 'โซล'],
+  ['โซล', 'โตเกียว'],
+  ['เดลี', 'มุมไบ'],
+  ['มุมไบ', 'ดูไบ'],
+  ['จาการ์ตา', 'ซิดนีย์'],
+  ['เพิร์ท', 'ซิดนีย์'],
 ];
 
 const visible = [];
 for (const c of CITIES) {
   const p = project(c.lon, c.lat);
-  if (p) visible.push({ ...c, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
+  // เมืองที่อยู่หลังโลกไม่เอา — ถ้าเอามาจะไปกองอยู่บนขอบโลกซึ่งไม่ใช่ตำแหน่งจริงของมัน
+  if (!p.back) visible.push({ ...c, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
 }
 const indexOf = new Map(visible.map((c, i) => [c.name, i]));
 const links = LINK_NAMES.map(([a, b]) => [indexOf.get(a), indexOf.get(b)]).filter(
