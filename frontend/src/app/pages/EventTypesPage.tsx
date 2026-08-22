@@ -219,7 +219,9 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
   }
 
   return (
-    <div className="flex flex-col gap-3.5">
+    /* flex-1 + min-h-0: ขอพื้นที่ที่เหลือจาก SetupPage มาให้ตารางเลื่อนในตัวเอง
+       เหมือนแท็บกลุ่มผู้รับและหน้าประวัติการโทร (ความสูงที่แน่นอนมาจาก SetupPage) */
+    <div className="flex min-h-0 flex-1 flex-col gap-3.5">
       {embedded ? (
         <div className="flex flex-wrap items-center gap-3">
           <p className="font-mono text-caption text-ink-2">{T.event_types_sub}</p>
@@ -243,11 +245,6 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
         />
       )}
 
-      {/* บอกให้ชัดตั้งแต่แรกว่าหน้านี้ไม่เกี่ยวกับผู้รับ — กันคนตามหาช่องเลือกกลุ่มที่ย้ายไปแล้ว */}
-      <p className="rounded-control border border-line bg-surface-2 px-3.5 py-2.5 text-caption leading-[1.8] text-ink-2">
-        {T.et_words_only_hint}
-      </p>
-
       {eventTypes.length === 0 ? (
         <div className="flex flex-col items-center gap-2.5 rounded-card border border-dashed border-line px-4 py-10 text-center">
           <span className="grid size-14 place-items-center rounded-card bg-surface-2">
@@ -260,46 +257,55 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
           </Btn>
         </div>
       ) : (
-        <div className="bg-surface rounded-card border border-line overflow-hidden">
-          <div className="overflow-x-auto overscroll-x-contain">
-            {/* min-w เท่ากับตารางหน้าอื่น (คิว/ประวัติ) — เดิมมีแค่ w-full ตารางเลยถูกบีบ
-                จน 5 คอลัมน์เบียดกันอ่านไม่ออกบนมือถือ แทนที่จะเลื่อนดูแนวนอนได้ */}
-            <table className="w-full min-w-[35rem]">
-              <thead>
-                <tr className="border-b border-line bg-surface-2">
-                  {[T.col_code, T.col_name, T.et_used_by, T.col_active, T.col_actions].map((h) => (
-                    <th key={h} className="text-left px-4 py-2.5 font-mono text-micro font-bold text-ink-2">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line-2">
-                {eventTypes.map((et) => (
-                  <tr key={et.id} className="hover:bg-surface-2 transition-colors">
-                    <td className="px-4 py-3 font-mono text-caption text-brand-strong">{et.code}</td>
-                    <td className="px-4 py-3 text-caption">{et.display_name}</td>
-                    <td className="px-4 py-3 text-caption text-ink-2">
-                      {usage[et.id] ? T.et_used_by_count(usage[et.id]) : T.et_used_by_none}
-                    </td>
-                    <td className="px-4 py-3"><Toggle on={et.is_active} onChange={() => toggleActive(et)} /></td>
-                    <td className="px-4 py-3">
-                      {/* ขนาดปุ่มและระยะห่างชุดเดียวกับแท็บกลุ่มผู้รับ — 32px และเว้นช่อง
-                          ก่อนปุ่มลบ สามแท็บนี้อยู่หน้าเดียวกัน ปุ่มแก้/ลบต้องกดเหมือนกันหมด */}
-                      <div className="flex items-center">
-                        <button onClick={() => openEdit(et)} title={T.edit}
-                          className="grid size-8 place-items-center rounded-control hover:bg-surface-2 text-ink-2 hover:text-ink transition-colors">
-                          <Pencil size={15} />
-                        </button>
-                        <button onClick={() => setDeleteTarget(et)} title={T.delete}
-                          className="ms-1 grid size-8 place-items-center rounded-control hover:bg-bad-soft text-ink-2 hover:text-bad-strong transition-colors">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        /* ── ตารางชุดเดียวกับหน้าประวัติการโทร ──────────────────────────────
+            เป็น flex ไม่ใช่ <table> ด้วยเหตุผลเดียวกับหน้านั้น: คอลัมน์แบ่งที่ว่างกันเอง
+            ตามสัดส่วน (flex-[1.2] ฯลฯ) และพอจอแคบกว่า sm แถวไหลลงบรรทัดใหม่ได้
+            ส่วน <table> จะยึด min-w ไว้แล้วบังคับให้เลื่อนแนวนอนแทน ซึ่งบนมือถือ
+            แปลว่าต้องเลื่อนไปมาทุกแถวเพื่ออ่านให้ครบ
+
+            กล่องเลื่อนในตัวเอง หัวคอลัมน์ sticky ค้างไว้ตอนเลื่อน — ที่นี่ยังไม่ยาวมาก
+            แต่จำนวนประเภทเหตุการณ์โตขึ้นเรื่อยๆ ตามระบบ และเป็นชุดเดียวกับอีกสองแท็บ */
+        <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+          {/* ซ่อนหัวคอลัมน์บนจอแคบ — ที่นั่นแถวไหลลงบรรทัดใหม่จนป้ายไม่ตรงกับข้อมูลแล้ว */}
+          <div className="sticky top-0 z-10 hidden flex-wrap items-center gap-x-3 border-b border-line bg-surface-2 px-3.5 py-1.5 font-mono text-micro font-bold text-ink-2 sm:flex">
+            <span className="min-w-0 flex-1 basis-[9rem]">{T.col_code}</span>
+            <span className="min-w-0 flex-[1.2] basis-[10rem]">{T.col_name}</span>
+            <span className="min-w-0 flex-[0.9] basis-[7.5rem]">{T.et_used_by}</span>
+            <span className="w-[3.5rem] shrink-0 text-end">{T.col_active}</span>
+            <span className="w-[4.25rem] shrink-0 text-end">{T.col_actions}</span>
           </div>
+
+          {eventTypes.map((et) => (
+            <div
+              key={et.id}
+              className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-2 px-3.5 py-2 transition-colors last:border-b-0 hover:bg-surface-2"
+            >
+              <span className="min-w-0 flex-1 basis-[9rem] truncate font-mono text-caption text-brand-strong">
+                {et.code}
+              </span>
+              <span className="min-w-0 flex-[1.2] basis-[10rem] truncate text-caption font-medium">
+                {et.display_name}
+              </span>
+              <span className="min-w-0 flex-[0.9] basis-[7.5rem] truncate text-caption text-ink-2">
+                {usage[et.id] ? T.et_used_by_count(usage[et.id]) : T.et_used_by_none}
+              </span>
+              <span className="flex w-[3.5rem] shrink-0 justify-end">
+                <Toggle on={et.is_active} onChange={() => toggleActive(et)} />
+              </span>
+              {/* ขนาดปุ่มและระยะห่างชุดเดียวกับแท็บกลุ่มผู้รับ — 32px และเว้นช่อง
+                  ก่อนปุ่มลบ สามแท็บนี้อยู่หน้าเดียวกัน ปุ่มแก้/ลบต้องกดเหมือนกันหมด */}
+              <span className="flex w-[4.25rem] shrink-0 items-center justify-end">
+                <button onClick={() => openEdit(et)} title={T.edit} aria-label={T.edit}
+                  className="grid size-8 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
+                  <Pencil size={15} />
+                </button>
+                <button onClick={() => setDeleteTarget(et)} title={T.delete} aria-label={T.delete}
+                  className="ms-1 grid size-8 place-items-center rounded-control text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong">
+                  <Trash2 size={15} />
+                </button>
+              </span>
+            </div>
+          ))}
         </div>
       )}
 

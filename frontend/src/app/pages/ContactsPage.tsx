@@ -318,281 +318,284 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           เป็นรูปแบบเดียวกับตารางคิว ตารางประวัติ และรายการอุปกรณ์บนหน้าภาพรวม
           หน้านี้เคยเป็นหน้าเดียวในเว็บที่เนื้อหาลอยอยู่บนพื้นหลังโดยไม่มีกรอบ
           จึงดูเหมือนคนละเว็บกับหน้าอื่นทั้งที่ใช้สีชุดเดียวกัน */}
-      <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
-        {visible.length === 0 ? (
-          <p className="px-4 py-10 text-center text-caption text-ink-2">{T.contacts_search_none}</p>
-        ) : null}
+      {/* ไม่มีกลุ่มเลย = ไม่ต้องวาดกรอบเปล่าค้างไว้ใต้ empty state */}
+      {groups.length > 0 ? (
+        <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+          {visible.length === 0 ? (
+            <p className="px-4 py-10 text-center text-caption text-ink-2">{T.contacts_search_none}</p>
+          ) : null}
 
-        {visible.map((g) => {
-          const phones = contactsByGroup[g.id] || [];
-          const pending = pendingDelete === g.id;
-          const renaming = editingGroup === g.id;
-          /* ตอนค้นเจอคนในกลุ่ม ให้กางกลุ่มนั้นเองโดยไม่ต้องกด — คนค้นชื่อคนอยากเห็นคนนั้น
-             ไม่ใช่แค่ชื่อกลุ่มที่เขาอยู่ คิดเป็นค่าจาก q ตรงนี้แทนที่จะไปแก้ state expanded
-             เพราะถ้าไปเขียน state ทับ พอลบคำค้นออกกลุ่มจะค้างกางอยู่ทั้งที่ผู้ใช้ไม่ได้กดเอง */
-          const open = expanded[g.id] || (q !== '' && hitsIn(g.id));
-          return (
-            <div key={g.id} className="min-w-0 border-b border-line-2 last:border-b-0">
-              {/* ทั้งแถวกดกางได้ ไม่ใช่เฉพาะช่วงชื่อกับลูกศร (ตามไฟล์ดีไซน์)
-                  ของเดิมพื้นที่ว่างกลางแถวกดไม่ติด ทั้งที่ตาเห็นเป็นแถบเดียวกันหมด
-                  กดแล้วไม่มีอะไรเกิดขึ้นอ่านได้ว่าเว็บค้าง มากกว่าจะเดาว่ากดผิดที่
+          {visible.map((g) => {
+            const phones = contactsByGroup[g.id] || [];
+            const pending = pendingDelete === g.id;
+            const renaming = editingGroup === g.id;
+            /* ตอนค้นเจอคนในกลุ่ม ให้กางกลุ่มนั้นเองโดยไม่ต้องกด — คนค้นชื่อคนอยากเห็นคนนั้น
+               ไม่ใช่แค่ชื่อกลุ่มที่เขาอยู่ คิดเป็นค่าจาก q ตรงนี้แทนที่จะไปแก้ state expanded
+               เพราะถ้าไปเขียน state ทับ พอลบคำค้นออกกลุ่มจะค้างกางอยู่ทั้งที่ผู้ใช้ไม่ได้กดเอง */
+            const open = expanded[g.id] || (q !== '' && hitsIn(g.id));
+            return (
+              <div key={g.id} className="min-w-0 border-b border-line-2 last:border-b-0">
+                {/* ทั้งแถวกดกางได้ ไม่ใช่เฉพาะช่วงชื่อกับลูกศร (ตามไฟล์ดีไซน์)
+                    ของเดิมพื้นที่ว่างกลางแถวกดไม่ติด ทั้งที่ตาเห็นเป็นแถบเดียวกันหมด
+                    กดแล้วไม่มีอะไรเกิดขึ้นอ่านได้ว่าเว็บค้าง มากกว่าจะเดาว่ากดผิดที่
 
-                  ปุ่มข้างในต้อง stopPropagation ไม่งั้นกดแก้ชื่อแล้วแถวกางออกมาด้วย */
-              }
-              <div
-                role={renaming ? undefined : 'button'}
-                tabIndex={renaming ? undefined : 0}
-                onClick={renaming ? undefined : () => toggleExpand(g.id)}
-                onKeyDown={
-                  renaming
-                    ? undefined
-                    : (e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggleExpand(g.id);
-                        }
-                      }
+                    ปุ่มข้างในต้อง stopPropagation ไม่งั้นกดแก้ชื่อแล้วแถวกางออกมาด้วย */
                 }
-                className={cn(
-                  'flex w-full items-center gap-2.5 px-4 py-3.5',
-                  !renaming && 'cursor-pointer transition-colors hover:bg-surface-2',
-                )}
-              >
-                {renaming ? (
-                  <>
-                    <input
-                      className={cn(inputCls, 'min-w-0 flex-1 py-1.5 text-caption')}
-                      value={groupDraft}
-                      onChange={(e) => setGroupDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveGroupName(g.id);
-                        if (e.key === 'Escape') setEditingGroup(null);
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={() => saveGroupName(g.id)}
-                      disabled={!groupDraft.trim()}
-                      className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
-                      aria-label={T.save}
-                    >
-                      <Check size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingGroup(null)}
-                      className="shrink-0 rounded-control px-1.5 py-1 text-ink-2"
-                      aria-label={T.cancel}
-                    >
-                      <X size={15} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex min-w-0 flex-1 items-center gap-2.5 text-start">
-                      <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft">
-                        <Users size={15} className="text-brand-strong" strokeWidth={1.8} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-caption font-semibold">{g.name}</span>
-                        <span className="block truncate text-micro text-ink-2">
-                          <span className="font-mono">{T.phones_count(g.contact_count)}</span>
-                          {memberPreview(contactsByGroup[g.id]) ? ` · ${memberPreview(contactsByGroup[g.id])}` : ''}
+                <div
+                  role={renaming ? undefined : 'button'}
+                  tabIndex={renaming ? undefined : 0}
+                  onClick={renaming ? undefined : () => toggleExpand(g.id)}
+                  onKeyDown={
+                    renaming
+                      ? undefined
+                      : (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleExpand(g.id);
+                          }
+                        }
+                  }
+                  className={cn(
+                    'flex w-full items-center gap-2.5 px-4 py-3.5',
+                    !renaming && 'cursor-pointer transition-colors hover:bg-surface-2',
+                  )}
+                >
+                  {renaming ? (
+                    <>
+                      <input
+                        className={cn(inputCls, 'min-w-0 flex-1 py-1.5 text-caption')}
+                        value={groupDraft}
+                        onChange={(e) => setGroupDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveGroupName(g.id);
+                          if (e.key === 'Escape') setEditingGroup(null);
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveGroupName(g.id)}
+                        disabled={!groupDraft.trim()}
+                        className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
+                        aria-label={T.save}
+                      >
+                        <Check size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingGroup(null)}
+                        className="shrink-0 rounded-control px-1.5 py-1 text-ink-2"
+                        aria-label={T.cancel}
+                      >
+                        <X size={15} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex min-w-0 flex-1 items-center gap-2.5 text-start">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft">
+                          <Users size={15} className="text-brand-strong" strokeWidth={1.8} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-caption font-semibold">{g.name}</span>
+                          <span className="block truncate text-micro text-ink-2">
+                            <span className="font-mono">{T.phones_count(g.contact_count)}</span>
+                            {memberPreview(contactsByGroup[g.id]) ? ` · ${memberPreview(contactsByGroup[g.id])}` : ''}
+                          </span>
                         </span>
                       </span>
-                    </span>
 
-                    {/* ปุ่มไอคอนขนาด 32px ไม่ใช่ ~24px แบบเดิม และเว้นช่องก่อนปุ่มลบ
-                        ของเดิมดินสอกับถังขยะติดกันเกือบชิด ทั้งคู่เล็กและไม่มีข้อความกำกับ
-                        พลาดไปหนึ่งช่องคือลบทั้งกลุ่ม (มียืนยันสองจังหวะก็จริง แต่การกดพลาด
-                        ไม่ควรเริ่มต้นที่ปุ่มทำลายตั้งแต่แรก) */}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setEditingGroup(g.id); setGroupDraft(g.name); }}
-                      className="grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
-                      aria-label={T.edit_group_name}
-                      title={T.edit_group_name}
-                    >
-                      <Pencil size={15} />
-                    </button>
+                      {/* ปุ่มไอคอนขนาด 32px ไม่ใช่ ~24px แบบเดิม และเว้นช่องก่อนปุ่มลบ
+                          ของเดิมดินสอกับถังขยะติดกันเกือบชิด ทั้งคู่เล็กและไม่มีข้อความกำกับ
+                          พลาดไปหนึ่งช่องคือลบทั้งกลุ่ม (มียืนยันสองจังหวะก็จริง แต่การกดพลาด
+                          ไม่ควรเริ่มต้นที่ปุ่มทำลายตั้งแต่แรก) */}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setEditingGroup(g.id); setGroupDraft(g.name); }}
+                        className="grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                        aria-label={T.edit_group_name}
+                        title={T.edit_group_name}
+                      >
+                        <Pencil size={15} />
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); pending ? removeGroup(g.id) : setPendingDelete(g.id); }}
-                      title={T.device_remove}
-                      className={cn(
-                        'ms-1 shrink-0 rounded-control text-micro transition-colors',
-                        pending
-                          ? 'bg-bad-strong px-2.5 py-1.5 text-status-ink'
-                          : 'grid size-8 place-items-center text-ink-2 hover:bg-bad-soft hover:text-bad-strong',
-                      )}
-                    >
-                      {pending ? T.device_remove_confirm : <Trash2 size={15} />}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); pending ? removeGroup(g.id) : setPendingDelete(g.id); }}
+                        title={T.device_remove}
+                        className={cn(
+                          'ms-1 shrink-0 rounded-control text-micro transition-colors',
+                          pending
+                            ? 'bg-bad-strong px-2.5 py-1.5 text-status-ink'
+                            : 'grid size-8 place-items-center text-ink-2 hover:bg-bad-soft hover:text-bad-strong',
+                        )}
+                      >
+                        {pending ? T.device_remove_confirm : <Trash2 size={15} />}
+                      </button>
 
-                    {/* ลูกศรเป็นแค่สัญลักษณ์บอกว่ากางได้ — ทั้งแถวรับคลิกอยู่แล้ว
-                        จึงไม่ต้องเป็นปุ่มซ้อนปุ่ม (และไม่ต้องมี tab stop ของตัวเอง) */}
-                    <span
-                      aria-hidden="true"
-                      className="grid size-8 shrink-0 place-items-center text-ink-2"
-                    >
-                      {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </span>
-                  </>
-                )}
-              </div>
-
-              {open ? (
-                <div className="border-t border-line">
-                  {phones.length === 0 ? (
-                    <p className="px-4 py-4 text-caption text-ink-2">{T.no_phones}</p>
-                  ) : null}
-
-                  {/* ไม่กรองแถวเบอร์ทิ้งตอนค้น — เลขลำดับคือลำดับไล่โทรจริง ถ้าซ่อนบางแถว
-                      เลขที่เห็นจะไม่ตรงกับที่ระบบใช้ และคนที่ค้นเจอ "ช่างต้น" มักอยากรู้ด้วยว่า
-                      เขาอยู่ลำดับที่เท่าไหร่ ใครโทรก่อน ใครโทรต่อ — เลยแค่ทำแถวที่ตรงให้เด่นขึ้น */}
-                  {phones.map((c, idx) => (
-                    <div
-                      key={c.id}
-                      className={cn(
-                        'flex items-center gap-2.5 border-b border-line-2 px-4 py-2.5 last:border-b-0',
-                        q !== '' && contactMatches(c, q, qDigits) && 'bg-brand-soft',
-                      )}
-                    >
-                      {editingContact === c.id ? (
-                        <>
-                          {/* ลำดับไม่เปลี่ยนตอนแก้ — แก้เบอร์ผิดแล้วต้องอยู่ตำแหน่งเดิมในสายไล่โทร */}
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-micro font-bold">
-                            {idx + 1}
-                          </span>
-                          <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-                            <input
-                              className={cn(inputCls, 'min-w-0 flex-1 basis-[8.125rem] py-1.5 font-mono text-caption')}
-                              value={contactDraft.phone}
-                              onChange={(e) => setContactDraft((d) => ({ ...d, phone: e.target.value }))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveContact(g.id, c.id);
-                                if (e.key === 'Escape') setEditingContact(null);
-                              }}
-                              placeholder={T.phone_ph}
-                              autoFocus
-                            />
-                            <input
-                              className={cn(inputCls, 'min-w-0 flex-1 basis-[6.25rem] py-1.5 text-caption')}
-                              value={contactDraft.name}
-                              onChange={(e) => setContactDraft((d) => ({ ...d, name: e.target.value }))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveContact(g.id, c.id);
-                                if (e.key === 'Escape') setEditingContact(null);
-                              }}
-                              placeholder={T.contact_name_ph}
-                            />
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => saveContact(g.id, c.id)}
-                            disabled={!contactDraft.phone.trim()}
-                            className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
-                            aria-label={T.save}
-                          >
-                            <Check size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingContact(null)}
-                            className="shrink-0 rounded-control px-1.5 py-1 text-ink-2"
-                            aria-label={T.cancel}
-                          >
-                            <X size={15} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="flex shrink-0 flex-col gap-0.5">
-                            <button
-                              type="button"
-                              onClick={() => movePhone(g.id, idx, -1)}
-                              disabled={idx === 0}
-                              className="grid size-5 place-items-center text-ink-2 hover:text-ink disabled:opacity-20"
-                              aria-label={T.move_up}
-                            >
-                              <ArrowUp size={12} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => movePhone(g.id, idx, 1)}
-                              disabled={idx === phones.length - 1}
-                              className="grid size-5 place-items-center text-ink-2 hover:text-ink disabled:opacity-20"
-                              aria-label={T.move_down}
-                            >
-                              <ArrowDown size={12} />
-                            </button>
-                          </span>
-
-                          {/* ลำดับนี้คือลำดับที่ระบบจะไล่โทรจริง เน้นให้เห็นชัด */}
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-micro font-bold">
-                            {idx + 1}
-                          </span>
-
-                          <span className="min-w-0 flex-1 truncate font-mono text-caption">
-                            {c.phone_number}
-                            {c.name ? <span className="font-sans text-ink-2"> · {c.name}</span> : null}
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={() => startEditContact(c)}
-                            className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-ink"
-                            aria-label={T.edit}
-                            title={T.edit}
-                          >
-                            <Pencil size={13} />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => removePhone(g.id, c.id)}
-                            className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-bad-strong"
-                            aria-label={T.delete}
-                            title={T.delete}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ))}
-
-                  <div className="flex flex-wrap gap-2 bg-surface-2 px-4 py-3">
-                    <input
-                      className={cn(inputCls, 'min-w-0 flex-1 basis-[8.125rem] bg-surface font-mono')}
-                      value={adding[g.id]?.phone ?? ''}
-                      onChange={(e) =>
-                        setAdding((a) => ({ ...a, [g.id]: { ...(a[g.id] ?? EMPTY_DRAFT), phone: e.target.value } }))
-                      }
-                      onKeyDown={(e) => e.key === 'Enter' && addPhone(g.id)}
-                      placeholder={T.phone_ph}
-                    />
-                    <input
-                      className={cn(inputCls, 'min-w-0 flex-1 basis-[6.25rem] bg-surface')}
-                      value={adding[g.id]?.name ?? ''}
-                      onChange={(e) =>
-                        setAdding((a) => ({ ...a, [g.id]: { ...(a[g.id] ?? EMPTY_DRAFT), name: e.target.value } }))
-                      }
-                      onKeyDown={(e) => e.key === 'Enter' && addPhone(g.id)}
-                      placeholder={T.contact_name_ph}
-                    />
-                    <Btn onClick={() => addPhone(g.id)} disabled={!(adding[g.id]?.phone ?? '').trim()}>
-                      <Plus size={15} />
-                    </Btn>
-                  </div>
+                      {/* ลูกศรเป็นแค่สัญลักษณ์บอกว่ากางได้ — ทั้งแถวรับคลิกอยู่แล้ว
+                          จึงไม่ต้องเป็นปุ่มซ้อนปุ่ม (และไม่ต้องมี tab stop ของตัวเอง) */}
+                      <span
+                        aria-hidden="true"
+                        className="grid size-8 shrink-0 place-items-center text-ink-2"
+                      >
+                        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </span>
+                    </>
+                  )}
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+
+                {open ? (
+                  <div className="border-t border-line">
+                    {phones.length === 0 ? (
+                      <p className="px-4 py-4 text-caption text-ink-2">{T.no_phones}</p>
+                    ) : null}
+
+                    {/* ไม่กรองแถวเบอร์ทิ้งตอนค้น — เลขลำดับคือลำดับไล่โทรจริง ถ้าซ่อนบางแถว
+                        เลขที่เห็นจะไม่ตรงกับที่ระบบใช้ และคนที่ค้นเจอ "ช่างต้น" มักอยากรู้ด้วยว่า
+                        เขาอยู่ลำดับที่เท่าไหร่ ใครโทรก่อน ใครโทรต่อ — เลยแค่ทำแถวที่ตรงให้เด่นขึ้น */}
+                    {phones.map((c, idx) => (
+                      <div
+                        key={c.id}
+                        className={cn(
+                          'flex items-center gap-2.5 border-b border-line-2 px-4 py-2.5 last:border-b-0',
+                          q !== '' && contactMatches(c, q, qDigits) && 'bg-brand-soft',
+                        )}
+                      >
+                        {editingContact === c.id ? (
+                          <>
+                            {/* ลำดับไม่เปลี่ยนตอนแก้ — แก้เบอร์ผิดแล้วต้องอยู่ตำแหน่งเดิมในสายไล่โทร */}
+                            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-micro font-bold">
+                              {idx + 1}
+                            </span>
+                            <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                              <input
+                                className={cn(inputCls, 'min-w-0 flex-1 basis-[8.125rem] py-1.5 font-mono text-caption')}
+                                value={contactDraft.phone}
+                                onChange={(e) => setContactDraft((d) => ({ ...d, phone: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveContact(g.id, c.id);
+                                  if (e.key === 'Escape') setEditingContact(null);
+                                }}
+                                placeholder={T.phone_ph}
+                                autoFocus
+                              />
+                              <input
+                                className={cn(inputCls, 'min-w-0 flex-1 basis-[6.25rem] py-1.5 text-caption')}
+                                value={contactDraft.name}
+                                onChange={(e) => setContactDraft((d) => ({ ...d, name: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveContact(g.id, c.id);
+                                  if (e.key === 'Escape') setEditingContact(null);
+                                }}
+                                placeholder={T.contact_name_ph}
+                              />
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => saveContact(g.id, c.id)}
+                              disabled={!contactDraft.phone.trim()}
+                              className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
+                              aria-label={T.save}
+                            >
+                              <Check size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingContact(null)}
+                              className="shrink-0 rounded-control px-1.5 py-1 text-ink-2"
+                              aria-label={T.cancel}
+                            >
+                              <X size={15} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex shrink-0 flex-col gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => movePhone(g.id, idx, -1)}
+                                disabled={idx === 0}
+                                className="grid size-5 place-items-center text-ink-2 hover:text-ink disabled:opacity-20"
+                                aria-label={T.move_up}
+                              >
+                                <ArrowUp size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => movePhone(g.id, idx, 1)}
+                                disabled={idx === phones.length - 1}
+                                className="grid size-5 place-items-center text-ink-2 hover:text-ink disabled:opacity-20"
+                                aria-label={T.move_down}
+                              >
+                                <ArrowDown size={12} />
+                              </button>
+                            </span>
+
+                            {/* ลำดับนี้คือลำดับที่ระบบจะไล่โทรจริง เน้นให้เห็นชัด */}
+                            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-micro font-bold">
+                              {idx + 1}
+                            </span>
+
+                            <span className="min-w-0 flex-1 truncate font-mono text-caption">
+                              {c.phone_number}
+                              {c.name ? <span className="font-sans text-ink-2"> · {c.name}</span> : null}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => startEditContact(c)}
+                              className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-ink"
+                              aria-label={T.edit}
+                              title={T.edit}
+                            >
+                              <Pencil size={13} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => removePhone(g.id, c.id)}
+                              className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-bad-strong"
+                              aria-label={T.delete}
+                              title={T.delete}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+
+                    <div className="flex flex-wrap gap-2 bg-surface-2 px-4 py-3">
+                      <input
+                        className={cn(inputCls, 'min-w-0 flex-1 basis-[8.125rem] bg-surface font-mono')}
+                        value={adding[g.id]?.phone ?? ''}
+                        onChange={(e) =>
+                          setAdding((a) => ({ ...a, [g.id]: { ...(a[g.id] ?? EMPTY_DRAFT), phone: e.target.value } }))
+                        }
+                        onKeyDown={(e) => e.key === 'Enter' && addPhone(g.id)}
+                        placeholder={T.phone_ph}
+                      />
+                      <input
+                        className={cn(inputCls, 'min-w-0 flex-1 basis-[6.25rem] bg-surface')}
+                        value={adding[g.id]?.name ?? ''}
+                        onChange={(e) =>
+                          setAdding((a) => ({ ...a, [g.id]: { ...(a[g.id] ?? EMPTY_DRAFT), name: e.target.value } }))
+                        }
+                        onKeyDown={(e) => e.key === 'Enter' && addPhone(g.id)}
+                        placeholder={T.contact_name_ph}
+                      />
+                      <Btn onClick={() => addPhone(g.id)} disabled={!(adding[g.id]?.phone ?? '').trim()}>
+                        <Plus size={15} />
+                      </Btn>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {/* ── ป๊อปอัพสร้างกลุ่ม ───────────────────────────────────────────────
           เดิมเป็นการ์ดที่แทรกกลางหน้า ซึ่งดันรายการกลุ่มทั้งก้อนเลื่อนลงตอนกดเพิ่ม
