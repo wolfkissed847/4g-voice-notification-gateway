@@ -467,7 +467,9 @@ function DeviceDialog({
       <DialogContent
         className={cn(
           // ต้องกำหนด sm:max-w ด้วย ไม่งั้น sm:max-w-lg (512px) ของ DialogContent กลางยังชนะบนจอกว้าง
-          'max-h-[85vh] max-w-[30rem] gap-4 overflow-y-auto sm:max-w-[30rem]',
+          // และต้องกว้างเฉพาะ sm: ขึ้นไป — เขียน max-w-[30rem] ไว้ตัวเดียว tailwind-merge
+          // จะลบ calc(100%-2rem) ของเดิมทิ้ง แล้วบนมือถือกล่องจะกว้างเต็มจอชนขอบพอดี
+          'max-h-[85vh] max-w-[calc(100%-2rem)] gap-4 overflow-y-auto sm:max-w-[30rem]',
           // [&>*]:min-w-0: DialogContent เป็น grid ซึ่งลูกทุกตัวมี min-width:auto = ย่อเล็กกว่า
           // เนื้อหาไม่ได้ พอมี key ยาวๆ ที่ตัดบรรทัดไม่ได้อยู่ข้างใน มันจะดันทั้งกล่องจนล้นขอบ
           '[&>*]:min-w-0',

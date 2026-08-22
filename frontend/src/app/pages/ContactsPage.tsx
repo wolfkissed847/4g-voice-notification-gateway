@@ -19,7 +19,7 @@
  */
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { ApiError } from '../api/client';
@@ -27,7 +27,10 @@ import {
   createContact, createGroup, deleteContact, deleteGroup, listContacts, listGroups,
   reorderContacts, updateContact, updateGroup,
 } from '../api/groups';
-import { Btn, Card, PageHeader, inputCls } from '../components/primitives';
+import { Btn, PageHeader, inputCls } from '../components/primitives';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '../components/ui/dialog';
 import { useApp } from '../context/AppContext';
 import { SNAP, readSnapshot, writeSnapshot } from '../lib/snapshot';
 import type { Contact, Group } from '../types';
@@ -51,6 +54,18 @@ function memberPreview(contacts: Contact[] | undefined): string {
   return rest > 0 ? `${shown.join(', ')} +${rest}` : shown.join(', ');
 }
 
+/** ตัดทุกอย่างที่ไม่ใช่ตัวเลขทิ้ง — คนพิมพ์ค้นเป็น "081-234" หรือ "081 234 5678" ก็ต้องเจอ
+ *  เบอร์ที่เก็บไว้เป็น 0812345678 ไม่งั้นค้นด้วยเบอร์แทบไม่มีวันตรง */
+const digitsOf = (s: string) => s.replace(/\D/g, '');
+
+/** เบอร์นี้ตรงคำค้นไหม — ดูทั้งชื่อคนและตัวเลข
+ *  ตัวเลขเทียบเฉพาะตอนที่คำค้นมีตัวเลขอยู่จริง ไม่งั้นค้นคำว่า "ช่าง" (digits = "")
+ *  จะกลายเป็น "".includes("") = true คือตรงกับทุกเบอร์ในระบบ */
+function contactMatches(c: Contact, q: string, digits: string): boolean {
+  if ((c.name ?? '').toLowerCase().includes(q)) return true;
+  return digits.length > 0 && digitsOf(c.phone_number).includes(digits);
+}
+
 /** ข้อมูลที่ฝากไว้ให้รอบหน้าหยิบไปวาดทันที (ดู lib/snapshot.ts) */
 type ContactsSnap = { groups: Group[]; contactsByGroup: Record<number, Contact[]> };
 
@@ -64,6 +79,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [adding, setAdding] = useState<Record<number, DraftContact>>({});
   const [newName, setNewName] = useState('');
   const [showNew, setShowNew] = useState(false);
+  const [query, setQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   // มีของเก่าอยู่แล้ว = ไม่ต้องขึ้น "กำลังโหลด" ให้วาดของเก่าไปก่อนแล้วโหลดทับเงียบๆ
   const [loading, setLoading] = useState(!cached);
@@ -222,8 +238,24 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
     return <p className="text-caption text-ink-2">{T.loading}</p>;
   }
 
+  /* คำค้นเดียวหาได้ทั้งสามอย่าง — ชื่อกลุ่ม ชื่อคน และเบอร์
+     เพราะคนเปิดหน้านี้รู้อยู่แค่อย่างเดียวในสามอย่างนั้น ("เบอร์ 081... อยู่กลุ่มไหน"
+     หรือ "ช่างต้นอยู่กลุ่มไหน") แล้วอยากได้อีกสองอย่างที่เหลือ
+     ถ้าแยกเป็นช่องค้นตามประเภท คนต้องรู้ก่อนว่าสิ่งที่ตัวเองถืออยู่เรียกว่าอะไร */
+  const q = query.trim().toLowerCase();
+  const qDigits = digitsOf(q);
+  const hitsIn = (groupId: number) =>
+    (contactsByGroup[groupId] ?? []).some((c) => contactMatches(c, q, qDigits));
+  const visible = q
+    ? groups.filter((g) => g.name.toLowerCase().includes(q) || hitsIn(g.id))
+    : groups;
+
   return (
-    <div className="flex flex-col gap-3.5">
+    /* flex-1 + min-h-0: ขอพื้นที่ที่เหลือจาก SetupPage มาให้กล่องรายชื่อเลื่อนในตัวเอง
+       เหมือนหน้าคิวกับหน้าประวัติ ไม่งั้นหน้าจะยาวลงไปเรื่อยๆ ตามจำนวนกลุ่ม
+       ความสูงที่แน่นอนมาจาก SetupPage (h-full เฉพาะตอนอยู่แท็บนี้) — ที่นี่ต้องไม่เขียน
+       h-full ซ้ำ เพราะจะกลายเป็น 100% ของทั้งหน้า ซึ่งมากกว่าที่เหลือจริงหลังหักหัวเรื่องกับแท็บ */
+    <div className="flex min-h-0 flex-1 flex-col gap-3.5">
       {embedded ? (
         <div className="flex flex-wrap items-center gap-3">
           <p className="font-mono text-caption text-ink-2">{T.contacts_sub}</p>
@@ -247,29 +279,31 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
         />
       )}
 
-      {showNew ? (
-        <Card className="flex max-w-2xl flex-col gap-3 border-brand-strong p-4">
-          <p className="text-caption font-semibold">{T.new_group}</p>
-          <div className="flex flex-wrap gap-2">
-            <input
-              className={cn(inputCls, 'min-w-0 flex-1 basis-[11.25rem]')}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addGroup()}
-              placeholder={T.new_group_ph}
-              autoFocus
+      {/* ช่องค้นหาโผล่เมื่อมีกลุ่มแล้วเท่านั้น — หน้าเปล่าไม่มีอะไรให้ค้น */}
+      {groups.length > 0 ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+          <span className="relative min-w-0 flex-1 basis-[15rem] sm:max-w-[24rem]">
+            <Search
+              size={15}
+              aria-hidden
+              className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-ink-2"
             />
-            <Btn variant="primary" onClick={addGroup} disabled={!newName.trim()}>
-              {T.create}
-            </Btn>
-            <Btn onClick={() => setShowNew(false)} aria-label={T.cancel}>
-              <X size={15} />
-            </Btn>
-          </div>
-        </Card>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={T.contacts_search}
+              aria-label={T.contacts_search}
+              className={cn(inputCls, 'w-full ps-9')}
+            />
+          </span>
+          {q ? (
+            <span className="font-mono text-micro text-ink-2">{T.contacts_search_found(visible.length)}</span>
+          ) : null}
+        </div>
       ) : null}
 
-      {groups.length === 0 && !showNew ? (
+      {groups.length === 0 ? (
         <div className="flex flex-col items-center gap-2.5 rounded-card border border-dashed border-line px-4 py-7 text-center">
           <p className="text-lead font-semibold">{T.contacts_title}</p>
           <p className="text-caption text-ink-2">{T.contacts_sub}</p>
@@ -284,11 +318,19 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           เป็นรูปแบบเดียวกับตารางคิว ตารางประวัติ และรายการอุปกรณ์บนหน้าภาพรวม
           หน้านี้เคยเป็นหน้าเดียวในเว็บที่เนื้อหาลอยอยู่บนพื้นหลังโดยไม่มีกรอบ
           จึงดูเหมือนคนละเว็บกับหน้าอื่นทั้งที่ใช้สีชุดเดียวกัน */}
-      <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-        {groups.map((g) => {
+      <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+        {visible.length === 0 ? (
+          <p className="px-4 py-10 text-center text-caption text-ink-2">{T.contacts_search_none}</p>
+        ) : null}
+
+        {visible.map((g) => {
           const phones = contactsByGroup[g.id] || [];
           const pending = pendingDelete === g.id;
           const renaming = editingGroup === g.id;
+          /* ตอนค้นเจอคนในกลุ่ม ให้กางกลุ่มนั้นเองโดยไม่ต้องกด — คนค้นชื่อคนอยากเห็นคนนั้น
+             ไม่ใช่แค่ชื่อกลุ่มที่เขาอยู่ คิดเป็นค่าจาก q ตรงนี้แทนที่จะไปแก้ state expanded
+             เพราะถ้าไปเขียน state ทับ พอลบคำค้นออกกลุ่มจะค้างกางอยู่ทั้งที่ผู้ใช้ไม่ได้กดเอง */
+          const open = expanded[g.id] || (q !== '' && hitsIn(g.id));
           return (
             <div key={g.id} className="min-w-0 border-b border-line-2 last:border-b-0">
               {/* ทั้งแถวกดกางได้ ไม่ใช่เฉพาะช่วงชื่อกับลูกศร (ตามไฟล์ดีไซน์)
@@ -395,22 +437,28 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                       aria-hidden="true"
                       className="grid size-8 shrink-0 place-items-center text-ink-2"
                     >
-                      {expanded[g.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </span>
                   </>
                 )}
               </div>
 
-              {expanded[g.id] ? (
+              {open ? (
                 <div className="border-t border-line">
                   {phones.length === 0 ? (
                     <p className="px-4 py-4 text-caption text-ink-2">{T.no_phones}</p>
                   ) : null}
 
+                  {/* ไม่กรองแถวเบอร์ทิ้งตอนค้น — เลขลำดับคือลำดับไล่โทรจริง ถ้าซ่อนบางแถว
+                      เลขที่เห็นจะไม่ตรงกับที่ระบบใช้ และคนที่ค้นเจอ "ช่างต้น" มักอยากรู้ด้วยว่า
+                      เขาอยู่ลำดับที่เท่าไหร่ ใครโทรก่อน ใครโทรต่อ — เลยแค่ทำแถวที่ตรงให้เด่นขึ้น */}
                   {phones.map((c, idx) => (
                     <div
                       key={c.id}
-                      className="flex items-center gap-2.5 border-b border-line-2 px-4 py-2.5 last:border-b-0"
+                      className={cn(
+                        'flex items-center gap-2.5 border-b border-line-2 px-4 py-2.5 last:border-b-0',
+                        q !== '' && contactMatches(c, q, qDigits) && 'bg-brand-soft',
+                      )}
                     >
                       {editingContact === c.id ? (
                         <>
@@ -545,6 +593,62 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           );
         })}
       </div>
+
+      {/* ── ป๊อปอัพสร้างกลุ่ม ───────────────────────────────────────────────
+          เดิมเป็นการ์ดที่แทรกกลางหน้า ซึ่งดันรายการกลุ่มทั้งก้อนเลื่อนลงตอนกดเพิ่ม
+          ตำแหน่งที่ตาจ้องอยู่จึงขยับหนีทุกครั้ง และการ์ดนั้นก็ไม่มีที่ให้อธิบายว่า
+          "ชื่อกลุ่มนี้จะไปโผล่ที่ไหน" ทั้งที่เป็นสิ่งเดียวที่ต้องตัดสินใจตอนสร้าง
+
+          ใช้ <Dialog> ของ Radix ด้วยเหตุผลเดียวกับหน้าอุปกรณ์: AppShell ห่อทุกหน้าไว้ด้วย
+          div ที่มี transform ซึ่งกลายเป็น containing block ของ position:fixed
+          กล่องที่เขียน fixed เองจึงไปอิงขอบ <main> แทนขอบจอ */}
+      <Dialog
+        open={showNew}
+        onOpenChange={(next) => {
+          setShowNew(next);
+          if (!next) setNewName('');
+        }}
+      >
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-[28rem]">
+          <DialogHeader className="gap-3 text-start">
+            <div className="flex flex-row items-center gap-3 pe-6">
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-strong">
+                <Users size={20} strokeWidth={1.8} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <DialogTitle className="text-lead font-bold">{T.new_group}</DialogTitle>
+                <DialogDescription className="text-micro leading-[1.6] text-ink-2">
+                  {T.contacts_sub}
+                </DialogDescription>
+              </span>
+            </div>
+          </DialogHeader>
+
+          <div>
+            <label className="text-caption text-ink-2 mb-1.5 block" htmlFor="new-group-name">
+              {T.group_name_label}
+            </label>
+            <input
+              id="new-group-name"
+              className={cn(inputCls, 'w-full')}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addGroup()}
+              placeholder={T.new_group_ph}
+              autoFocus
+            />
+            <p className="text-micro mt-1.5 leading-[1.7] text-ink-2">{T.new_group_hint}</p>
+          </div>
+
+          <DialogFooter>
+            <Btn onClick={() => setShowNew(false)}>{T.cancel}</Btn>
+            <Btn variant="primary" onClick={addGroup} disabled={!newName.trim()}>
+              <Plus size={15} />
+              {T.create}
+            </Btn>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

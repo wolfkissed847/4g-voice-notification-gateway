@@ -305,40 +305,55 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
 
       {/* Create/edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        {/* max-h + scroll: กล่องนี้ยาวขึ้นหลังใส่ตัวช่วยเรื่องตัวแปร ถ้าไม่จำกัดความสูง
-            บนจอเตี้ยปุ่มบันทึกจะหลุดออกนอกจอโดยที่เลื่อนลงไปกดไม่ได้
+        {/* ── วางสองคอลัมน์ ────────────────────────────────────────────────
+            ซ้าย = "เหตุการณ์นี้คืออะไร" (รหัส + ชื่อ + เปิด/ปิด) สั้นและกรอกครั้งเดียวจบ
+            ขวา = "ให้พูดว่าอะไร" (ข้อความ + ตัวช่วยเรื่องตัวแปร) ยาวและแก้บ่อยที่สุด
+            เรียงลงมาแนวตั้งหมดแล้วกล่องสูงจนต้องเลื่อน ทั้งที่ของฝั่งซ้ายเตี้ยมาก
+            ที่ว่างข้างๆ เลยถูกทิ้งเปล่า และตัวช่วยกับช่องข้อความไม่ได้อยู่ในสายตาพร้อมกัน
+
+            max-h + scroll ยังต้องมีไว้เผื่อจอเตี้ยจริงๆ ไม่งั้นปุ่มบันทึกหลุดออกนอกจอ
+            กว้างเฉพาะ sm: ขึ้นไป — ต่ำกว่านั้นปล่อยเป็น calc(100%-2rem) ตามค่าเดิมของ DialogContent
+            ถ้าเขียน max-w-[46rem] ไว้ตัวเดียว tailwind-merge จะลบ calc ของเดิมทิ้ง แล้วบนมือถือ
+            กล่องจะกว้างเต็มจอชนขอบซ้ายขวาพอดี ไม่เหลือระยะขอบเลย
             [&>*]:min-w-0 — DialogContent เป็น grid ลูกทุกตัวย่อเล็กกว่าเนื้อหาไม่ได้
             ตัวอย่าง JSON ที่บรรทัดยาวจึงดันทั้งกล่องจนล้นขอบถ้าไม่ปลดตรงนี้ */}
-        <DialogContent className="max-h-[85vh] overflow-y-auto [&>*]:min-w-0">
+        <DialogContent className="max-h-[85vh] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-[46rem] [&>*]:min-w-0">
           <DialogHeader>
             <DialogTitle>{form.id ? T.edit_event_type : T.new_event_type}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            {formErr && <p className="text-caption text-bad-strong">{formErr}</p>}
-            <div>
-              <label className="text-caption text-ink-2 block mb-1.5">{T.code_label}</label>
-              <input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                disabled={!!form.id} placeholder={T.code_ph} className={inputCls} />
-              <p className="text-micro text-ink-2 mt-1">{T.code_hint}</p>
+
+          {formErr && <p className="text-caption text-bad-strong">{formErr}</p>}
+
+          {/* จอแคบกว่า sm ก็ยุบกลับเป็นคอลัมน์เดียวตามเดิม สองคอลัมน์บนมือถือคือบีบทั้งคู่จนใช้ไม่ได้ */}
+          <div className="grid gap-x-5 gap-y-3.5 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+            <div className="flex min-w-0 flex-col gap-3.5">
+              <div>
+                <label className="text-caption text-ink-2 block mb-1.5">{T.code_label}</label>
+                <input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+                  disabled={!!form.id} placeholder={T.code_ph} className={inputCls} />
+                <p className="text-micro leading-[1.7] text-ink-2 mt-1">{T.code_hint}</p>
+              </div>
+              <div>
+                <label className="text-caption text-ink-2 block mb-1.5">{T.display_name_label}</label>
+                <input value={form.display_name} onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
+                  placeholder={T.display_name_ph} className={inputCls} />
+              </div>
+              {form.id && (
+                /* ใส่กรอบให้เท่ากับช่องกรอกด้านบน ไม่งั้นสวิตช์ลอยเดี่ยวๆ ในคอลัมน์ที่เหลือแต่ที่ว่าง */
+                <div className="flex items-center justify-between gap-3 rounded-control border border-line bg-surface-2 px-3 py-2.5">
+                  <label className="text-caption text-ink-2">{T.active_label}</label>
+                  <Toggle on={form.is_active} onChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
+                </div>
+              )}
             </div>
-            <div>
-              <label className="text-caption text-ink-2 block mb-1.5">{T.display_name_label}</label>
-              <input value={form.display_name} onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
-                placeholder={T.display_name_ph} className={inputCls} />
-            </div>
-            <div>
+
+            <div className="min-w-0">
               <label className="text-caption text-ink-2 block mb-1.5">{T.message_template_label}</label>
               <textarea value={form.message_template} onChange={(e) => setForm((f) => ({ ...f, message_template: e.target.value }))}
                 placeholder={T.message_template_ph} rows={3} className={inputCls} />
-              <p className="text-micro text-ink-2 mt-1">{T.message_template_hint}</p>
+              <p className="text-micro leading-[1.7] text-ink-2 mt-1">{T.message_template_hint}</p>
               <TemplateVarsHelp template={form.message_template} code={form.code} />
             </div>
-            {form.id && (
-              <div className="flex items-center justify-between">
-                <label className="text-caption text-ink-2">{T.active_label}</label>
-                <Toggle on={form.is_active} onChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
-              </div>
-            )}
           </div>
           <DialogFooter>
             <button onClick={() => setFormOpen(false)} className="px-4 py-2.5 rounded-control border border-line text-caption text-ink-2 bg-surface-2">{T.cancel}</button>
