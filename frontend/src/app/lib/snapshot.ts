@@ -31,7 +31,6 @@ export const SNAP = {
   contacts: 'contacts',
   eventTypes: 'event-types',
   devices: 'devices',
-  setupCounts: 'setup-counts',
 } as const;
 
 export function readSnapshot<T>(key: string): T | undefined {

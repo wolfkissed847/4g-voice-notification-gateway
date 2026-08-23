@@ -9,16 +9,11 @@
  * เดิมมีแถบ "ลำดับการตั้งค่า" อยู่หัวหน้า ถอดออกแล้วตามที่ผู้ใช้ขอ — แท็บทั้งสามอยู่
  * เรียงตามลำดับที่ควรทำอยู่แล้ว และแต่ละหน้าบอกเองได้ว่ายังขาดอะไร
  */
-import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router';
 
 import { cn } from '@/app/components/ui/utils';
-import { listApiKeys } from '../api/apiKeys';
-import { listEventTypes } from '../api/eventTypes';
-import { listGroups } from '../api/groups';
 import { PageHeader } from '../components/primitives';
 import { useApp } from '../context/AppContext';
-import { SNAP, readSnapshot, writeSnapshot } from '../lib/snapshot';
 import { ContactsPage } from './ContactsPage';
 import { DevicesPage } from './DevicesPage';
 import { EventTypesPage } from './EventTypesPage';
@@ -29,37 +24,6 @@ export function SetupPage() {
   const { T } = useApp();
   const location = useLocation();
 
-  /* จำนวนของแต่ละแท็บ — เดิมแท็บบอกแค่ชื่อ ต้องกดเข้าไปทีละแท็บถึงจะรู้ว่าตั้งค่าอะไรไปแล้วบ้าง
-     ซึ่งเป็นคำถามแรกของคนที่เปิดหน้านี้ ("ยังไม่ได้เพิ่มอุปกรณ์เลยหรือเพิ่มไปแล้ว")
-     ตัวเลขบนแท็บตอบให้ตั้งแต่ยังไม่กด และเห็นทันทีว่าแท็บไหนยังว่าง = ยังต้องไปทำ
-
-     ยิงครั้งเดียวตอนเข้าหน้า ไม่ตามการเปลี่ยนแปลงในแท็บ — ตัวเลขอาจล้าไปหนึ่งจังหวะ
-     หลังเพิ่ม/ลบ ซึ่งรับได้เพราะแท็บที่กำลังเปิดอยู่แสดงรายการจริงให้เห็นเต็มๆ อยู่แล้ว */
-  const [counts, setCounts] = useState<Record<TabId, number | null>>(
-    () =>
-      readSnapshot<Record<TabId, number | null>>(SNAP.setupCounts) ?? {
-        contacts: null,
-        events: null,
-        devices: null,
-      },
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([
-      listGroups().catch(() => []),
-      listEventTypes().catch(() => []),
-      listApiKeys().catch(() => []),
-    ]).then(([g, e, k]) => {
-      if (cancelled) return;
-      const next = { contacts: g.length, events: e.length, devices: k.length };
-      setCounts(next);
-      writeSnapshot(SNAP.setupCounts, next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   // แท็บมาจาก path ไม่ใช่ state — ลิงก์ตรงเข้า /event-types ยังใช้ได้เหมือนเดิม
   // และปุ่มย้อนกลับของเบราว์เซอร์ทำงานถูกต้องระหว่างสองแท็บ
   const tab: TabId = location.pathname.startsWith('/event-types')
@@ -86,12 +50,12 @@ export function SetupPage() {
       {/* แท็บเป็นลิงก์จริง ไม่ใช่ปุ่มที่สลับ state — URL เปลี่ยนตาม จึงแชร์ลิงก์
           และกดปุ่มย้อนกลับได้ตามที่คนคาดหวังจากเมนูหลัก
 
-          รูปทรงตามไฟล์ดีไซน์ figma/Redesign Notification Settings: ชิปกลมพร้อมตัวเลขกำกับ
+          รูปทรงตามไฟล์ดีไซน์ figma/Redesign Notification Settings: ชิปกลม
           (เคยลองทำเป็นการ์ดสรุปใบใหญ่ตามที่โค้ดในโฟลเดอร์นั้นเขียนไว้ แต่ภาพอ้างอิงจริง
            เป็นชิป — โค้ดกับภาพในโฟลเดอร์เดียวกันเป็นคนละรุ่น ยึดตามภาพ)
 
-          ตัวเลขบนชิปตอบคำถามแรกของคนที่เปิดหน้านี้ตั้งแต่ยังไม่กด — "ยังไม่ได้เพิ่ม
-          อุปกรณ์เลยหรือเพิ่มไปแล้ว" และเห็นทันทีว่าแท็บไหนยังเป็น 0 = ยังต้องไปทำ */}
+          เคยมีตัวเลขจำนวนกำกับอยู่บนชิป เอาออกตามที่ผู้ใช้ขอ — และเมื่อไม่ต้องโชว์ตัวเลข
+          ก็ไม่ต้องยิงขอรายการทั้งสามชุดตอนเข้าหน้าอีก เหลือแค่ชุดของแท็บที่เปิดอยู่จริง */}
       <div className="flex flex-wrap gap-2">
         {(
           [
@@ -113,16 +77,6 @@ export function SetupPage() {
               )}
             >
               {t.label}
-              {counts[t.id] === null ? null : (
-                <span
-                  className={cn(
-                    'rounded-full px-1.5 py-0.5 font-mono text-micro leading-none tabular-nums',
-                    on ? 'bg-brand-ink/20 text-brand-ink' : 'bg-surface-2 text-ink-2',
-                  )}
-                >
-                  {counts[t.id]}
-                </span>
-              )}
             </NavLink>
           );
         })}
