@@ -250,6 +250,28 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
     ? groups.filter((g) => g.name.toLowerCase().includes(q) || hitsIn(g.id))
     : groups;
 
+  /* ช่องค้นหาโผล่เมื่อมีกลุ่มแล้วเท่านั้น — หน้าเปล่าไม่มีอะไรให้ค้น
+     ประกาศไว้ตัวเดียวเพราะมันไปอยู่คนละที่ตามโหมด: แบบฝังอยู่แถวเดียวกับปุ่มเพิ่มกลุ่ม
+     ส่วนแบบเปิดหน้าตรงๆ ปุ่มอยู่ใน PageHeader แล้ว ช่องค้นหาจึงอยู่แถวของมันเอง */
+  const searchBox =
+    groups.length > 0 ? (
+      <span className="relative min-w-0 flex-1 basis-[15rem] sm:max-w-[24rem]">
+        <Search
+          size={15}
+          aria-hidden
+          className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-ink-2"
+        />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={T.contacts_search}
+          aria-label={T.contacts_search}
+          className={cn(inputCls, 'w-full ps-9')}
+        />
+      </span>
+    ) : null;
+
   return (
     /* flex-1 + min-h-0: ขอพื้นที่ที่เหลือจาก SetupPage มาให้กล่องรายชื่อเลื่อนในตัวเอง
        เหมือนหน้าคิวกับหน้าประวัติ ไม่งั้นหน้าจะยาวลงไปเรื่อยๆ ตามจำนวนกลุ่ม
@@ -257,8 +279,10 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
        h-full ซ้ำ เพราะจะกลายเป็น 100% ของทั้งหน้า ซึ่งมากกว่าที่เหลือจริงหลังหักหัวเรื่องกับแท็บ */
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
       {embedded ? (
+        /* ช่องค้นหายืด (flex-1) จึงดันปุ่มไปชิดขวาเองโดยไม่ต้องพึ่ง ms-auto บนจอกว้าง
+           แต่ยังใส่ ms-auto ไว้เผื่อตอนไม่มีกลุ่ม (ไม่มีช่องค้นหา) ปุ่มจะได้ยังอยู่ขวา */
         <div className="flex flex-wrap items-center gap-3">
-          <p className="font-mono text-caption text-ink-2">{T.contacts_sub}</p>
+          {searchBox}
           <span className="ms-auto">
             <Btn variant="primary" onClick={() => setShowNew(true)}>
               <Plus size={15} />
@@ -279,28 +303,9 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
         />
       )}
 
-      {/* ช่องค้นหาโผล่เมื่อมีกลุ่มแล้วเท่านั้น — หน้าเปล่าไม่มีอะไรให้ค้น */}
-      {groups.length > 0 ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2.5">
-          <span className="relative min-w-0 flex-1 basis-[15rem] sm:max-w-[24rem]">
-            <Search
-              size={15}
-              aria-hidden
-              className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-ink-2"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={T.contacts_search}
-              aria-label={T.contacts_search}
-              className={cn(inputCls, 'w-full ps-9')}
-            />
-          </span>
-          {q ? (
-            <span className="font-mono text-micro text-ink-2">{T.contacts_search_found(visible.length)}</span>
-          ) : null}
-        </div>
+      {/* หน้าที่เปิดตรงๆ ปุ่มอยู่ใน PageHeader แล้ว ช่องค้นหาจึงได้แถวของตัวเอง */}
+      {!embedded && searchBox ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2.5">{searchBox}</div>
       ) : null}
 
       {groups.length === 0 ? (
@@ -318,6 +323,14 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           เป็นรูปแบบเดียวกับตารางคิว ตารางประวัติ และรายการอุปกรณ์บนหน้าภาพรวม
           หน้านี้เคยเป็นหน้าเดียวในเว็บที่เนื้อหาลอยอยู่บนพื้นหลังโดยไม่มีกรอบ
           จึงดูเหมือนคนละเว็บกับหน้าอื่นทั้งที่ใช้สีชุดเดียวกัน */}
+      {/* จำนวนที่ตรงคำค้น — เดิมอยู่ข้างช่องค้นหา พอช่องค้นหาย้ายไปอยู่แถวเดียวกับปุ่ม
+          ตัวเลขจะไปเบียดปุ่ม เลยย้ายมาไว้ตรงนี้ ติดกับของที่มันกำลังนับอยู่จริง */}
+      {q ? (
+        <p className="-mb-1 shrink-0 font-mono text-micro text-ink-2">
+          {T.contacts_search_found(visible.length)}
+        </p>
+      ) : null}
+
       {/* ไม่มีกลุ่มเลย = ไม่ต้องวาดกรอบเปล่าค้างไว้ใต้ empty state */}
       {groups.length > 0 ? (
         <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
