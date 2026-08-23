@@ -171,11 +171,15 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
       .catch((e) => toast.error(e instanceof ApiError ? e.message : T.error_generic));
   };
 
+  /* ชื่อบังคับพอๆ กับเบอร์ — รายชื่อนี้ถูกอ่านตอนเกิดเหตุจริง ("โทรหาใครไปแล้วบ้าง")
+     แถวที่มีแต่ตัวเลขเปล่าๆ ตอบคำถามนั้นไม่ได้ ต้องไปไล่ถามว่าเบอร์นี้ของใคร
+     และลำดับไล่โทรก็ตั้งใจไม่ถูกถ้าไม่รู้ว่าแต่ละเบอร์เป็นใคร */
   const addPhone = (groupId: number) => {
     const draft = adding[groupId] ?? EMPTY_DRAFT;
     const phone = draft.phone.trim();
-    if (!phone) return;
-    createContact(groupId, { phone_number: phone, name: draft.name.trim() || undefined })
+    const name = draft.name.trim();
+    if (!phone || !name) return;
+    createContact(groupId, { phone_number: phone, name })
       .then((c) => {
         setContactsByGroup((m) => ({ ...m, [groupId]: [...(m[groupId] || []), c] }));
         setAdding((a) => ({ ...a, [groupId]: EMPTY_DRAFT }));
@@ -191,8 +195,9 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   const saveContact = (groupId: number, contactId: number) => {
     const phone = contactDraft.phone.trim();
-    if (!phone) return;
-    updateContact(contactId, { phone_number: phone, name: contactDraft.name.trim() })
+    const name = contactDraft.name.trim();
+    if (!phone || !name) return;
+    updateContact(contactId, { phone_number: phone, name })
       .then((updated) => {
         setContactsByGroup((m) => ({
           ...m,
@@ -507,7 +512,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                             <button
                               type="button"
                               onClick={() => saveContact(g.id, c.id)}
-                              disabled={!contactDraft.phone.trim()}
+                              disabled={!contactDraft.phone.trim() || !contactDraft.name.trim()}
                               className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
                               aria-label={T.save}
                             >
@@ -598,7 +603,10 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                         onKeyDown={(e) => e.key === 'Enter' && addPhone(g.id)}
                         placeholder={T.contact_name_ph}
                       />
-                      <Btn onClick={() => addPhone(g.id)} disabled={!(adding[g.id]?.phone ?? '').trim()}>
+                      <Btn
+                        onClick={() => addPhone(g.id)}
+                        disabled={!(adding[g.id]?.phone ?? '').trim() || !(adding[g.id]?.name ?? '').trim()}
+                      >
                         <Plus size={15} />
                       </Btn>
                     </div>
