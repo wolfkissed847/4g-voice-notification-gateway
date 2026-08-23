@@ -125,10 +125,10 @@ function TemplateVarsHelp({ template, code }: { template: string; code: string }
         <p className="mb-1.5 text-micro text-ink-2">{T.et_limits_title}</p>
         <ul className="flex flex-col gap-1">
           {[T.et_limit_msg, T.et_limit_count, T.et_limit_value].map((line) => (
-            <li key={line} className="flex gap-2 text-micro leading-[1.7] text-ink-2">
-              <span aria-hidden className="opacity-45">
-                •
-              </span>
+            /* จุดนำหน้าวาดเป็นวงกลมเอง ไม่ใช้อักขระ • — ฟอนต์ Mali ไม่มีสัญลักษณ์นี้
+               เบราว์เซอร์เลยไปหยิบจากฟอนต์สำรองซึ่งได้เป็นสี่เหลี่ยมเล็กๆ คนละทรงกัน */
+            <li key={line} className="flex items-start gap-2 text-micro leading-[1.7] text-ink-2">
+              <span aria-hidden className="mt-[0.6em] size-[0.3em] shrink-0 rounded-full bg-current opacity-45" />
               <span className="min-w-0">{line}</span>
             </li>
           ))}
@@ -376,7 +376,11 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
 
           {/* จอแคบกว่า sm ยุบเป็นคอลัมน์เดียว เส้นคั่นแนวตั้งกลายเป็นเส้นคั่นแนวนอนแทน
               สองคอลัมน์บนมือถือคือบีบทั้งคู่จนใช้ไม่ได้ทั้งสองฝั่ง */}
-          <div className="grid gap-0 px-5 py-4 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+          {/* แบ่งครึ่งเท่ากัน ไม่ใช่ 16rem + ที่เหลือ — ของเดิมฝั่งขวากว้างกว่าเกือบเท่าตัว
+              ทั้งที่ข้างในเป็นข้อความสั้นๆ ส่วนฝั่งซ้ายที่มีช่องกรอกสามช่องกลับถูกบีบ
+              จนคำใบ้ใต้ช่องตกบรรทัดทุกอัน สองฝั่งเลยสูงไม่เท่ากันมาก เห็นเป็นที่ว่าง
+              ยาวๆ ข้างเส้นคั่น พอเท่ากันแล้วช่องกรอกได้ที่พอใช้ และความสูงสองฝั่งใกล้กันเอง */}
+          <div className="grid gap-0 px-5 py-4 sm:grid-cols-2">
             <div className="flex min-w-0 flex-col gap-3.5 sm:pe-5">
               {formErr ? <p className="text-caption text-bad-strong">{formErr}</p> : null}
               <div>
@@ -390,10 +394,16 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
                 <input value={form.display_name} onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
                   placeholder={T.display_name_ph} className={inputCls} />
               </div>
-              <div>
+              {/* ช่องข้อความยืดกินที่ว่างที่เหลือของคอลัมน์ซ้าย (flex-1)
+                  ความสูงของแถวถูกกำหนดโดยฝั่งที่สูงกว่าเสมอ ซึ่งมักเป็นฝั่งขวาเวลามีตัวแปรหลายตัว
+                  ถ้าช่องนี้สูงคงที่ ที่ว่างใต้มันจะถูกทิ้งเปล่าและสองฝั่งจบไม่เท่ากัน
+                  พอให้มันยืด ที่ว่างกลายเป็นพื้นที่พิมพ์ข้อความยาวๆ ซึ่งเป็นของที่ใช้จริง
+                  max-h กันไว้ไม่ให้สูงเกินอ่านสบายตอนมีตัวแปร 20 ตัวเต็มเพดาน */}
+              <div className="flex min-h-0 flex-1 flex-col">
                 <label className="text-caption text-ink-2 block mb-1.5">{T.message_template_label}</label>
                 <textarea value={form.message_template} onChange={(e) => setForm((f) => ({ ...f, message_template: e.target.value }))}
-                  placeholder={T.message_template_ph} rows={3} className={inputCls} />
+                  placeholder={T.message_template_ph} rows={3}
+                  className={cn(inputCls, 'min-h-[5.25rem] max-h-[16rem] flex-1 resize-y')} />
                 <p className="text-micro leading-[1.7] text-ink-2 mt-1">{T.message_template_hint}</p>
               </div>
               {form.id && (
