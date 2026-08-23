@@ -266,12 +266,17 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
             กล่องเลื่อนในตัวเอง หัวคอลัมน์ sticky ค้างไว้ตอนเลื่อน — ที่นี่ยังไม่ยาวมาก
             แต่จำนวนประเภทเหตุการณ์โตขึ้นเรื่อยๆ ตามระบบ และเป็นชุดเดียวกับอีกสองแท็บ */
         <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
-          {/* ซ่อนหัวคอลัมน์บนจอแคบ — ที่นั่นแถวไหลลงบรรทัดใหม่จนป้ายไม่ตรงกับข้อมูลแล้ว */}
-          <div className="sticky top-0 z-10 hidden flex-wrap items-center gap-x-3 border-b border-line bg-surface-2 px-3.5 py-1.5 font-mono text-micro font-bold text-ink-2 sm:flex">
+          {/* ซ่อนหัวคอลัมน์บนจอแคบ — ที่นั่นแถวไหลลงบรรทัดใหม่จนป้ายไม่ตรงกับข้อมูลแล้ว
+
+              หัวคอลัมน์ text-body (0.938rem) ใหญ่กว่าแถวข้อมูล text-caption (0.844rem)
+              ตามที่ผู้ใช้ขอ — ต่างจากหน้าประวัติการโทรที่หัวเล็กกว่าแถว เพราะที่นั่นมี 20+ แถว
+              ต่อหน้า หัวคอลัมน์อ่านครั้งเดียวแล้วไม่กลับไปอ่านอีก ส่วนตารางนี้สั้น
+              หัวที่เด่นกว่าช่วยแบ่งกลุ่มคอลัมน์ให้เห็นชัดโดยไม่ต้องแลกความหนาแน่นของแถว */}
+          <div className="sticky top-0 z-10 hidden flex-wrap items-center gap-x-3 border-b border-line bg-surface-2 px-3.5 py-1.5 font-mono text-body font-bold text-ink-2 sm:flex">
             <span className="min-w-0 flex-1 basis-[9rem]">{T.col_code}</span>
             <span className="min-w-0 flex-[1.2] basis-[10rem]">{T.col_name}</span>
             <span className="min-w-0 flex-[0.9] basis-[7.5rem]">{T.et_used_by}</span>
-            <span className="w-[3.5rem] shrink-0 text-end">{T.col_active}</span>
+            <span className="w-[4.25rem] shrink-0 text-end">{T.col_active}</span>
             <span className="w-[4.25rem] shrink-0 text-end">{T.col_actions}</span>
           </div>
 
@@ -289,7 +294,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
               <span className="min-w-0 flex-[0.9] basis-[7.5rem] truncate text-caption text-ink-2">
                 {usage[et.id] ? T.et_used_by_count(usage[et.id]) : T.et_used_by_none}
               </span>
-              <span className="flex w-[3.5rem] shrink-0 justify-end">
+              <span className="flex w-[4.25rem] shrink-0 justify-end">
                 <Toggle on={et.is_active} onChange={() => toggleActive(et)} />
               </span>
               {/* ขนาดปุ่มและระยะห่างชุดเดียวกับแท็บกลุ่มผู้รับ — 32px และเว้นช่อง
