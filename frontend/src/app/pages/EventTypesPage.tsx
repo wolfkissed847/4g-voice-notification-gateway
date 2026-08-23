@@ -364,16 +364,14 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
           [&>*]:min-w-0 — DialogContent เป็น grid ลูกทุกตัวย่อเล็กกว่าเนื้อหาไม่ได้
           ตัวอย่าง JSON ที่บรรทัดยาวจึงดันทั้งกล่องจนล้นขอบถ้าไม่ปลดตรงนี้
 
-          ── ความสูงขั้นต่ำ ──────────────────────────────────────────────────
-          ตอนยังไม่พิมพ์อะไรกล่องสูงแค่ 28.5rem ซึ่งเตี้ยไปเมื่อเทียบกับความกว้าง 46rem
-          min-h ดันขึ้นเป็น 34rem แล้วส่วนที่เพิ่มไปลงที่ช่องข้อความ (แถวกลางเป็น 1fr
-          และช่องข้อความเป็น flex-1) ได้ที่พิมพ์กว้างขึ้นเท่าตัวแทนที่จะเป็นที่ว่างเปล่า
-
-          เขียนเป็น min(34rem,70vh) ไม่ใช่ 34rem เฉยๆ เพราะเมื่อ min-height ชนกับ
-          max-height ฝั่ง min ชนะตามสเปก จอเตี้ยกว่า 40rem จะได้กล่องที่ล้นจอ
-          ทั้งที่ max-h-[85vh] เขียนไว้แล้ว — ปิดเพดานไว้ที่ 70vh จึงชนกันไม่ได้เลย */}
+          ── ความกว้าง ──────────────────────────────────────────────────────
+          52rem ไม่ใช่ 46rem — สองคอลัมน์แบ่งครึ่ง ฝั่งละราว 24rem ซึ่งพอให้คำใบ้ใต้
+          ช่องกรอกและบรรทัดคำอธิบายฝั่งขวาอยู่บรรทัดเดียวจบเป็นส่วนใหญ่
+          เขียนซ้อน min() กับ calc(100%-2rem) เพราะที่ sm: ขึ้นไป max-w ตัวนี้ทับตัวฐาน
+          ถ้าใส่ 52rem เปล่าๆ จอที่กว้างไม่ถึง (หรือ root font ใหญ่จนคิดเป็น px แล้วเกิน)
+          กล่องจะกว้างกว่าจอแล้วโดนตัด — ปิดเพดานไว้ที่ขอบจอลบระยะขอบเสมอ */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-h-[85vh] max-w-[calc(100%-2rem)] gap-0 overflow-y-auto p-0 sm:min-h-[min(34rem,70vh)] sm:max-w-[46rem] sm:grid-rows-[auto_1fr_auto] [&>*]:min-w-0 [&>button]:top-5 [&>button]:right-5">
+        <DialogContent className="max-h-[85vh] max-w-[calc(100%-2rem)] gap-0 overflow-y-auto p-0 sm:max-w-[min(52rem,calc(100%-2rem))] [&>*]:min-w-0 [&>button]:top-5 [&>button]:right-5">
           <DialogHeader className="flex-row items-center gap-3 border-b border-line px-5 py-3 pe-12 text-start">
             <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft text-brand-strong">
               <Layers size={17} strokeWidth={1.8} />
