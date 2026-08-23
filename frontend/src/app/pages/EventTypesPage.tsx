@@ -26,6 +26,8 @@ import {
 import { listApiKeys } from "../api/apiKeys";
 import { listEventTypes, createEventType, updateEventType, deleteEventType } from "../api/eventTypes";
 import { ApiError } from "../api/client";
+import { cn } from "@/app/components/ui/utils";
+import { Alert } from "../components/Alert";
 import { Btn, PageHeader, inputCls } from "../components/primitives";
 import { SNAP, readSnapshot, writeSnapshot } from "../lib/snapshot";
 import type { EventType } from "../types";
@@ -63,52 +65,83 @@ function TemplateVarsHelp({ template, code }: { template: string; code: string }
   const needed = unique.filter((v) => v !== "device");
   const hasDevice = unique.includes("device");
 
+  /* จัดรูป JSON เองแทน JSON.stringify(obj, null, 2) เพราะค่าตัวอย่างเป็น "..." ที่ไม่ใช่
+     ค่าจริง และคีย์ต้องเรียงตามลำดับที่พิมพ์ในข้อความ ไม่ใช่ลำดับที่ object เก็บไว้
+     ผลคืออ่านแล้วก๊อปไปใช้ได้ทันที ไม่ต้องเดาว่าวงเล็บไหนปิดตรงไหน */
   const body =
-    `{ "event_type_code": "${code || "your_code"}"` +
-    (needed.length
-      ? `,
-  "variables": { ${needed.map((v) => `"${v}": "..."`).join(", ")} } }`
-      : " }");
+    needed.length === 0
+      ? `{\n  "event_type_code": "${code || "your_code"}"\n}`
+      : [
+          "{",
+          `  "event_type_code": "${code || "your_code"}",`,
+          '  "variables": {',
+          needed.map((v) => `    "${v}": "..."`).join(",\n"),
+          "  }",
+          "}",
+        ].join("\n");
+
+  const chip = "rounded-full border px-2 py-px font-mono text-[0.6875rem] leading-[1.7]";
 
   return (
-    <div className="mt-2 flex flex-col gap-2 rounded-control border border-dashed border-line bg-surface-2 px-3 py-2.5">
-      <p className="text-micro font-medium text-ink-2">{T.et_vars_title}</p>
+    <div className="flex min-w-0 flex-col gap-4">
+      <p className="text-caption font-semibold">{T.et_howto_title}</p>
 
-      {unique.length === 0 ? (
-        <p className="text-micro leading-[1.7] text-ink-2">{T.et_vars_none}</p>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-1.5">
+      {/* ── ตัวแปรที่ตรวจเจอในข้อความ ─────────────────────────────────────
+          บรรทัดละตัว ไม่ใช่เรียงต่อกันเป็นแถว — แต่ละตัวมีคำกำกับของตัวเองว่า
+          "ต้องส่งมา" หรือ "ระบบเติมให้" ซึ่งเป็นข้อมูลที่ต่างกันคนละเรื่อง
+          ถ้าเรียงต่อกันแล้วตกบรรทัด คำกำกับจะไปอยู่คนละบรรทัดกับชิปของมันเอง */}
+      <div>
+        <p className="mb-1.5 text-micro text-ink-2">{T.et_vars_title}</p>
+        {unique.length === 0 ? (
+          <p className="text-micro leading-[1.8] text-ink-2">{T.et_vars_none}</p>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
             {hasDevice ? (
-              <span className="rounded-full border border-ok bg-ok-soft px-2 py-px font-mono text-[0.6875rem] text-ok-strong">
-                {"{device}"} · {T.et_vars_auto}
-              </span>
+              <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className={cn(chip, "border-ok bg-ok-soft text-ok-strong")}>{"{device}"}</span>
+                <span className="text-micro text-ink-2">— {T.et_vars_auto}</span>
+              </li>
             ) : null}
             {needed.map((v) => (
-              <span
-                key={v}
-                className="rounded-full border border-brand-strong bg-brand-soft px-2 py-px font-mono text-[0.6875rem] text-brand-strong"
-              >
-                {`{${v}}`}
-              </span>
+              <li key={v} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className={cn(chip, "border-brand-strong bg-brand-soft text-brand-strong")}>
+                  {`{${v}}`}
+                </span>
+                <span className="text-micro text-ink-2">— {T.et_vars_send}</span>
+              </li>
             ))}
-            {needed.length ? <span className="text-[0.6875rem] text-ink-2">← {T.et_vars_send}</span> : null}
-          </div>
+          </ul>
+        )}
+      </div>
 
-          <div className="min-w-0">
-            <p className="mb-1 text-[0.6875rem] text-ink-2">{T.et_vars_example}</p>
-            <pre className="min-w-0 rounded-control border border-line bg-surface px-2.5 py-2 font-mono text-[0.6875rem] leading-[1.8] break-all whitespace-pre-wrap text-ink-2">
-              {body}
-            </pre>
-          </div>
+      <div className="min-w-0">
+        <p className="mb-1.5 text-micro text-ink-2">{T.et_vars_example}</p>
+        <pre className="min-w-0 overflow-x-auto overscroll-x-contain rounded-control border border-line bg-surface-2 px-3 py-2.5 font-mono text-[0.6875rem] leading-[1.9] text-ink-2">
+          {body}
+        </pre>
+      </div>
 
-          {needed.length ? (
-            <p className="text-[0.6875rem] leading-[1.7] text-warn-strong">{T.et_vars_missing}</p>
-          ) : null}
-        </>
-      )}
+      <div>
+        <p className="mb-1.5 text-micro text-ink-2">{T.et_limits_title}</p>
+        <ul className="flex flex-col gap-1">
+          {[T.et_limit_msg, T.et_limit_count, T.et_limit_value].map((line) => (
+            <li key={line} className="flex gap-2 text-micro leading-[1.7] text-ink-2">
+              <span aria-hidden className="opacity-45">
+                •
+              </span>
+              <span className="min-w-0">{line}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
-      <p className="font-mono text-[0.6875rem] leading-[1.7] text-ink-2">{T.et_vars_limits}</p>
+      {/* ขึ้นเฉพาะตอนมีตัวแปรที่ต้องส่งจริง — ถ้าข้อความไม่มีตัวแปรเลยก็ไม่มีอะไรให้พลาด
+          กล่องเตือนที่ขึ้นตลอดเวลาจะกลายเป็นของประจำหน้าที่ไม่มีใครอ่าน */}
+      {needed.length ? (
+        <Alert tone="warn" className="px-3 py-2.5 [&_div]:text-micro [&_div]:leading-[1.8]">
+          {T.et_vars_missing}
+        </Alert>
+      ) : null}
     </div>
   );
 }
@@ -314,30 +347,38 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
         </div>
       )}
 
-      {/* Create/edit dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        {/* ── วางสองคอลัมน์ ────────────────────────────────────────────────
-            ซ้าย = "เหตุการณ์นี้คืออะไร" (รหัส + ชื่อ + เปิด/ปิด) สั้นและกรอกครั้งเดียวจบ
-            ขวา = "ให้พูดว่าอะไร" (ข้อความ + ตัวช่วยเรื่องตัวแปร) ยาวและแก้บ่อยที่สุด
-            เรียงลงมาแนวตั้งหมดแล้วกล่องสูงจนต้องเลื่อน ทั้งที่ของฝั่งซ้ายเตี้ยมาก
-            ที่ว่างข้างๆ เลยถูกทิ้งเปล่า และตัวช่วยกับช่องข้อความไม่ได้อยู่ในสายตาพร้อมกัน
+      {/* ── ป๊อปอัพเพิ่ม/แก้ประเภทเหตุการณ์ ──────────────────────────────────
+          แบ่งเป็น "ช่องกรอก" (ซ้าย) กับ "วิธีการนำไปใช้" (ขวา) คั่นด้วยเส้นแนวตั้ง
+          ซ้าย = สิ่งที่ต้องตัดสินใจและพิมพ์ ขวา = สิ่งที่ต้องเอาไปบอกคนเขียนเฟิร์มแวร์
+          สองอย่างนี้ต้องเห็นพร้อมกัน เพราะฝั่งขวาเปลี่ยนตามสิ่งที่พิมพ์อยู่ฝั่งซ้ายแบบทันที
+          เส้นคั่นทำให้อ่านออกทันทีว่าอะไรเป็นของกรอก อะไรเป็นของอ่าน — เดิมสองฝั่ง
+          หน้าตาเหมือนกันหมด จนดูเหมือนฝั่งขวายังมีอะไรให้กรอกอีก
 
-            max-h + scroll ยังต้องมีไว้เผื่อจอเตี้ยจริงๆ ไม่งั้นปุ่มบันทึกหลุดออกนอกจอ
-            กว้างเฉพาะ sm: ขึ้นไป — ต่ำกว่านั้นปล่อยเป็น calc(100%-2rem) ตามค่าเดิมของ DialogContent
-            ถ้าเขียน max-w-[46rem] ไว้ตัวเดียว tailwind-merge จะลบ calc ของเดิมทิ้ง แล้วบนมือถือ
-            กล่องจะกว้างเต็มจอชนขอบซ้ายขวาพอดี ไม่เหลือระยะขอบเลย
-            [&>*]:min-w-0 — DialogContent เป็น grid ลูกทุกตัวย่อเล็กกว่าเนื้อหาไม่ได้
-            ตัวอย่าง JSON ที่บรรทัดยาวจึงดันทั้งกล่องจนล้นขอบถ้าไม่ปลดตรงนี้ */}
-        <DialogContent className="max-h-[85vh] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-[46rem] [&>*]:min-w-0">
-          <DialogHeader>
-            <DialogTitle>{form.id ? T.edit_event_type : T.new_event_type}</DialogTitle>
+          p-0 บน DialogContent แล้วให้แต่ละส่วนคุม padding เอง เส้นคั่นหัว/ท้ายจึงลากเต็ม
+          ความกว้างกล่องได้จริง ไม่ต้องใช้ margin ติดลบมาหักล้าง padding ของกล่องนอก
+          [&>button] = ปุ่มกากบาทของ Radix ขยับให้ตรงกลางแถบหัวพอดี (ค่าเดิม top-4 อิงกล่องที่มี p-6)
+
+          กว้างเฉพาะ sm: ขึ้นไป — ต่ำกว่านั้นปล่อยเป็น calc(100%-2rem) ตามค่าเดิมของ DialogContent
+          ถ้าเขียน max-w-[46rem] ไว้ตัวเดียว tailwind-merge จะลบ calc ของเดิมทิ้ง แล้วบนมือถือ
+          กล่องจะกว้างเต็มจอชนขอบซ้ายขวาพอดี ไม่เหลือระยะขอบเลย
+          [&>*]:min-w-0 — DialogContent เป็น grid ลูกทุกตัวย่อเล็กกว่าเนื้อหาไม่ได้
+          ตัวอย่าง JSON ที่บรรทัดยาวจึงดันทั้งกล่องจนล้นขอบถ้าไม่ปลดตรงนี้ */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-h-[85vh] max-w-[calc(100%-2rem)] gap-0 overflow-y-auto p-0 sm:max-w-[46rem] [&>*]:min-w-0 [&>button]:top-5 [&>button]:right-5">
+          <DialogHeader className="flex-row items-center gap-3 border-b border-line px-5 py-3 pe-12 text-start">
+            <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft text-brand-strong">
+              <Layers size={17} strokeWidth={1.8} />
+            </span>
+            <DialogTitle className="min-w-0 truncate text-lead font-bold">
+              {form.id ? T.edit_event_type : T.new_event_type}
+            </DialogTitle>
           </DialogHeader>
 
-          {formErr && <p className="text-caption text-bad-strong">{formErr}</p>}
-
-          {/* จอแคบกว่า sm ก็ยุบกลับเป็นคอลัมน์เดียวตามเดิม สองคอลัมน์บนมือถือคือบีบทั้งคู่จนใช้ไม่ได้ */}
-          <div className="grid gap-x-5 gap-y-3.5 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-            <div className="flex min-w-0 flex-col gap-3.5">
+          {/* จอแคบกว่า sm ยุบเป็นคอลัมน์เดียว เส้นคั่นแนวตั้งกลายเป็นเส้นคั่นแนวนอนแทน
+              สองคอลัมน์บนมือถือคือบีบทั้งคู่จนใช้ไม่ได้ทั้งสองฝั่ง */}
+          <div className="grid gap-0 px-5 py-4 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+            <div className="flex min-w-0 flex-col gap-3.5 sm:pe-5">
+              {formErr ? <p className="text-caption text-bad-strong">{formErr}</p> : null}
               <div>
                 <label className="text-caption text-ink-2 block mb-1.5">{T.code_label}</label>
                 <input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
@@ -349,6 +390,12 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
                 <input value={form.display_name} onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
                   placeholder={T.display_name_ph} className={inputCls} />
               </div>
+              <div>
+                <label className="text-caption text-ink-2 block mb-1.5">{T.message_template_label}</label>
+                <textarea value={form.message_template} onChange={(e) => setForm((f) => ({ ...f, message_template: e.target.value }))}
+                  placeholder={T.message_template_ph} rows={3} className={inputCls} />
+                <p className="text-micro leading-[1.7] text-ink-2 mt-1">{T.message_template_hint}</p>
+              </div>
               {form.id && (
                 /* ใส่กรอบให้เท่ากับช่องกรอกด้านบน ไม่งั้นสวิตช์ลอยเดี่ยวๆ ในคอลัมน์ที่เหลือแต่ที่ว่าง */
                 <div className="flex items-center justify-between gap-3 rounded-control border border-line bg-surface-2 px-3 py-2.5">
@@ -358,15 +405,12 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
               )}
             </div>
 
-            <div className="min-w-0">
-              <label className="text-caption text-ink-2 block mb-1.5">{T.message_template_label}</label>
-              <textarea value={form.message_template} onChange={(e) => setForm((f) => ({ ...f, message_template: e.target.value }))}
-                placeholder={T.message_template_ph} rows={3} className={inputCls} />
-              <p className="text-micro leading-[1.7] text-ink-2 mt-1">{T.message_template_hint}</p>
+            <div className="mt-4 min-w-0 border-t border-line pt-4 sm:mt-0 sm:border-t-0 sm:border-s sm:ps-5 sm:pt-0">
               <TemplateVarsHelp template={form.message_template} code={form.code} />
             </div>
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="border-t border-line px-5 py-3.5">
             <button onClick={() => setFormOpen(false)} className="px-4 py-2.5 rounded-control border border-line text-caption text-ink-2 bg-surface-2">{T.cancel}</button>
             <button onClick={submitForm} disabled={saving} className="px-4 py-2.5 rounded-control bg-brand hover:brightness-110 text-brand-ink text-caption font-semibold disabled:opacity-60">
               {saving ? T.saving : T.save}
