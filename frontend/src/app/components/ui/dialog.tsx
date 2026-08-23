@@ -102,7 +102,11 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      /* leading-[1.5] ไม่ใช่ leading-none — ไทยมีสระล่าง (◌ุ ◌ู) และวรรณยุกต์บนที่พุ่ง
+         เกินความสูงตัวอักษร พอ line-height เท่ากับ 1 พอดีเป๊ะ หมึกส่วนนั้นจะอยู่นอกกล่อง
+         หัวข้อไหนมี truncate (overflow:hidden) อยู่ด้วยจะโดนตัดหายไปเลย
+         เช่น "ประเภทเหตุการณ์ใหม่" เห็นเป็น "ประเภทเหตการณ์ใหม่" — ตัวอักษรถูกต้องแต่หมึกโดนตัด */
+      className={cn("text-lg leading-[1.5] font-semibold", className)}
       {...props}
     />
   );
