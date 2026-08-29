@@ -100,8 +100,11 @@ flowchart LR
 
 </div>
 
-Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป็นโค้ดจริงทั้ง 10 หน้า รองรับทั้งภาษาไทย/อังกฤษ
-โหมดสว่าง/มืด และปรับตามขนาดจอตั้งแต่มือถือจนถึงจอกว้าง
+Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป็นโค้ดจริง — 8 หน้าที่มีเนื้อหาของตัวเอง เมนูหลัก 6 รายการ
+รองรับทั้งภาษาไทย/อังกฤษ โหมดสว่าง/มืด และปรับตามขนาดจอตั้งแต่มือถือจนถึงจอกว้าง
+
+> ภาพชุดนี้ถ่ายไว้ 16 ส.ค. 2569 ก่อนการยกเครื่องหน้าเว็บรอบ 21–23 ส.ค. หน้าจริงตอนนี้
+> ใช้ชื่อ **4G Gateway** พร้อมโลโก้ลูกโลก และหน้าเข้าระบบเปลี่ยนไปแล้ว
 
 ---
 
@@ -109,11 +112,11 @@ Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป
 
 <table>
 <tr><td><b>Backend</b></td><td>FastAPI · SQLAlchemy · Alembic · SQLite (WAL mode)</td></tr>
-<tr><td><b>Frontend</b></td><td>Vite · React 18 · TypeScript · Tailwind CSS v4 · shadcn/ui</td></tr>
-<tr><td><b>เสียงพูด</b></td><td>Google Text-to-Speech (gTTS) — ภาษาไทย</td></tr>
-<tr><td><b>ฮาร์ดแวร์</b></td><td>Raspberry Pi 3 · SIMCOM A7670E / A7670C (4G LTE Cat.1) · ซิม AIS<br>ต่อได้ทั้งผ่าน USB และผ่านหัว GPIO (UART + คุมขา PWRKEY/RESET/STATUS)</td></tr>
-<tr><td><b>Deploy</b></td><td>Docker (multi-stage build) · GitHub Actions self-hosted runner บน Pi</td></tr>
-<tr><td><b>ความปลอดภัย</b></td><td>API key รายอุปกรณ์ (เก็บแค่ sha256 hash) · JWT + bcrypt · gitleaks pre-commit</td></tr>
+<tr><td><b>Frontend</b></td><td>Vite 6 · React 18 · TypeScript · Tailwind CSS v4 · shadcn/ui (Radix) · react-router 7</td></tr>
+<tr><td><b>เสียงพูด</b></td><td>Google Text-to-Speech (gTTS) — ภาษาไทย (สร้างใหม่ทุกสาย ไม่แคช จึงต้องมีเน็ตขณะโทร)</td></tr>
+<tr><td><b>ฮาร์ดแวร์</b></td><td>Raspberry Pi 3 · SIMCOM A7670E / A7670C (4G LTE Cat.1) · ซิม AIS<br>ต่อได้ทั้งผ่าน USB และผ่านหัว GPIO (UART + คุมขา PWRKEY/STATUS)<br>ระบบไล่หาพอร์ตที่ตอบคำสั่ง AT เองได้ ถอดเสียบสลับแบบไม่ต้องแก้คอนฟิก</td></tr>
+<tr><td><b>Deploy</b></td><td>Docker (multi-stage build) · GitHub Actions self-hosted runner บน Pi · Cloudflare Tunnel</td></tr>
+<tr><td><b>ความปลอดภัย</b></td><td>API key รายอุปกรณ์ (ตรวจสิทธิ์ด้วย sha256 hash) · JWT + bcrypt · gitleaks pre-commit<br>เบอร์โทรใน log ถูกปิดบางส่วนเสมอ · หน้าเอกสาร API ปิดเป็นค่าเริ่มต้น</td></tr>
 </table>
 
 ### สถาปัตยกรรม 3 ชั้น
@@ -136,7 +139,8 @@ Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป
 | ส่วน | สถานะ |
 |---|:---:|
 | Backend — API, คิวงาน, worker, ระบบสิทธิ์, จัดการกลุ่ม/เบอร์/ประเภทเหตุการณ์ | ✅ |
-| Dashboard 10 หน้า ต่อ API จริง | ✅ |
+| Dashboard ต่อ API จริงครบทุกหน้า | ✅ |
+| ปิด/เปิดอุปกรณ์ชั่วคราวได้โดยไม่ต้องลบ API key ทิ้ง | ✅ |
 | ระบบจัดการเวอร์ชันฐานข้อมูล (Alembic migrations) | ✅ |
 | Docker + CI/CD deploy อัตโนมัติ | ✅ |
 | ทดสอบกับฮาร์ดแวร์จริง — โทรออก, เล่นเสียงเข้าสาย, วางสาย | ✅ |
@@ -162,7 +166,49 @@ python tests/concurrency_sweep.py  # หาจุดที่เริ่มร�
 ระหว่างที่ระบบจริงเดินอยู่ได้โดยไม่กระทบข้อมูลหรือสายที่กำลังโทร
 
 **เพดานที่วัดได้จริง** — รับเข้าคิว ~100 คำขอ/วินาที · ส่งออก ~80 สาย/ชั่วโมง
-(ตัวส่งถูกจำกัดโดยโมดูล 4G ที่โทรได้ทีละสาย ไม่ใช่โดยซอฟต์แวร์ ดู `docs/LIMITATIONS.md` §8)
+ตัวส่งถูกจำกัดโดยโมดูล 4G ที่โทรได้ทีละสาย ไม่ใช่โดยซอฟต์แวร์ — ต่างกันราว 4,500 เท่า
+ตัวเลขนี้วัดไว้ก่อนเพิ่มการเว้นช่วงก่อนพูดและการพูดซ้ำ เวลาต่อสายจริงตอนนี้จึงยาวกว่าเดิมเล็กน้อย
+
+---
+
+## 🚀 เริ่มใช้งาน
+
+```bash
+git clone https://github.com/<your-account>/4g-voice-notification-gateway.git
+cd 4g-voice-notification-gateway
+cp .env.example .env
+```
+
+แก้ `.env` อย่างน้อย 3 ค่าก่อนรัน:
+
+```bash
+python scripts/hash_password.py        # ได้ bcrypt hash → ใส่ใน ADMIN_PASSWORD_HASH
+python scripts/generate_encryption_key.py   # ได้ Fernet key → ใส่ใน ENCRYPTION_KEY
+# แล้วตั้ง JWT_SECRET_KEY เป็นสตริงสุ่มยาวๆ ของตัวเอง
+```
+
+รันบน Raspberry Pi ด้วย Docker:
+
+```bash
+docker compose up -d          # service ชื่อ gateway — เปิดที่ 127.0.0.1:8000
+docker compose logs -f gateway
+```
+
+ฐานข้อมูลจะ migrate ตัวเองตอนสตาร์ต ไม่ต้องรัน `alembic` มือ ครั้งแรกเข้าหน้าเว็บแล้ว
+สร้างประเภทเหตุการณ์ · กลุ่มผู้รับ · และอุปกรณ์ (จะได้ API key มา) ตามลำดับ จากนั้นยิงทดสอบได้เลย:
+
+```bash
+curl -X POST http://127.0.0.1:8000/notify \
+  -H "X-API-Key: <key ที่ได้จากหน้าอุปกรณ์>" \
+  -H "Content-Type: application/json" \
+  -d '{"event_type_code": "server_down"}'
+```
+
+โมดูล 4G ไม่จำเป็นต้องเสียบก็เปิดระบบได้ — หน้าเว็บ API และฐานข้อมูลทำงานได้ตามปกติ
+เพียงแต่งานในคิวจะยังไม่ถูกโทรออกจนกว่าโมดูลจะพร้อม
+
+> **Deploy อัตโนมัติ:** repo นี้มี workflow `Build and Deploy on Pi` ที่ให้ Pi build และ deploy
+> ตัวเองผ่าน self-hosted runner ทุกครั้งที่ push เข้า `main` — ไม่ผ่าน registry ภายนอก
 
 ---
 
@@ -185,7 +231,8 @@ python tests/concurrency_sweep.py  # หาจุดที่เริ่มร�
 
 <div align="center">
 
-📄 *เอกสารวิธีติดตั้งและใช้งานจะเพิ่มเข้ามาเมื่อระบบพร้อมใช้งานจริง*
+📄 *ระบบติดตั้งใช้งานจริงบน Raspberry Pi แล้ว — เอกสารเชิงลึก (โครงสร้างข้อมูล ไดอะแกรม
+การต่อ GPIO บันทึกปัญหาที่เจอ) เก็บไว้ในโฟลเดอร์ `docs/` ซึ่งไม่ได้ขึ้น repo นี้*
 
 **License:** [MIT](LICENSE)
 
