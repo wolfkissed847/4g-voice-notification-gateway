@@ -249,7 +249,7 @@ def login(request: LoginRequest, http_request: Request):
 
     if request.username != settings.admin_username or not verify_password(request.password):
         login_guard.record_failure(key)
-        raise HTTPException(status_code=401, detail="username หรือ password ไม่ถูกต้อง")
+        raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
 
     login_guard.record_success(key)
     token = create_access_token(username=request.username)
@@ -414,7 +414,7 @@ def update_group(
 ):
     group = contacts_service.update_group(db, group_id, name=request.name, description=request.description)
     if group is None:
-        raise HTTPException(status_code=404, detail="ไม่พบกลุ่มนี้")
+        raise HTTPException(status_code=404, detail="ไม่พบกลุ่มผู้รับนี้ อาจถูกลบไปแล้ว")
     return _group_to_response(group)
 
 
@@ -425,7 +425,7 @@ def delete_group(group_id: int, db: Session = Depends(get_db), _user: str = Depe
     except contacts_service.GroupInUseError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
-        raise HTTPException(status_code=404, detail="ไม่พบกลุ่มนี้")
+        raise HTTPException(status_code=404, detail="ไม่พบกลุ่มผู้รับนี้ อาจถูกลบไปแล้ว")
 
 
 @app.get("/groups/{group_id}/contacts", response_model=list[ContactResponse])
@@ -459,14 +459,14 @@ def update_contact(
     except contacts_service.InvalidPhoneNumberError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if contact is None:
-        raise HTTPException(status_code=404, detail="ไม่พบเบอร์ติดต่อนี้")
+        raise HTTPException(status_code=404, detail="ไม่พบเบอร์นี้ อาจถูกลบไปแล้ว")
     return _contact_to_response(contact)
 
 
 @app.delete("/contacts/{contact_id}", status_code=204)
 def delete_contact(contact_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
     if not contacts_service.delete_contact(db, contact_id):
-        raise HTTPException(status_code=404, detail="ไม่พบเบอร์ติดต่อนี้")
+        raise HTTPException(status_code=404, detail="ไม่พบเบอร์นี้ อาจถูกลบไปแล้ว")
 
 
 @app.put("/groups/{group_id}/contacts/reorder", response_model=list[ContactResponse])
@@ -514,7 +514,7 @@ def update_event_type(
 ):
     event_type = event_types_service.update_event_type(db, event_type_id, **request.model_dump(exclude_unset=True))
     if event_type is None:
-        raise HTTPException(status_code=404, detail="ไม่พบ event type นี้")
+        raise HTTPException(status_code=404, detail="ไม่พบประเภทเหตุการณ์นี้ อาจถูกลบไปแล้ว")
     return _event_type_to_response(event_type)
 
 
@@ -523,7 +523,7 @@ def delete_event_type(
     event_type_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)
 ):
     if not event_types_service.delete_event_type(db, event_type_id):
-        raise HTTPException(status_code=404, detail="ไม่พบ event type นี้")
+        raise HTTPException(status_code=404, detail="ไม่พบประเภทเหตุการณ์นี้ อาจถูกลบไปแล้ว")
 
 
 # ---------- Dashboard: API Keys (สำหรับระบบภายนอกยิง /notify) ----------
@@ -603,7 +603,7 @@ def update_api_key(
         # (เกิดได้จริงเมื่อเปิดหน้าตั้งค่าค้างไว้ แล้วมีคนลบเบอร์นั้นทิ้งจากอีกแท็บก่อนกดบันทึก)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if api_key is None:
-        raise HTTPException(status_code=404, detail="ไม่พบ API key นี้")
+        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์นี้ อาจถูกลบไปแล้ว")
     return _api_key_to_response(api_key)
 
 
@@ -617,7 +617,7 @@ def reveal_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depe
     หน้าเว็บจะถอยไปแสดงแค่ตัวหน้าของ key และเสนอให้ออก key ใหม่
     """
     if not db.query(ApiKey).filter(ApiKey.id == key_id).first():
-        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์นี้")
+        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์นี้ อาจถูกลบไปแล้ว")
     return ApiKeyRevealResponse(key=api_key_service.reveal_key(db, key_id))
 
 
@@ -625,7 +625,7 @@ def reveal_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depe
 def delete_api_key(key_id: int, db: Session = Depends(get_db), _user: str = Depends(get_current_user)):
     """ลบอุปกรณ์ออกจากฐานข้อมูลจริง — ประวัติการโทรเดิมยังอยู่ครบ (ดู api_key_service.delete_api_key)"""
     if not api_key_service.delete_api_key(db, key_id):
-        raise HTTPException(status_code=404, detail="ไม่พบ API key นี้")
+        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์นี้ อาจถูกลบไปแล้ว")
 
 
 # ---------- Dashboard: ทดสอบยิงแจ้งเตือนจากหน้าเว็บ (JWT ไม่ใช่ API key) ----------
@@ -643,7 +643,7 @@ def test_notify(
     """
     device = db.query(ApiKey).filter(ApiKey.id == request.device_id).first()
     if device is None:
-        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์ที่ระบุ")
+        raise HTTPException(status_code=404, detail="ไม่พบอุปกรณ์ที่ระบุ อาจถูกลบไปแล้ว")
     job = _resolve_and_enqueue(db, request, api_key=device)
     return NotifyResponse(job_id=job.id, status=job.status.value)
 

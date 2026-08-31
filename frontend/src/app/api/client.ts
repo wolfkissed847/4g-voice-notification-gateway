@@ -1,6 +1,7 @@
 // ─── Fetch wrapper ────────────────────────────────────────────────────────────
 // Base URL, JWT header injection, FastAPI {detail} error handling, 401 redirect.
 
+import { fallbackByStatus, humanizeDetail } from "../lib/friendlyError";
 import { clearSnapshots } from "../lib/snapshot";
 
 /**
@@ -97,14 +98,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!res.ok) {
-    let detail = res.statusText;
+    // ข้อความที่โยนออกไปจากตรงนี้ถูกเอาไปโชว์ในกล่องแจ้งเตือนตรงๆ จึงต้องเป็นภาษาคนเสมอ
+    //
+    // ⚠️ สองกับดักที่เคยทำให้ผู้ใช้อ่านไม่รู้เรื่อง (ห้ามถอยกลับไปทำแบบเดิม)
+    //
+    // 1) ห้ามใช้ res.statusText เป็นค่าสุดท้าย — HTTP/2 ตัด reason phrase ออกจากโปรโตคอลแล้ว
+    //    ค่านี้จึงว่างเสมอเมื่อเปิดผ่าน Cloudflare Tunnel (ทางเข้าปกติของระบบ)
+    //    ผลที่เคยเจอ: กดลบกลุ่มได้ 500 ที่ตอบเป็น plain text → res.json() พัง → กล่องแดงว่างเปล่า
+    //
+    // 2) ห้าม JSON.stringify(data.detail) — FastAPI ตอบ 422 มาเป็น array ของ validation error
+    //    ผลที่เคยเจอ: พิมพ์เบอร์สั้นไปแล้วได้ก้อน JSON ดิบเต็มจอ
+    //    [{"type":"string_too_short","loc":["body","phone_number"],...}]
+    //    ตอนนี้ humanizeDetail() แปลงเป็น "เบอร์โทรสั้นเกินไป ต้องมีอย่างน้อย 8 หลัก" แทน
+    let detail = "";
     try {
       const data = await res.json();
-      if (data && typeof data.detail === "string") detail = data.detail;
-      else if (data && data.detail) detail = JSON.stringify(data.detail);
+      if (data && data.detail !== undefined) detail = humanizeDetail(data.detail);
     } catch {
-      // response body wasn't JSON — keep statusText
+      // body ไม่ใช่ JSON (เช่น 500 ที่ FastAPI ไม่ได้ดัก จะตอบเป็น "Internal Server Error" เปล่าๆ)
+      // เนื้อหาแบบนั้นเป็นภาษาเครื่อง ไม่เอามาโชว์ — ปล่อยให้ตกไปที่ข้อความสำรองด้านล่าง
     }
+    if (!detail) detail = fallbackByStatus(res.status);
     throw new ApiError(res.status, detail);
   }
 
