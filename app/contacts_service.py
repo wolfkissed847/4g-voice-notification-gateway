@@ -6,11 +6,11 @@ import re
 
 from sqlalchemy.orm import Session
 
-from app.database import Contact, EventType, Group
+from app.database import ApiKeyEventType, Contact, Group
 
 
 class GroupInUseError(Exception):
-    """ลบ group ไม่ได้เพราะยังมี event type ผูกอยู่"""
+    """ลบ group ไม่ได้เพราะยังถูกใช้เป็นผู้รับสายของคู่ (อุปกรณ์ + เหตุการณ์) อยู่"""
 
 
 def list_groups(db: Session) -> list[Group]:
@@ -46,8 +46,19 @@ def delete_group(db: Session, group_id: int) -> bool:
     group = get_group(db, group_id)
     if group is None:
         return False
-    if db.query(EventType).filter(EventType.group_id == group_id).count() > 0:
-        raise GroupInUseError(f"กลุ่ม '{group.name}' ยังมี event type ผูกอยู่ ลบไม่ได้")
+    # เดิมเช็คกับ EventType.group_id ซึ่งถูก drop ไปแล้วตั้งแต่ revision b7c4d1e9f230
+    # (ประเภทเหตุการณ์ไม่รู้จักกลุ่มอีกต่อไป) ผลคือบรรทัดนี้โยน AttributeError ทุกครั้งที่กดลบ
+    # → 500 ที่ไม่มีใครดักไว้ ลบกลุ่มไม่ได้เลยสักกลุ่มตั้งแต่ 13 ส.ค. 2569
+    #
+    # ที่ต้องกันไว้จริงๆ คือ api_key_event_types.group_id ซึ่งเป็นตัวชี้ว่า
+    # "คู่ (อุปกรณ์ + เหตุการณ์) นี้โทรหากลุ่มไหน" — FK ตัวนั้นไม่ได้ตั้ง ondelete ไว้
+    # ปล่อยให้ลบจึงได้ FOREIGN KEY constraint failed เป็น 500 อีกแบบหนึ่งแทน
+    in_use = db.query(ApiKeyEventType).filter(ApiKeyEventType.group_id == group_id).count()
+    if in_use > 0:
+        raise GroupInUseError(
+            f"ลบ '{group.name}' ไม่ได้ เพราะยังถูกตั้งเป็นผู้รับสายอยู่ {in_use} จุด — "
+            "ไปที่หน้าอุปกรณ์แล้วเปลี่ยนผู้รับสายของเหตุการณ์ที่ใช้กลุ่มนี้ก่อน"
+        )
     db.delete(group)
     db.commit()
     return True

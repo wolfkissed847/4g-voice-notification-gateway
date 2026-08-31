@@ -512,6 +512,70 @@ except ImportError as exc:
     print(f"  (ข้ามหัวข้อนี้ — ต้องติดตั้ง httpx ก่อน: {exc})")
 
 # ---------------------------------------------------------------------------
+section("8. ลบกลุ่มผู้รับ — ต้องลบได้จริง และบอกเหตุผลเมื่อลบไม่ได้")
+# ---------------------------------------------------------------------------
+# บั๊กที่เคยเจอ: delete_group เช็คกับ EventType.group_id ซึ่งถูก drop ไปแล้วตั้งแต่
+# revision b7c4d1e9f230 ผลคือโยน AttributeError → 500 ที่ไม่มีใครดัก ลบกลุ่มไม่ได้เลย
+# สักกลุ่มตั้งแต่ 13 ส.ค. 2569 และไม่มีเทสไหนจับได้เพราะไม่เคยมีเทสยิง DELETE /groups
+
+db8 = SessionLocal()
+
+# 1) กลุ่มเปล่าที่ไม่มีใครใช้ ต้องลบได้
+g_free = cs.create_group(db8, name="กลุ่มลอยๆ ไม่มีใครใช้")
+try:
+    ok = cs.delete_group(db8, g_free.id)
+    check("ลบกลุ่มที่ไม่มีใครใช้ได้", ok is True and cs.get_group(db8, g_free.id) is None)
+except Exception as exc:
+    check("ลบกลุ่มที่ไม่มีใครใช้ได้", False, f"โยน {type(exc).__name__}: {exc}")
+
+# 2) กลุ่มที่มีเบอร์อยู่ข้างใน ต้องลบได้ และเบอร์ต้องหายตามไปด้วย (CASCADE)
+g_with = cs.create_group(db8, name="กลุ่มมีเบอร์")
+c_in = cs.create_contact(db8, group_id=g_with.id, phone_number="0870000009", name="คนในกลุ่ม")
+cid = c_in.id
+try:
+    cs.delete_group(db8, g_with.id)
+    from app.database import Contact as _C
+    left = db8.query(_C).filter(_C.id == cid).count()
+    check("ลบกลุ่มแล้วเบอร์ในกลุ่มหายตาม (CASCADE)", left == 0, f"เหลือ {left} แถว")
+except Exception as exc:
+    check("ลบกลุ่มแล้วเบอร์ในกลุ่มหายตาม (CASCADE)", False, f"โยน {type(exc).__name__}: {exc}")
+
+# 3) กลุ่มที่ถูกตั้งเป็นผู้รับสายของคู่ (อุปกรณ์ + เหตุการณ์) ต้องลบไม่ได้
+#    และต้องเป็น GroupInUseError ที่อธิบายเหตุผล ไม่ใช่ 500 เปล่าๆ
+g_used = cs.create_group(db8, name="กลุ่มที่ถูกใช้อยู่")
+cs.create_contact(db8, group_id=g_used.id, phone_number="0870000010", name="คนรับสาย")
+ev8 = es.create_event_type(db8, code="delete_guard_evt", display_name="ทดสอบด่านลบกลุ่ม",
+                           message_template="ทดสอบ {device}")
+dev8, _k8 = ks.create_api_key(db8, name="อุปกรณ์ทดสอบลบกลุ่ม", event_type_ids=[ev8.id])
+ks.set_event_links(db8, dev8, [{"event_type_id": ev8.id, "group_id": g_used.id}])
+
+raised = None
+try:
+    cs.delete_group(db8, g_used.id)
+except cs.GroupInUseError as exc:
+    raised = exc
+except Exception as exc:
+    raised = exc
+check("ลบกลุ่มที่ถูกใช้เป็นผู้รับสายอยู่ ถูกปฏิเสธด้วย GroupInUseError",
+      isinstance(raised, cs.GroupInUseError),
+      f"ได้ {type(raised).__name__ if raised else 'ไม่โยนอะไรเลย'}")
+check("ข้อความที่ปฏิเสธบอกชื่อกลุ่มและจำนวนจุดที่ใช้อยู่",
+      raised is not None and g_used.name in str(raised) and any(ch.isdigit() for ch in str(raised)),
+      str(raised)[:80])
+check("กลุ่มที่ถูกใช้อยู่ต้องยังอยู่ในฐานข้อมูล",
+      cs.get_group(db8, g_used.id) is not None)
+
+# 4) ลบกลุ่มที่ไม่มีอยู่จริง ต้องได้ False (ไปเป็น 404) ไม่ใช่ระเบิด
+try:
+    check("ลบกลุ่มที่ไม่มีอยู่จริง คืนค่า False (เพื่อให้ API ตอบ 404)",
+          cs.delete_group(db8, 999999) is False)
+except Exception as exc:
+    check("ลบกลุ่มที่ไม่มีอยู่จริง คืนค่า False (เพื่อให้ API ตอบ 404)", False,
+          f"โยน {type(exc).__name__}")
+
+db8.close()
+
+# ---------------------------------------------------------------------------
 line = "=" * 70
 print(f"\n{line}")
 print(f"สรุป: ผ่าน {len(_passed)} · ตก {len(_failed)}")

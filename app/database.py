@@ -13,7 +13,7 @@ from sqlalchemy import (
     create_engine, event, Column, ForeignKey, Integer, MetaData, String, DateTime, Enum, Text
 )
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy.orm import backref, declarative_base, relationship, sessionmaker
 
 from app.config import settings
 
@@ -127,7 +127,16 @@ class Contact(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-    group = relationship("Group", backref="contacts")
+    # passive_deletes=True สำคัญมาก — ห้ามถอดออก
+    #
+    # FK ด้านบนตั้ง ondelete="CASCADE" ไว้แล้ว แต่ SQLAlchemy ไม่เชื่อค่านั้นโดยปริยาย:
+    # ค่าเริ่มต้นของมันคือโหลดลูกทั้งหมดขึ้นมาแล้วสั่ง UPDATE contacts SET group_id=NULL
+    # ก่อนลบแม่ ซึ่งชนกับ nullable=False ทันที → NOT NULL constraint failed: contacts.group_id
+    # ผลคือลบกลุ่มที่ "มีเบอร์อยู่ข้างใน" ไม่ได้เลย (กลุ่มเปล่าลบได้ จึงดูเหมือนสุ่มพัง)
+    #
+    # ตั้ง passive_deletes=True แล้ว SQLAlchemy จะไม่ยุ่งกับลูก ปล่อยให้ DB ทำ CASCADE เอง
+    # ซึ่งทำได้จริงเพราะเราเปิด PRAGMA foreign_keys=ON ทุก connection (ดู event listener ด้านล่าง)
+    group = relationship("Group", backref=backref("contacts", passive_deletes=True))
 
 
 class EventType(Base):
