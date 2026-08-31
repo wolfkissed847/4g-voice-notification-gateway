@@ -122,7 +122,7 @@ class EventTypeResponse(BaseModel):
 
 
 class ApiKeyCreateRequest(BaseModel):
-    name: str = Field(..., description="ชื่ออุปกรณ์ เช่น 'โหนดตึก A ชั้น 3' — ใช้เติม {device} ในข้อความ")
+    name: str = Field(..., description="ชื่ออุปกรณ์ เช่น 'โหนดตึก A ชั้น 3' — ใช้ระบุที่มาในประวัติการโทร")
     event_type_ids: list[int] = Field(
         default_factory=list, description="event type ที่อุปกรณ์นี้ได้รับอนุญาตให้ยิง"
     )

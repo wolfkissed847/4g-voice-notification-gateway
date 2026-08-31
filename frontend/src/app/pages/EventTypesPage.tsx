@@ -60,10 +60,10 @@ function TemplateVarsHelp({ template, code }: { template: string; code: string }
 
   // ตัวแปรที่ Python .format() รับ = ตัวอักษร/ตัวเลข/ขีดล่าง เท่านั้น
   const found = Array.from(template.matchAll(/\{(\w+)\}/g)).map((m) => m[1]);
-  const unique = Array.from(new Set(found));
-  // {device} ไม่ต้องส่งมา ระบบเติมจากชื่ออุปกรณ์เจ้าของ key ที่ยิงเข้ามา
-  const needed = unique.filter((v) => v !== "device");
-  const hasDevice = unique.includes("device");
+  // ทุกตัวต้องส่งมาจาก payload ไม่มีตัวไหนได้รับการยกเว้น — เดิม {device} ถูกเติมจาก
+  // ชื่ออุปกรณ์เจ้าของ key ให้เบื้องหลัง กล่องนี้เลยต้องแยกอธิบายสองแบบว่าตัวไหนต้องส่ง
+  // ตัวไหนไม่ต้อง ซึ่งเป็นกฎที่มองจากข้อความที่พิมพ์อยู่ไม่ออกเลย ตอนนี้เหลือกฎเดียว
+  const needed = Array.from(new Set(found));
 
   /* จัดรูป JSON เองแทน JSON.stringify(obj, null, 2) เพราะค่าตัวอย่างเป็น "..." ที่ไม่ใช่
      ค่าจริง และคีย์ต้องเรียงตามลำดับที่พิมพ์ในข้อความ ไม่ใช่ลำดับที่ object เก็บไว้
@@ -92,16 +92,10 @@ function TemplateVarsHelp({ template, code }: { template: string; code: string }
           ถ้าเรียงต่อกันแล้วตกบรรทัด คำกำกับจะไปอยู่คนละบรรทัดกับชิปของมันเอง */}
       <div>
         <p className="mb-1.5 text-micro text-ink-2">{T.et_vars_title}</p>
-        {unique.length === 0 ? (
+        {needed.length === 0 ? (
           <p className="text-micro leading-[1.8] text-ink-2">{T.et_vars_none}</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
-            {hasDevice ? (
-              <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className={cn(chip, "border-ok bg-ok-soft text-ok-strong")}>{"{device}"}</span>
-                <span className="text-micro text-ink-2">— {T.et_vars_auto}</span>
-              </li>
-            ) : null}
             {needed.map((v) => (
               <li key={v} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className={cn(chip, "border-brand-strong bg-brand-soft text-brand-strong")}>

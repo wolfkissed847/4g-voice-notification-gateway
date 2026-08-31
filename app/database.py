@@ -239,14 +239,16 @@ class ApiKey(Base):
 
     ที่เลือกให้ 1 key = 1 อุปกรณ์ เพราะ:
     - ชื่ออุปกรณ์ (`name`) อยู่ในฐานข้อมูล ไม่ใช่ใน firmware — ย้ายจุดติดตั้งหรือเปลี่ยนชื่อ
-      แก้จาก dashboard ได้เลย ไม่ต้องเอาบอร์ดกลับมาแฟลชใหม่ (ดู event_types_service.render_message)
+      แก้จาก dashboard ได้เลย ไม่ต้องเอาบอร์ดกลับมาแฟลชใหม่ และประวัติการโทรเก่ายังอ่านออก
     - อุปกรณ์หาย/ถูกขโมย revoke แค่ key ของตัวนั้น ตัวอื่นในไซต์เดียวกันไม่กระทบ
     - last_used_at กลายเป็น heartbeat รายอุปกรณ์ — เห็นได้ว่าบอร์ดตัวไหนเงียบไปนานแล้ว
     """
     __tablename__ = "api_keys"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)  # ชื่ออุปกรณ์ เช่น "โหนดตึก A ชั้น 3" — ใช้เติม {device} ในข้อความ
+    # ชื่ออุปกรณ์ เช่น "โหนดตึก A ชั้น 3" — ใช้ระบุที่มาในประวัติการโทร (source_device)
+    # ไม่ได้ถูกพูดในสาย: คำที่พูดมาจากแม่แบบข้อความ + variables ที่อุปกรณ์ส่งมาเท่านั้น
+    name = Column(String, nullable=False)
     key_prefix = Column(String, nullable=False, index=True)
     key_hash = Column(String, nullable=False)
     is_active = Column(String, default="true")

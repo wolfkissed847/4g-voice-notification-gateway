@@ -78,22 +78,21 @@ def delete_event_type(db: Session, event_type_id: int) -> bool:
     return True
 
 
-def render_message(
-    template: str, variables: dict[str, str], device_name: str | None = None
-) -> str:
+def render_message(template: str, variables: dict[str, str]) -> str:
     """
     แทนที่ {key} ใน template ด้วยค่าจาก variables — ถ้าขาดตัวแปรที่จำเป็นจะ raise ชัดเจน
 
-    `{device}` ถูกเติมให้อัตโนมัติจากชื่ออุปกรณ์เจ้าของ API key ที่ยิงเข้ามา
-    อุปกรณ์จึงไม่ต้องส่งชื่อตัวเองมาใน payload เลย — ผลคือย้ายจุดติดตั้งหรือเปลี่ยนชื่อโหนด
-    แก้ที่ dashboard ได้ทันที ไม่ต้องเอาบอร์ดกลับมาแฟลช firmware ใหม่
+    ทุกตัวแปรมาจาก payload ที่ยิงเข้ามาเท่านั้น ไม่มีตัวไหนถูกเติมให้เบื้องหลัง
+    เดิม `{device}` ถูกเติมอัตโนมัติจากชื่ออุปกรณ์เจ้าของ API key ซึ่งอ่านแม่แบบแล้ว
+    เดาไม่ออกว่าตัวไหนต้องส่งตัวไหนไม่ต้อง และกฎ "payload ชนะ" ยิ่งทำให้ประโยคที่พูดจริง
+    ขึ้นกับสิ่งที่มองไม่เห็นในหน้าตั้งค่า ตอนนี้กฎเหลือข้อเดียว: เขียน {x} ในแม่แบบ
+    ก็ต้องส่ง x มาใน variables เสมอ
 
-    ถ้า payload ส่ง device มาเองด้วยจะให้ค่าจาก payload ชนะ (เผื่อกรณี gateway ตัวเดียว
-    รายงานแทนอุปกรณ์ปลายทางหลายตัว)
+    ชื่ออุปกรณ์ยังถูกบันทึกลงประวัติการโทรให้เอง (source_device) — ที่เลิกทำคือการเอาไป
+    ยัดในประโยคที่พูด ไม่ใช่การรู้ว่าใครเป็นคนแจ้ง
     """
-    merged = {"device": device_name or "ไม่ระบุอุปกรณ์", **variables}
     try:
-        return template.format(**merged)
+        return template.format(**variables)
     except KeyError as exc:
         missing_key = exc.args[0]
         raise MissingTemplateVariableError(

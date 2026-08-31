@@ -8,9 +8,9 @@
  * 3. เพิ่ม 403 เข้าตาราง status — ของใหม่จริงที่ backend ตอบเมื่ออุปกรณ์ยิง event type
  *    ที่ไม่ได้รับอนุญาต ซึ่งเป็นกรณีที่ผู้ใช้จะเจอบ่อยตอน setup อุปกรณ์ใหม่
  * 4. ใช้ CodePanel จาก primitives (พื้นเข้มคงที่ทั้ง light/dark โดยเจตนา — โค้ดอ่านง่ายกว่า)
- * 5. ตัวอย่างโค้ดตัด variables ออกจากตัวอย่างหลัก เพราะ {device} ถูกเติมจากชื่ออุปกรณ์
- *    ให้อัตโนมัติแล้ว อุปกรณ์ส่งแค่ event_type_code ก็พอ (ดู render_message ใน backend)
- *    — นี่คือหัวใจของการที่ firmware ไม่ต้องแก้เวลาย้าย/เปลี่ยนชื่อโหนด
+ * 5. ตัวอย่างโค้ดหลักส่งแค่ event_type_code เพราะแม่แบบเริ่มต้นไม่มีตัวแปร — ตัวอย่างที่สั้นที่สุด
+ *    ที่ยิงแล้วได้ยินเสียงจริง แม่แบบที่ใส่ {ตัวแปร} เองต้องส่ง variables มาครบทุกตัว
+ *    ไม่มีตัวไหนถูกเติมให้เบื้องหลัง (ดู render_message ใน backend)
  */
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -92,8 +92,8 @@ export function ApiGuidePage({ embedded = false }: { embedded?: boolean } = {}) 
       field: 'variables',
       req: false,
       desc: th
-        ? 'ค่าแทน {key} ใน template — {device} ถูกเติมจากชื่ออุปกรณ์ให้อยู่แล้ว ไม่ต้องส่ง'
-        : 'Values for {key} placeholders — {device} is filled from the device name automatically',
+        ? 'ค่าแทน {key} ใน template — ทุกตัวที่เขียนไว้ในแม่แบบต้องส่งมาให้ครบ ขาดตัวใดตัวหนึ่งจะได้ 400'
+        : 'Values for {key} placeholders — every placeholder in the template must be supplied, or the request is rejected with 400',
     },
   ];
 

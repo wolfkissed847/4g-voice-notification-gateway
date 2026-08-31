@@ -124,7 +124,7 @@ export interface ApiKeyEventTypeRef {
 }
 
 /**
- * 1 key = 1 อุปกรณ์ — `name` คือชื่ออุปกรณ์ที่ backend เอาไปเติม {device} ในข้อความเสียง
+ * 1 key = 1 อุปกรณ์ — `name` คือชื่ออุปกรณ์ที่ใช้ระบุที่มาในประวัติการโทรและหน้าคิวงาน
  * ไม่มี field key เต็ม เพราะ backend เก็บแค่ sha256 hash — plaintext เห็นครั้งเดียวตอนสร้าง
  */
 export interface ApiKey {

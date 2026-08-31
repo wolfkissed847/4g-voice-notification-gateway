@@ -237,14 +237,14 @@ function UsageGuide() {
             <p className="text-micro font-medium text-ink-2">{th ? '2. อุปกรณ์ยิงเข้ามา' : '2. The device sends'}</p>
             <pre className="rounded-control border border-line bg-surface-2 px-3 py-2 font-mono text-micro leading-[1.9] break-all whitespace-pre-wrap text-ink-2">
               {`{ "event_type_code": "temp_high",
-  "variables": { "temp": "78" } }`}
+  "variables": { "device": "ตู้ควบคุมอาคาร A", "temp": "78" } }`}
             </pre>
           </div>
 
           <p className="rounded-control border border-dashed border-line px-3 py-2.5 text-caption leading-[1.8] text-ink-2">
             {th
-              ? '{device} ไม่ต้องส่งมา — ระบบเติมชื่ออุปกรณ์ให้เองจาก key ที่ยิงเข้ามา ย้ายจุดติดตั้งแล้วแก้ชื่อที่หน้าอุปกรณ์ได้เลย ไม่ต้องแฟลชบอร์ดใหม่'
-              : '{device} is filled in automatically from the key that sent the request — rename the device on the web and the wording follows, no reflash needed.'}
+              ? 'ทุกตัวแปรที่เขียนไว้ในข้อความต้องส่งมาจากอุปกรณ์เอง รวมทั้ง {device} ด้วย — ไม่มีตัวไหนถูกเติมให้เบื้องหลัง คำที่ปลายสายได้ยินจึงตรงกับสิ่งที่อ่านได้จากข้อความและ payload เท่านั้น'
+              : 'Every placeholder in the message must come from the device, {device} included — nothing is filled in behind the scenes, so what the caller hears is exactly what the template plus the payload say.'}
           </p>
           <p className="text-caption leading-[1.8] text-warn-strong">
             {th

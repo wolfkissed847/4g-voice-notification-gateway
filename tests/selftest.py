@@ -137,7 +137,7 @@ cb2 = cs.create_contact(db, group_id=gb.id, phone_number="0820000003", name="ช
 # เหตุการณ์เป็น "คลังคำพูด" ล้วน สร้างทิ้งไว้เฉยๆ โดยไม่ผูกกับกลุ่มหรือเบอร์ใดๆ ได้
 ev = es.create_event_type(
     db, code="pump_stop", display_name="ปั๊มหยุดทำงาน",
-    message_template="แจ้งเหตุ {device} ปั๊มหยุดทำงาน",
+    message_template="แจ้งเหตุ ปั๊มหยุดทำงาน",
 )
 check("สร้างประเภทเหตุการณ์ได้โดยไม่ต้องผูกกลุ่มหรือเบอร์",
       "group_id" not in {c.name for c in ev.__table__.columns})
@@ -355,13 +355,23 @@ es.delete_event_type(db, ev2.id)
 check("ลบประเภทเหตุการณ์ที่ยังไม่ถูกใช้ได้", es.get_event_type(db, ev2.id) is None)
 
 try:
-    es.render_message("อุณหภูมิ {} ที่ {device}", {}, device_name="d")
+    es.render_message("อุณหภูมิ {} ที่ {place}", {"place": "ตึก A"})
     check("แม่แบบที่มีวงเล็บว่าง ไม่กลายเป็น 500", False)
 except es.MissingTemplateVariableError:
     check("แม่แบบที่มีวงเล็บว่าง ตอบเป็นข้อความบอกสาเหตุแทน 500", True)
 
-check("เติมชื่ออุปกรณ์ให้อัตโนมัติ",
-      es.render_message("เหตุที่ {device}", {}, device_name="ปั๊ม A") == "เหตุที่ ปั๊ม A")
+check("แทนค่าตัวแปรที่ส่งมาใน variables",
+      es.render_message("เหตุที่ {device}", {"device": "ปั๊ม A"}) == "เหตุที่ ปั๊ม A")
+
+# ไม่มีตัวแปรตัวไหนถูกเติมให้เบื้องหลังอีกแล้ว รวมทั้ง {device} ที่เคยเติมจากชื่ออุปกรณ์
+# เดิมแม่แบบที่ลืมส่งตัวแปรมาจะเงียบๆ ได้คำว่า "ไม่ระบุอุปกรณ์" ไปพูดในสายแทน
+# ซึ่งฝั่งที่ยิงเข้ามาไม่มีทางรู้เลยว่าตัวเองส่งไม่ครบ ตอนนี้ถูกปฏิเสธตั้งแต่ HTTP response
+try:
+    es.render_message("เหตุที่ {device}", {})
+    check("ไม่ส่ง device มาแล้วยังผ่าน = ยังมีการเติมให้เบื้องหลังอยู่", False)
+except es.MissingTemplateVariableError as exc:
+    check("ตัวแปรที่แม่แบบต้องการแต่ไม่ได้ส่งมา ถูกปฏิเสธพร้อมบอกชื่อตัวแปร",
+          "device" in str(exc), str(exc)[:70])
 
 # ---------------------------------------------------------------------------
 section("6. กู้งานค้างเมื่อระบบดับกลางสาย")
@@ -447,7 +457,7 @@ try:
     # โมเดลผู้รับแบบใหม่ผ่านหน้าเว็บจริง
     r = client.post("/event-types", headers=auth, json={
         "code": "http_only_words", "display_name": "เหตุการณ์คำพูดล้วน",
-        "message_template": "ทดสอบจาก {device}",
+        "message_template": "ทดสอบจากระบบ",
     })
     check("สร้างประเภทเหตุการณ์ผ่าน API ได้โดยไม่ต้องส่งกลุ่มมาเลย",
           r.status_code == 200 and "group_id" not in r.json(),
@@ -545,7 +555,7 @@ except Exception as exc:
 g_used = cs.create_group(db8, name="กลุ่มที่ถูกใช้อยู่")
 cs.create_contact(db8, group_id=g_used.id, phone_number="0870000010", name="คนรับสาย")
 ev8 = es.create_event_type(db8, code="delete_guard_evt", display_name="ทดสอบด่านลบกลุ่ม",
-                           message_template="ทดสอบ {device}")
+                           message_template="ทดสอบด่านลบกลุ่ม")
 dev8, _k8 = ks.create_api_key(db8, name="อุปกรณ์ทดสอบลบกลุ่ม", event_type_ids=[ev8.id])
 ks.set_event_links(db8, dev8, [{"event_type_id": ev8.id, "group_id": g_used.id}])
 

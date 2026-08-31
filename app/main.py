@@ -189,7 +189,7 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key) -> CallJo
     else:
         try:
             message = event_types_service.render_message(
-                event_type.message_template, request.variables, device_name=device_name
+                event_type.message_template, request.variables
             )
         except event_types_service.MissingTemplateVariableError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -638,8 +638,12 @@ def test_notify(
     เข้าคิวจริงเหมือน /notify ทุกประการ ใช้กดทดสอบจากหน้าเว็บโดยไม่ต้องยิง API จากอุปกรณ์จริง
 
     จำลองเป็นอุปกรณ์ที่ระบุทั้งหมด — ใช้ผู้รับที่ผูกไว้กับอุปกรณ์นั้น ตรวจสิทธิ์ตามที่อุปกรณ์นั้นมี
-    และชื่ออุปกรณ์ถูกพูดในสายจริง ทดสอบแล้วจึงตรงกับสิ่งที่จะเกิดขึ้นจริงตอนอุปกรณ์ยิงเข้ามาเอง
+    และบันทึกประวัติในชื่ออุปกรณ์นั้น ทดสอบแล้วจึงตรงกับสิ่งที่จะเกิดขึ้นจริงตอนอุปกรณ์ยิงเข้ามาเอง
     ไม่ใช่ทดสอบคนละเส้นทางแล้วมาเจอปัญหาเอาตอนของจริง
+
+    ไม่มีการเติม variables ให้เบื้องหลังที่นี่เช่นกัน — แม่แบบที่มี {ตัวแปร} แล้วไม่ส่งค่ามา
+    จะได้ 400 เหมือนกับที่อุปกรณ์จริงจะได้ ถ้าเส้นทางทดสอบใจดีกว่าเส้นทางจริง
+    ปุ่มทดสอบจะผ่านฉลุยแล้วไปพังเอาตอนของจริง ซึ่งเป็นสิ่งเดียวที่ปุ่มนี้มีหน้าที่ป้องกัน
     """
     device = db.query(ApiKey).filter(ApiKey.id == request.device_id).first()
     if device is None:
