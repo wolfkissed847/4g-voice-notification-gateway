@@ -107,6 +107,10 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [removeTarget, setRemoveTarget] = useState<{ device: ApiKey; ref: ApiKeyEventTypeRef } | null>(null);
 
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
+  /* คำค้นของตารางฝั่งขวาในป๊อปอัพ — แยกจากช่องค้นอุปกรณ์ด้านบนหน้า
+     ล้างทุกครั้งที่เปิดป๊อปอัพใหม่ ไม่งั้นเปิดมาแล้วเจอรายการที่ถูกกรองไว้จากรอบก่อน
+     โดยที่ตัวเองไม่ได้พิมพ์อะไร ซึ่งอ่านได้ว่า "กลุ่มหายไปไหน" */
+  const [drawerQuery, setDrawerQuery] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -249,7 +253,8 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   };
 
   /* ── ลิ้นชักผู้รับสาย ─────────────────────────────────────────────────── */
-  const openDrawer = (d: ApiKey, ref: ApiKeyEventTypeRef) =>
+  const openDrawer = (d: ApiKey, ref: ApiKeyEventTypeRef) => {
+    setDrawerQuery('');
     setDrawer({
       deviceId: d.id,
       eventTypeId: ref.id,
@@ -259,6 +264,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
       groupId: ref.group_id,
       contactIds: ref.contacts.map((c) => c.id),
     });
+  };
 
   const saveDrawer = () => {
     if (!drawer) return;
@@ -277,6 +283,35 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const drawerInvalid = drawer
     ? drawer.mode === 'group' ? drawer.groupId === null : drawer.contactIds.length === 0
     : true;
+
+  /* ── ตัวกรองของตารางฝั่งขวา ─────────────────────────────────────────────
+     คำค้นเดียวหาได้ทั้งชื่อกลุ่ม ชื่อคน และเบอร์ เพราะคนที่เปิดป๊อปอัพนี้รู้อยู่แค่
+     อย่างเดียวในสามอย่างนั้น ("เบอร์นี้ต้องได้รับสาย" / "ให้ทีมช่างรับ")
+     ตัวเลขเทียบเฉพาะตอนคำค้นมีตัวเลขจริง ไม่งั้นค้นคำว่า "ช่าง" (digits = "")
+     จะกลายเป็น "".includes("") = true คือตรงกับทุกเบอร์ */
+  const dq = drawerQuery.trim().toLowerCase();
+  const dqDigits = dq.replace(/\D/g, '');
+  const contactHit = (c: Contact) =>
+    (c.name ?? '').toLowerCase().includes(dq) ||
+    (dqDigits.length > 0 && c.phone_number.replace(/\D/g, '').includes(dqDigits));
+
+  // โหมดกลุ่มก็ค้นด้วยเบอร์ได้ — กลุ่มที่มีคนตรงคำค้นถือว่าตรงด้วย
+  const drawerGroups = dq
+    ? groups.filter((g) => g.name.toLowerCase().includes(dq) || contacts.some((c) => c.group_id === g.id && contactHit(c)))
+    : groups;
+  const drawerContacts = dq ? contacts.filter(contactHit) : contacts;
+
+  /** ชื่อคนที่จะถูกโทรตามที่เลือกไว้ในป๊อปอัพตอนนี้ (ยังไม่ได้บันทึก) */
+  const drawerPicked: string[] = !drawer
+    ? []
+    : drawer.mode === 'group'
+      ? (drawer.groupId === null
+          ? []
+          : contacts.filter((c) => c.group_id === drawer.groupId).map((c) => c.name || c.phone_number))
+      : drawer.contactIds
+          .map((id) => contacts.find((c) => c.id === id))
+          .filter((c): c is Contact => c !== undefined)
+          .map((c) => c.name || c.phone_number);
 
   const availableFor = (d: ApiKey) =>
     eventTypes.filter((et) => !d.allowed_event_types.some((e) => e.id === et.id));
@@ -429,7 +464,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
           แล้วเลื่อนเฉพาะรายการตรงกลาง — รายการเบอร์ยาวเกินจอได้ ถ้าปล่อยให้ทั้งกล่อง
           เลื่อน ปุ่มบันทึกจะไปอยู่ใต้สุดที่ต้องเลื่อนลงไปหา */}
       <Dialog open={drawer !== null} onOpenChange={(o) => { if (!o) setDrawer(null); }}>
-        <DialogContent className="flex max-h-[85vh] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[32rem] [&>button]:top-4 [&>button]:right-4">
+        <DialogContent className="flex max-h-[85vh] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(52rem,calc(100%-2rem))] [&>button]:top-4 [&>button]:right-4">
           {drawer && drawerEvent ? (
             <>
               <DialogHeader className="shrink-0 gap-0 border-b border-line px-5 py-4 pe-12 text-start">
@@ -438,149 +473,206 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 <p className="truncate font-mono text-micro text-ink-2">{drawerEvent.code}</p>
               </DialogHeader>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
-                <p className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dev_target_mode}</p>
+              {/* ── สองฝั่ง: เลือกโหมดซ้าย เลือกตัวจริงขวา ──────────────────
+                  ฝั่งซ้ายมีแค่สองตัวเลือกและไม่โตตามข้อมูล ฝั่งขวาโตไม่จำกัด
+                  (กลุ่มกี่กลุ่มก็ได้ เบอร์กี่เบอร์ก็ได้) แยกกันแล้วโหมดที่เลือกอยู่
+                  ไม่ถูกเลื่อนหายไปตอนไล่หาในรายการยาวๆ และคำตอบสุดท้าย
+                  ("จะโทรหาใครบ้าง") อยู่ค้างให้เห็นตลอดที่ฝั่งซ้าย
 
-                {/* สองตัวเลือกเป็นการ์ดที่มีคำอธิบายใต้ชื่อ ไม่ใช่แค่ radio เปล่าๆ
-                    "ทั้งกลุ่ม" กับ "เลือกเบอร์เอง" ต่างกันตรงพฤติกรรมตอนโทร ไม่ใช่ตรงชื่อ */}
-                <div className="mt-2.5 flex flex-col gap-2">
-                  {([
-                    { v: 'group' as const, label: T.dev_target_group, desc: T.dv_mode_group_desc },
-                    { v: 'custom' as const, label: T.dev_target_contacts, desc: T.dv_mode_custom_desc },
-                  ]).map((o) => {
-                    const on = drawer.mode === o.v;
-                    return (
-                      <button
-                        key={o.v}
-                        type="button"
-                        onClick={() => setDrawer({ ...drawer, mode: o.v })}
-                        className={cn(
-                          'flex items-start gap-3 rounded-control border px-3.5 py-3 text-start transition-colors',
-                          on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface hover:border-brand-strong',
-                        )}
-                      >
-                        <span
+                  จอแคบกว่า sm ยุบเป็นคอลัมน์เดียว เส้นคั่นแนวตั้งเป็นแนวนอนแทน */}
+              <div className="grid min-h-0 flex-1 sm:grid-cols-[15.5rem_minmax(0,1fr)]">
+                {/* ฝั่งซ้าย — ผู้รับสาย */}
+                <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain border-b border-line px-5 py-4 sm:border-b-0 sm:border-e">
+                  <p className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dev_target_mode}</p>
+
+                  {/* สองตัวเลือกเป็นการ์ดที่มีคำอธิบายใต้ชื่อ ไม่ใช่แค่ radio เปล่าๆ
+                      "ทั้งกลุ่ม" กับ "เลือกเบอร์เอง" ต่างกันตรงพฤติกรรมตอนโทร ไม่ใช่ตรงชื่อ */}
+                  <div className="flex flex-col gap-2">
+                    {([
+                      { v: 'group' as const, label: T.dev_target_group, desc: T.dv_mode_group_desc },
+                      { v: 'custom' as const, label: T.dev_target_contacts, desc: T.dv_mode_custom_desc },
+                    ]).map((o) => {
+                      const on = drawer.mode === o.v;
+                      return (
+                        <button
+                          key={o.v}
+                          type="button"
+                          onClick={() => setDrawer({ ...drawer, mode: o.v })}
                           className={cn(
-                            'mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
-                            on ? 'border-brand-strong' : 'border-line',
+                            'flex items-start gap-2.5 rounded-control border px-3 py-2.5 text-start transition-colors',
+                            on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface hover:border-brand-strong',
                           )}
                         >
-                          {on ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-caption font-semibold">{o.label}</span>
-                          <span className="block text-micro leading-[1.6] text-ink-2">{o.desc}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
+                          <span
+                            className={cn(
+                              'mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
+                              on ? 'border-brand-strong' : 'border-line',
+                            )}
+                          >
+                            {on ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-caption font-semibold">{o.label}</span>
+                            <span className="block text-micro leading-[1.6] text-ink-2">{o.desc}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* สรุปว่าที่เลือกไว้ตอนนี้แปลว่าจะโทรหาใครก่อนหลัง — อยู่ฝั่งซ้าย
+                      เพราะเป็นคำตอบของทั้งป๊อปอัพ ไม่ใช่ของแถวใดแถวหนึ่งทางขวา */}
+                  <div className="mt-auto border-t border-line-2 pt-3">
+                    {drawerPicked.length === 0 ? (
+                      <p className="text-micro leading-[1.7] text-warn-strong">{T.dev_target_missing}</p>
+                    ) : (
+                      <p className="text-micro leading-[1.8] text-ink-2">
+                        <span className="font-semibold text-ink">{T.dev_will_call}</span>{' '}
+                        {drawerPicked.map((n, i) => `${i + 1}. ${n}`).join('  ·  ')}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                {drawer.mode === 'group' ? (
-                  <div className="mt-5">
-                    <p className="mb-2 text-caption text-ink-2">{T.dv_pick_group}</p>
-                    {groups.length === 0 ? (
-                      <p className="rounded-control border border-warn bg-warn-soft px-3.5 py-2.5 text-micro leading-[1.7] text-warn-strong">
+                {/* ฝั่งขวา — ตารางที่ค้นได้ */}
+                <div className="flex min-h-0 min-w-0 flex-col">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-line px-5 py-3">
+                    <p className="text-caption text-ink-2">
+                      {drawer.mode === 'group' ? T.dv_pick_group : T.dv_pick_contacts}
+                    </p>
+                    <span className="relative ms-auto min-w-0 flex-1 basis-[11rem]">
+                      <Search
+                        size={14}
+                        aria-hidden
+                        className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-ink-2"
+                      />
+                      {/* ค้นได้ทั้งชื่อกลุ่ม ชื่อคน และเบอร์ ในช่องเดียว — โหมดกลุ่มก็ยัง
+                          ค้นด้วยเบอร์ได้ เพราะคนที่ถือเบอร์อยู่ในมือมักไม่รู้ว่ามันอยู่กลุ่มไหน */}
+                      <input
+                        type="search"
+                        value={drawerQuery}
+                        onChange={(e) => setDrawerQuery(e.target.value)}
+                        placeholder={T.dv_search_recip_ph}
+                        aria-label={T.dv_search_recip_ph}
+                        className="w-full rounded-control border border-line bg-surface-2 py-1.5 ps-8 pe-2.5 text-caption outline-none focus:border-brand-strong"
+                      />
+                    </span>
+                  </div>
+
+                  {drawer.mode === 'group' ? (
+                    groups.length === 0 ? (
+                      <p className="m-5 rounded-control border border-warn bg-warn-soft px-3.5 py-2.5 text-micro leading-[1.7] text-warn-strong">
                         {T.dv_no_groups}
                       </p>
                     ) : (
-                      <div className="flex flex-col gap-2">
-                        {groups.map((g) => {
-                          const on = drawer.groupId === g.id;
-                          const mine = contacts.filter((c) => c.group_id === g.id);
+                      <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+                        {/* หัวคอลัมน์ sticky ชุดเดียวกับตารางอื่นในเว็บ */}
+                        <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-surface-2 px-4 py-1.5 font-mono text-micro text-ink-2">
+                          <span className="w-4 shrink-0" />
+                          <span className="min-w-0 flex-1 basis-[8rem]">{T.col_group}</span>
+                          <span className="w-[4.5rem] shrink-0 text-end">{T.dv_col_people}</span>
+                        </div>
+                        {drawerGroups.length === 0 ? (
+                          <p className="px-4 py-8 text-center text-caption text-ink-2">{T.dv_search_none}</p>
+                        ) : (
+                          drawerGroups.map((g) => {
+                            const on = drawer.groupId === g.id;
+                            const mine = contacts.filter((c) => c.group_id === g.id);
+                            return (
+                              <button
+                                key={g.id}
+                                type="button"
+                                onClick={() => setDrawer({ ...drawer, groupId: g.id })}
+                                className={cn(
+                                  'flex w-full items-center gap-3 border-b border-line-2 px-4 py-2.5 text-start transition-colors last:border-b-0',
+                                  on ? 'bg-brand-soft' : 'bg-surface hover:bg-surface-2',
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
+                                    on ? 'border-brand-strong' : 'border-line',
+                                  )}
+                                >
+                                  {on ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
+                                </span>
+                                <span className="min-w-0 flex-1 basis-[8rem]">
+                                  <span className={cn('block truncate text-caption', on ? 'font-semibold' : 'font-medium')}>
+                                    {g.name}
+                                  </span>
+                                  {/* บอกด้วยว่าในกลุ่มมีใคร — เลือกกลุ่มโดยไม่รู้ว่ามีใครอยู่
+                                      คือการเดา และเป็นจุดที่พลาดแล้วสายไปหาคนผิด */}
+                                  <span className="block truncate text-micro text-ink-2">
+                                    {mine.length === 0
+                                      ? T.dev_group_empty
+                                      : mine.map((c) => c.name || c.phone_number).join(', ')}
+                                  </span>
+                                </span>
+                                <span className="w-[4.5rem] shrink-0 text-end font-mono text-micro text-ink-2">
+                                  {T.ct_people_count(mine.length)}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )
+                  ) : contacts.length === 0 ? (
+                    <p className="m-5 rounded-control border border-warn bg-warn-soft px-3.5 py-2.5 text-micro leading-[1.7] text-warn-strong">
+                      {T.dev_no_contacts_at_all}
+                    </p>
+                  ) : (
+                    <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+                      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-surface-2 px-4 py-1.5 font-mono text-micro text-ink-2">
+                        <span className="w-4 shrink-0" />
+                        <span className="min-w-0 flex-1 basis-[7rem]">{T.dv_col_person}</span>
+                        <span className="min-w-0 flex-1 basis-[6rem]">{T.col_phone}</span>
+                        <span className="min-w-0 flex-1 basis-[6rem]">{T.dv_col_in_group}</span>
+                      </div>
+                      {drawerContacts.length === 0 ? (
+                        <p className="px-4 py-8 text-center text-caption text-ink-2">{T.dv_search_none}</p>
+                      ) : (
+                        drawerContacts.map((c) => {
+                          const on = drawer.contactIds.includes(c.id);
                           return (
                             <button
-                              key={g.id}
+                              key={c.id}
                               type="button"
-                              onClick={() => setDrawer({ ...drawer, groupId: g.id })}
+                              onClick={() => setDrawer({
+                                ...drawer,
+                                contactIds: on
+                                  ? drawer.contactIds.filter((x) => x !== c.id)
+                                  : drawer.contactIds.concat([c.id]),
+                              })}
                               className={cn(
-                                'flex items-center gap-3 rounded-control border px-3.5 py-2.5 text-start transition-colors',
-                                on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface hover:border-brand-strong',
+                                'flex w-full items-center gap-3 border-b border-line-2 px-4 py-2.5 text-start transition-colors last:border-b-0',
+                                on ? 'bg-brand-soft' : 'bg-surface hover:bg-surface-2',
                               )}
                             >
                               <span
                                 className={cn(
-                                  'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
-                                  on ? 'border-brand-strong' : 'border-line',
+                                  'grid size-4 shrink-0 place-items-center rounded-[5px] border-[1.5px]',
+                                  on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line',
                                 )}
                               >
-                                {on ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
+                                {on ? <span className="text-[0.55rem] leading-none">✓</span> : null}
                               </span>
-                              <span className="min-w-0">
-                                <span className="block truncate text-caption font-semibold">{g.name}</span>
-                                {/* บอกด้วยว่าในกลุ่มมีใคร — เลือกกลุ่มโดยไม่รู้ว่ามีใครอยู่
-                                    คือการเดา และเป็นจุดที่พลาดแล้วสายไปหาคนผิด */}
-                                <span className="block truncate text-micro text-ink-2">
-                                  {mine.length === 0
-                                    ? T.dev_group_empty
-                                    : `${T.ct_people_count(mine.length)} — ${mine.map((c) => c.name || c.phone_number).join(', ')}`}
-                                </span>
+                              <span className={cn('min-w-0 flex-1 basis-[7rem] truncate text-caption', on ? 'font-semibold' : 'font-medium')}>
+                                {c.name?.trim() || '—'}
+                              </span>
+                              <span className="min-w-0 flex-1 basis-[6rem] truncate font-mono text-caption text-ink-2">
+                                {c.phone_number}
+                              </span>
+                              <span className="min-w-0 flex-1 basis-[6rem] truncate text-micro text-ink-2">
+                                {groups.find((g) => g.id === c.group_id)?.name ?? ''}
                               </span>
                             </button>
                           );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-5">
-                    <p className="mb-2 text-caption text-ink-2">{T.dv_pick_contacts}</p>
-                    {contacts.length === 0 ? (
-                      <p className="rounded-control border border-warn bg-warn-soft px-3.5 py-2.5 text-micro leading-[1.7] text-warn-strong">
-                        {T.dev_no_contacts_at_all}
-                      </p>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        <p className="text-micro leading-[1.7] text-ink-2">{T.dev_pick_contacts_hint}</p>
-                        {groups.map((g) => {
-                          const mine = contacts.filter((c) => c.group_id === g.id);
-                          if (mine.length === 0) return null;
-                          return (
-                            <div key={g.id} className="flex flex-col gap-1.5">
-                              <p className="text-micro font-semibold text-ink-2">{g.name}</p>
-                              {mine.map((c) => {
-                                const on = drawer.contactIds.includes(c.id);
-                                return (
-                                  <button
-                                    key={c.id}
-                                    type="button"
-                                    onClick={() => setDrawer({
-                                      ...drawer,
-                                      contactIds: on
-                                        ? drawer.contactIds.filter((x) => x !== c.id)
-                                        : drawer.contactIds.concat([c.id]),
-                                    })}
-                                    className={cn(
-                                      'flex items-center gap-3 rounded-control border px-3.5 py-2.5 text-start transition-colors',
-                                      on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface hover:border-brand-strong',
-                                    )}
-                                  >
-                                    <span
-                                      className={cn(
-                                        'grid size-4 shrink-0 place-items-center rounded-[5px] border-[1.5px]',
-                                        on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line',
-                                      )}
-                                    >
-                                      {on ? <span className="text-[0.55rem] leading-none">✓</span> : null}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block truncate text-caption font-medium">
-                                        {c.name?.trim() || c.phone_number}
-                                      </span>
-                                      <span className="block truncate font-mono text-micro text-ink-2">
-                                        {c.phone_number}
-                                      </span>
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex shrink-0 gap-2 border-t border-line px-5 py-3.5">
