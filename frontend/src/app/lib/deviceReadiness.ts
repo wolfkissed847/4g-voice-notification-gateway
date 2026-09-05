@@ -35,8 +35,11 @@ export function readiness(device: ApiKey, T: ReturnType<typeof useApp>['T']): Re
   if (!device.is_active) return { tone: 'muted', label: T.device_off, Icon: Ban };
   if (device.allowed_event_types.length === 0)
     return { tone: 'warn', label: T.device_not_ready_events, Icon: AlertTriangle };
-  const hasSomeone = device.allowed_event_types.some((e) => e.contacts.length > 0 || e.group_id !== null);
-  if (!hasSomeone) return { tone: 'warn', label: T.device_not_ready_recipients, Icon: AlertTriangle };
+  // every ไม่ใช่ some — เดิมใช้ some ทำให้อุปกรณ์ที่เปิดไว้ 3 เหตุการณ์แต่ตั้งผู้รับแค่อันเดียว
+  // ขึ้นป้ายเขียว "พร้อม" ทั้งที่อีก 2 เรื่องยิงเข้ามาแล้วไม่มีใครรับสาย ซึ่งเป็นความล้มเหลว
+  // แบบเงียบที่สุดของระบบนี้ — ทุกอย่างดูสำเร็จหมดจนกว่าจะมีเรื่องจริงแล้วไม่มีใครรู้
+  const everyoneCovered = device.allowed_event_types.every((e) => e.contacts.length > 0 || e.group_id !== null);
+  if (!everyoneCovered) return { tone: 'warn', label: T.device_not_ready_recipients, Icon: AlertTriangle };
   return { tone: 'ok', label: T.device_ready, Icon: ShieldCheck };
 }
 
