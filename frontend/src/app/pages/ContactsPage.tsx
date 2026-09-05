@@ -360,30 +360,24 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
       ) : null}
 
       {/* ไม่มีกลุ่มเลย = ไม่ต้องวาดกรอบเปล่าค้างไว้ใต้ empty state */}
+      {/* ── การ์ดใบละกลุ่ม ตามไฟล์ดีไซน์ figma/Redesign Notification Settings ──
+          (Screenshot_2026-08-19_113223 / _113228) แต่ใช้ token ของธีมเราทั้งหมด
+          ไม่ใช่สี slate/blue ของไฟล์นั้น
+
+          เคยลองทำเป็นตารางคอลัมน์แบบแท็บประเภทเหตุการณ์อยู่รอบหนึ่ง แล้วผู้ใช้เลือก
+          กลับมาแบบนี้ — เพราะกลุ่มไม่ได้มีข้อมูลหลายช่องให้เทียบกันข้ามแถวเหมือน
+          ประเภทเหตุการณ์ มันมีแค่ชื่อกับ "ใครอยู่ในนั้นบ้าง" และงานจริงของหน้านี้คือ
+          กางกลุ่มเดียวออกมาแก้เบอร์ข้างใน ซึ่งการ์ดที่แยกใบกันชัดอ่านง่ายกว่าแถวตาราง
+          ที่กางแล้วเนื้อหาข้างในไหลต่อกับแถวถัดไป
+
+          กล่องนอกไม่มีกรอบ/พื้นของตัวเอง — การ์ดลอยอยู่บนพื้นหน้าเลยตามไฟล์ดีไซน์
+          แต่ยังเลื่อนอยู่ในตัวเอง (flex-1 + overflow-auto) ไม่ให้ทั้งหน้าเลื่อนตามจำนวนกลุ่ม */}
       {groups.length > 0 ? (
-        <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+        <div className="flex min-h-[10rem] min-w-0 flex-1 flex-col gap-2.5 overflow-auto overscroll-contain">
           {visible.length === 0 ? (
-            <p className="px-4 py-10 text-center text-caption text-ink-2">{T.contacts_search_none}</p>
-          ) : null}
-
-          {/* ── ตารางชุดเดียวกับแท็บประเภทเหตุการณ์ ────────────────────
-              เดิมแถวกลุ่มเป็นการ์ดในตัวเอง: ไอคอนวงกลม ชื่อตัวหนา แล้วบรรทัดที่สอง
-              เอา "3 เบอร์โทร · ช่างต้น, ช่างเอ" มาต่อกันด้วยจุดคั่น อ่านทีละแถวได้
-              แต่กวาดตาลงมาเทียบข้ามแถวไม่ได้เลย เพราะไม่มีอะไรอยู่ตรงคอลัมน์เดียวกัน
-              พอแยกเป็นคอลัมน์แบบตารางเดียวกับอีกแท็บ คำถามที่คนเปิดหน้านี้ถามจริง
-              ("กลุ่มไหนยังไม่มีเบอร์" / "ใครอยู่กลุ่มไหน") ตอบได้ด้วยการกวาดตารอบเดียว
-              และปุ่มแก้/ลบก็ไปอยู่ตำแหน่งเดียวกับของอีกแท็บ ไม่ต้องหาใหม่ทุกครั้งที่สลับ
-
-              ลูกศรกาง/หุบย้ายมาไว้หน้าชื่อ ไม่ใช่ท้ายแถวแบบเดิม — มันบอกว่า "แถวนี้กางได้"
-              ซึ่งเป็นเรื่องของตัวแถวเอง ไม่ใช่คอลัมน์ข้อมูลอีกคอลัมน์ และวางไว้หน้าชื่อ
-              ทำให้เห็นได้ทันทีว่าแถวไหนกางอยู่โดยไม่ต้องกวาดตาไปสุดขอบขวา */}
-          {visible.length > 0 ? (
-            <div className="sticky top-0 z-10 hidden flex-wrap items-center gap-x-3 border-b border-line bg-surface-2 px-3.5 py-1.5 font-mono text-body font-bold text-ink-2 sm:flex">
-              <span className="min-w-0 flex-1 basis-[10rem]">{T.group_name_label}</span>
-              <span className="min-w-0 flex-[0.7] basis-[6rem]">{T.ct_col_phones}</span>
-              <span className="min-w-0 flex-[1.3] basis-[10rem]">{T.ct_col_members}</span>
-              <span className="w-[4.25rem] shrink-0 text-end">{T.col_actions}</span>
-            </div>
+            <p className="rounded-card border border-dashed border-line px-4 py-10 text-center text-caption text-ink-2">
+              {T.contacts_search_none}
+            </p>
           ) : null}
 
           {visible.map((g) => {
@@ -395,7 +389,13 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                เพราะถ้าไปเขียน state ทับ พอลบคำค้นออกกลุ่มจะค้างกางอยู่ทั้งที่ผู้ใช้ไม่ได้กดเอง */
             const open = expanded[g.id] || (q !== '' && hitsIn(g.id));
             return (
-              <div key={g.id} className="min-w-0 border-b border-line-2 last:border-b-0">
+              <div
+                key={g.id}
+                className={cn(
+                  'min-w-0 shrink-0 overflow-hidden rounded-card border bg-surface shadow-card transition-colors',
+                  open ? 'border-brand-strong' : 'border-line',
+                )}
+              >
                 {/* ทั้งแถวกดกางได้ ไม่ใช่เฉพาะช่วงชื่อกับลูกศร (ตามไฟล์ดีไซน์)
                     ของเดิมพื้นที่ว่างกลางแถวกดไม่ติด ทั้งที่ตาเห็นเป็นแถบเดียวกันหมด
                     กดแล้วไม่มีอะไรเกิดขึ้นอ่านได้ว่าเว็บค้าง มากกว่าจะเดาว่ากดผิดที่
@@ -417,17 +417,14 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                         }
                   }
                   className={cn(
-                    'flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2 transition-colors',
-                    !renaming && 'cursor-pointer hover:bg-surface-2',
-                    open && 'bg-surface-2',
+                    'flex w-full items-center gap-2.5 px-4 py-3',
+                    !renaming && 'cursor-pointer transition-colors hover:bg-surface-2',
                   )}
                 >
                   {renaming ? (
                     <>
-                      {/* ช่องแก้ชื่อกินที่ของสามคอลัมน์แรกรวมกัน — ชื่อกลุ่มยาวกว่าคอลัมน์ชื่อ
-                          ได้ง่าย และตอนกำลังพิมพ์ก็ไม่มีอะไรให้อ่านในอีกสองคอลัมน์อยู่แล้ว */}
                       <input
-                        className={cn(inputCls, 'min-w-0 flex-1 basis-[14rem] py-1.5 text-caption')}
+                        className={cn(inputCls, 'min-w-0 flex-1 py-1.5 text-caption')}
                         value={groupDraft}
                         onChange={(e) => setGroupDraft(e.target.value)}
                         onKeyDown={(e) => {
@@ -436,67 +433,67 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                         }}
                         autoFocus
                       />
-                      <span className="flex w-[4.25rem] shrink-0 items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={() => saveGroupName(g.id)}
-                          disabled={!groupDraft.trim()}
-                          className="grid size-8 place-items-center rounded-control text-ok-strong disabled:opacity-40"
-                          aria-label={T.save}
-                          title={T.save}
-                        >
-                          <Check size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingGroup(null)}
-                          className="ms-1 grid size-8 place-items-center rounded-control text-ink-2"
-                          aria-label={T.cancel}
-                          title={T.cancel}
-                        >
-                          <X size={15} />
-                        </button>
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => saveGroupName(g.id)}
+                        disabled={!groupDraft.trim()}
+                        className="grid size-8 shrink-0 place-items-center rounded-control text-ok-strong disabled:opacity-40"
+                        aria-label={T.save}
+                        title={T.save}
+                      >
+                        <Check size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingGroup(null)}
+                        className="ms-1 grid size-8 shrink-0 place-items-center rounded-control text-ink-2"
+                        aria-label={T.cancel}
+                        title={T.cancel}
+                      >
+                        <X size={15} />
+                      </button>
                     </>
                   ) : (
                     <>
-                      <span className="flex min-w-0 flex-1 basis-[10rem] items-center gap-2">
-                        <span aria-hidden className="grid size-5 shrink-0 place-items-center text-ink-2">
-                          {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      <span className="grid size-9 shrink-0 place-items-center rounded-control bg-brand-soft">
+                        <Users size={16} className="text-brand-strong" strokeWidth={1.8} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-body font-semibold">{g.name}</span>
+                        {/* บรรทัดที่สองตอบสองอย่างที่ต่างกัน จึงคั่นด้วยจุด: มีกี่เบอร์ (ตัวเลข
+                            อ่านเร็ว) และเป็นใครบ้าง (ชื่อ 3 คนแรก) — ยังไม่มีเบอร์ก็บอกตรงๆ
+                            ไม่ปล่อยว่าง เพราะกลุ่มเปล่าคือกลุ่มที่ต้องไปเติมเบอร์ ไม่ใช่กลุ่มปกติ */}
+                        <span className="block truncate text-micro text-ink-2">
+                          <span className="font-mono">{T.phones_count(g.contact_count)}</span>
+                          {preview ? ` · ${preview}` : ` · ${T.no_phones}`}
                         </span>
-                        <span className="truncate text-caption font-medium">{g.name}</span>
                       </span>
 
-                      <span className="min-w-0 flex-[0.7] basis-[6rem] truncate font-mono text-caption text-ink-2">
-                        {T.phones_count(g.contact_count)}
-                      </span>
+                      {/* ปุ่มไอคอนขนาด 32px และเว้นช่องก่อนปุ่มลบ — ของเดิมดินสอกับถังขยะ
+                          ติดกันเกือบชิด ทั้งคู่เล็กและไม่มีข้อความกำกับ พลาดไปหนึ่งช่องคือลบทั้งกลุ่ม */}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setEditingGroup(g.id); setGroupDraft(g.name); }}
+                        className="grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                        aria-label={T.edit_group_name}
+                        title={T.edit_group_name}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}
+                        className="ms-1 grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
+                        aria-label={T.delete}
+                        title={T.delete}
+                      >
+                        <Trash2 size={15} />
+                      </button>
 
-                      {/* ยังไม่มีเบอร์ = ขีดเดียว ไม่ใช่ช่องว่าง — ช่องว่างอ่านได้ว่าโหลดไม่ขึ้น */}
-                      <span className="min-w-0 flex-[1.3] basis-[10rem] truncate text-caption text-ink-2">
-                        {preview || '—'}
-                      </span>
-
-                      {/* ขนาดปุ่มและระยะห่างชุดเดียวกับแท็บประเภทเหตุการณ์ — 32px และเว้นช่อง
-                          ก่อนปุ่มลบ สามแท็บนี้อยู่หน้าเดียวกัน ปุ่มแก้/ลบต้องกดเหมือนกันหมด */}
-                      <span className="flex w-[4.25rem] shrink-0 items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setEditingGroup(g.id); setGroupDraft(g.name); }}
-                          className="grid size-8 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
-                          aria-label={T.edit_group_name}
-                          title={T.edit_group_name}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}
-                          className="ms-1 grid size-8 place-items-center rounded-control text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
-                          aria-label={T.delete}
-                          title={T.delete}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                      {/* ลูกศรเป็นแค่สัญลักษณ์บอกว่ากางได้ — ทั้งแถวรับคลิกอยู่แล้ว
+                          จึงไม่ต้องเป็นปุ่มซ้อนปุ่ม (และไม่ต้องมี tab stop ของตัวเอง) */}
+                      <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center text-ink-2">
+                        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       </span>
                     </>
                   )}

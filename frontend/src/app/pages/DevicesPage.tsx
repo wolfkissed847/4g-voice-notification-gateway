@@ -8,11 +8,13 @@
  *
  * ปัญหาที่ตั้งใจแก้:
  *   1. กดลึก 3 ชั้น        → รายการกับแผงตั้งค่าอยู่จอเดียวกัน กดชื่อแล้วแก้ได้เลย
- *   2. ตั้งค่ายาก           → แผงขวาเป็นสองขั้น: เลือกเหตุการณ์ก่อน แล้วค่อยเลือกผู้รับสาย
- *                            ทั้งแผงเป็นของเหตุการณ์ที่เลือกตัวเดียว ช่องเลือกกลุ่มกับ
- *                            กล่องติ๊กเบอร์จึงกว้างเต็มแผง (เคยเป็นตารางที่เอาทุกเหตุการณ์
- *                            มาเรียงพร้อมกัน ผู้ใช้บอกว่าใช้งานลำบาก จึงรื้อเป็นทีละอัน)
- *   3. มองไม่เห็นภาพรวม    → รายการ "ตั้งไว้แล้ว" ท้ายแผง + มุมมอง "ตารางรวม" อุปกรณ์ × เหตุการณ์
+ *   2. ตั้งค่ายาก           → แผงขวาเป็นรายการติ๊ก ติ๊กเหตุการณ์ไหน อันนั้นกางออกมา
+ *                            ให้เลือกผู้รับสายตรงนั้นเลย เต็มความกว้างของแถว
+ *                            (ผ่านมาสองแบบก่อนหน้า: ตาราง 4 คอลัมน์ที่บีบจนกดยาก
+ *                             และ select ทีละอันที่ต้องเปิด dropdown ถึงจะเห็นรายการ
+ *                             — ผู้ใช้เลือกแบบนี้จากไฟล์ดีไซน์ figma)
+ *   3. มองไม่เห็นภาพรวม    → รายการติ๊กเห็นทุกเหตุการณ์พร้อมกัน ตัวที่เปิดอยู่ย้อมสีแบรนด์
+ *                            + มุมมอง "ตารางรวม" อุปกรณ์ × เหตุการณ์
  *
  * เคยมีแถบ "เปิดทุกเหตุการณ์แล้วให้โทรหา" (ตั้งกลุ่มเดียวให้ทุกเหตุการณ์รวดเดียว)
  * และแถบบอกลำดับการตั้งค่าอยู่บนสุด — ผู้ใช้สั่งเอาออกทั้งคู่หลังลองใช้จริง
@@ -29,7 +31,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Cpu, PhoneOutgoing, Plus, Power, Search, Trash2, X } from 'lucide-react';
+import { Cpu, PhoneOutgoing, Plus, Power, Search, Trash2 } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
@@ -82,11 +84,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [pickMode, setPickMode] = useState<Record<string, boolean>>({});
   const pickKey = (deviceId: number, etId: number) => `${deviceId}:${etId}`;
 
-  /* เหตุการณ์ที่กำลังตั้งค่าอยู่ในแผงขวา — ทีละอัน ไม่ใช่ทั้งตารางพร้อมกัน
-     เก็บเป็น id ของ event type ไม่ผูกกับอุปกรณ์ จึงยังค้างอยู่ตัวเดิมตอนสลับอุปกรณ์
-     ซึ่งเป็นสิ่งที่ต้องการเวลาไล่ตั้งเหตุการณ์เดียวกันให้อุปกรณ์หลายตัวติดกัน */
-  const [etId, setEtId] = useState<number | null>(null);
-
   useEffect(() => {
     let alive = true;
     Promise.all([listApiKeys(), listEventTypes(), listGroups()])
@@ -111,27 +108,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   }, [devices, selId]);
 
   const sel = devices.find((d) => d.id === selId) ?? null;
-
-  /* ตั้งต้นที่เหตุการณ์แรกที่อุปกรณ์นี้เปิดไว้ — ยังไม่เปิดอะไรเลยก็ปล่อยว่าง
-     ห้ามตั้งเป็นตัวแรกในระบบ เพราะตอนนี้ "เลือกในช่อง = เปิดใช้" การเลือกให้เอง
-     จึงเท่ากับไปเปิดเหตุการณ์ให้อุปกรณ์โดยที่ไม่มีใครสั่ง
-
-     แตะเฉพาะตอนตัวที่เลือกอยู่หายไปจริงๆ (ถูกลบ หรือยังไม่เคยเลือก) — ไม่งั้นการสลับ
-     อุปกรณ์จะดีดกลับไปเหตุการณ์แรกทุกครั้ง ทั้งที่คนกำลังไล่ตั้งเหตุการณ์เดิมอยู่ */
-  useEffect(() => {
-    if (eventTypes.length === 0) return;
-    if (etId !== null && eventTypes.some((e) => e.id === etId)) return;
-    setEtId(sel?.allowed_event_types[0]?.id ?? null);
-  }, [sel, eventTypes, etId]);
-
-  const curEt = eventTypes.find((e) => e.id === etId) ?? null;
-  const curRef = sel && curEt ? (sel.allowed_event_types.find((e) => e.id === curEt.id) ?? null) : null;
-  const curOn = curRef !== null;
-  const curPicked = curRef?.contacts ?? [];
-  const curIsPick =
-    curOn && sel !== null && curEt !== null
-      ? curPicked.length > 0 || pickMode[pickKey(sel.id, curEt.id)] === true
-      : false;
 
   /** ชื่อคนที่จะถูกโทรจริงของคู่นี้ เรียงตามลำดับไล่สาย
    *  โหมดกลุ่มต้องไปหยิบจากรายชื่อทั้งระบบเอง เพราะ backend ส่งมาแค่ id กับชื่อกลุ่ม */
@@ -388,243 +364,184 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   </p>
                 ) : null}
 
-                {/* ── ทีละเหตุการณ์ ไม่ใช่ทั้งตารางพร้อมกัน ────────────────────
-                    เดิมเอาทุกเหตุการณ์มาเรียงเป็นตาราง แต่ละแถวมีทั้งสวิตช์เปิด ปุ่มสลับโหมด
-                    ช่องเลือกกลุ่ม และกล่องติ๊กเบอร์ ยัดอยู่ในคอลัมน์กว้าง 1.5fr ผลคือ
-                    ของที่ต้องกดจริงถูกบีบจนเล็ก ชิปเบอร์ตกบรรทัดกันมั่ว และเกินครึ่งจอ
-                    เป็นแถวที่ยังไม่ได้เปิดซึ่งไม่มีอะไรให้ทำเลย ต้องกวาดหาแถวที่สนใจก่อนทุกครั้ง
+                {/* ── รายการติ๊ก: ติ๊กอันไหน อันนั้นกางออกมาให้เลือกผู้รับตรงนั้น ──
+                    รูปทรงตามไฟล์ดีไซน์ figma/Redesign Notification Settings
+                    (Screenshot_2026-08-19_113302) แต่ใช้ token ของธีมเราทั้งหมด
+                    ไม่ใช่สี slate/blue ของไฟล์นั้น
 
-                    ตอนนี้เลือกเหตุการณ์จากช่องเดียวก่อน แล้วทั้งแผงเป็นของเหตุการณ์นั้นตัวเดียว
-                    ช่องเลือกกลุ่มกับกล่องติ๊กเบอร์จึงได้ความกว้างเต็มแผง
-                    ส่วนภาพรวมว่าตั้งอะไรไว้แล้วบ้างย้ายไปเป็นรายการสรุปท้ายแผง */}
+                    เคยลองมาสองแบบก่อนหน้านี้ ผู้ใช้ตีกลับทั้งคู่:
+                      1) ตาราง 4 คอลัมน์ เอาทุกเหตุการณ์มาเรียงพร้อมกัน — ของที่ต้องกดจริง
+                         ถูกบีบอยู่ในคอลัมน์ 1.5fr ชิปเบอร์ตกบรรทัดมั่ว
+                      2) select เลือกเหตุการณ์ทีละอัน — แก้เรื่องที่แคบได้ แต่ต้องเปิด
+                         dropdown ก่อนถึงจะรู้ว่ามีเหตุการณ์อะไรให้เลือกบ้าง
+
+                    แบบนี้ได้ทั้งสองอย่าง: เห็นรายการทั้งหมดพร้อมกันเหมือนแบบ 1
+                    และตัวที่เปิดอยู่ได้ความกว้างเต็มแผงเหมือนแบบ 2 — เพราะของที่ต้องกด
+                    ไม่ได้อยู่ในคอลัมน์ของตัวเอง แต่กางลงมาเป็นบรรทัดใหม่ใต้ชื่อ
+
+                    ติ๊ก = เปิดใช้เลย ไม่มีปุ่มยืนยันซ้ำ ติ๊กออก = ปิด (ตามที่ผู้ใช้สั่งไว้) */}
                 {eventTypes.length === 0 ? (
-                  <p className="border-b border-line px-5 py-6 text-caption text-ink-2">{T.dv_no_events}</p>
+                  <p className="px-5 py-6 text-caption text-ink-2">{T.dv_no_events}</p>
                 ) : (
-                  <>
-                    {/* ── ขั้นที่ 1 ────────────────────────────────────────────── */}
-                    <section className="border-b border-line px-5 py-4">
-                      <p className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dv_step1_title}</p>
-                      {/* เลือกในช่องนี้ = เปิดให้อุปกรณ์ยิงเหตุการณ์นั้นเลย ไม่มีปุ่มติ๊กซ้ำ
-                          เคยมีปุ่ม "ให้อุปกรณ์นี้ยิงเหตุการณ์นี้ได้" อยู่ข้างช่อง ซึ่งเป็นการ
-                          ให้ยืนยันสิ่งที่เพิ่งทำไปแล้ว — เลือกจากช่องอยู่ดีๆ ก็คือตั้งใจจะใช้มัน
-                          ปิดเหตุการณ์ทำที่รายการ "ตั้งไว้แล้ว" ท้ายแผงแทน ซึ่งเป็นที่ที่เห็นว่า
-                          กำลังจะปิดอะไรและมันตั้งอะไรค้างไว้อยู่
+                  <section className="flex flex-col gap-2.5 px-5 py-4">
+                    <p className="text-lead font-bold">{T.dv_pick_events_title}</p>
 
-                          "— เลือกเหตุการณ์ —" โผล่เฉพาะตอนยังไม่ได้เลือกอะไร ไม่ค้างเป็น
-                          ตัวเลือกถาวร เพราะการกลับไปเลือกมันไม่มีความหมาย (ไม่ใช่การปิด) */}
-                      <select
-                        value={curOn && curEt ? curEt.id : ''}
-                        onChange={(e) => {
-                          if (!e.target.value) return;
-                          const id = Number(e.target.value);
-                          setEtId(id);
-                          if (!sel.allowed_event_types.some((x) => x.id === id)) toggleEvent(sel, id);
-                        }}
-                        className="mt-2.5 w-full rounded-control border border-line bg-surface px-3 py-2.5 text-body"
-                      >
-                        {!curOn ? <option value="">{T.dv_pick_event_ph}</option> : null}
-                        {/* ต่อ "· เปิดอยู่" ท้ายชื่อ ไม่ใช่แยกเป็นสองกลุ่มใน optgroup
-                            เพราะลำดับต้องคงที่ ไม่งั้นพอเปิดตัวไหน รายการทั้งช่อง
-                            จะสลับที่กันเองใต้เมาส์ที่กำลังจะกดตัวถัดไป */}
-                        {eventTypes.map((et) => {
-                          const enabled = sel.allowed_event_types.some((e) => e.id === et.id);
-                          return (
-                            <option key={et.id} value={et.id}>
-                              {et.display_name}{enabled ? ` · ${T.dv_step1_on}` : ''}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      {curOn && curEt ? (
-                        <p className="mt-2 font-mono text-micro text-ink-2">{curEt.code}</p>
-                      ) : null}
-                    </section>
-
-                    {/* ── ขั้นที่ 2 ────────────────────────────────────────────── */}
-                    <section className="border-b border-line px-5 py-4">
-                      <p className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dv_step2_title}</p>
-
-                      {!curOn || !curEt ? (
-                        /* ปิดอยู่ = ไม่มีอะไรให้เลือก บอกตรงๆ ว่าต้องทำอะไรก่อน
-                           ดีกว่าโชว์ตัวเลือกจางๆ ที่กดไม่ได้ ซึ่งอ่านได้ว่าเว็บเสีย */
-                        <p className="mt-2.5 rounded-control border border-dashed border-line bg-surface-2 px-3.5 py-3 text-caption text-ink-2">
-                          {T.dv_step2_locked}
-                        </p>
-                      ) : (
-                        <div className="mt-2.5 flex flex-col gap-3">
-                          <div className="flex w-fit gap-0.5 rounded-control border border-line bg-surface-2 p-0.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPickMode((m) => ({ ...m, [pickKey(sel.id, curEt.id)]: false }));
-                                setTarget(sel, curEt.id, { contact_ids: null, group_id: curRef?.group_id ?? null });
-                              }}
+                    {eventTypes.map((et) => {
+                      const ref = sel.allowed_event_types.find((e) => e.id === et.id) ?? null;
+                      const on = ref !== null;
+                      const picked = ref?.contacts ?? [];
+                      const isPick = on && (picked.length > 0 || pickMode[pickKey(sel.id, et.id)] === true);
+                      const ready = ref ? linkReady(ref) : false;
+                      return (
+                        <div
+                          key={et.id}
+                          className={cn(
+                            'min-w-0 rounded-card border transition-colors',
+                            on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface',
+                          )}
+                        >
+                          {/* ทั้งแถวหัวเป็นปุ่มติ๊ก ไม่ใช่เฉพาะช่องสี่เหลี่ยมเล็กๆ ตรงหัวแถว
+                              เป้ากดกว้างเต็มแถวแล้วพลาดยาก และไม่ต้องเล็งกล่อง 20px */}
+                          <button
+                            type="button"
+                            onClick={() => toggleEvent(sel, et.id)}
+                            aria-pressed={on}
+                            className="flex w-full items-center gap-3 px-3.5 py-3 text-start"
+                          >
+                            <span
                               className={cn(
-                                'rounded-[7px] px-3.5 py-1.5 text-caption',
-                                !curIsPick ? 'bg-surface font-semibold text-ink' : 'text-ink-2',
+                                'grid size-5 shrink-0 place-items-center rounded-[6px] border-[1.5px]',
+                                on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line bg-surface',
                               )}
                             >
-                              {T.dev_target_group}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPickMode((m) => ({ ...m, [pickKey(sel.id, curEt.id)]: true }));
-                                setTarget(sel, curEt.id, { group_id: null, contact_ids: curPicked.map((c) => c.id) });
-                              }}
-                              className={cn(
-                                'rounded-[7px] px-3.5 py-1.5 text-caption',
-                                curIsPick ? 'bg-surface font-semibold text-ink' : 'text-ink-2',
-                              )}
-                            >
-                              {T.dev_target_contacts}
-                            </button>
-                          </div>
+                              {on ? <span className="text-micro leading-none">✓</span> : null}
+                            </span>
+                            <span className={cn('min-w-0 flex-1 truncate text-body', on ? 'font-semibold' : 'text-ink-2')}>
+                              {et.display_name}
+                            </span>
+                            <span className="shrink-0 font-mono text-micro text-ink-2">{et.code}</span>
+                          </button>
 
-                          {!curIsPick ? (
-                            <select
-                              value={curRef?.group_id ?? ''}
-                              onChange={(e) => setTarget(sel, curEt.id, {
-                                group_id: e.target.value ? Number(e.target.value) : null,
-                                contact_ids: null,
-                              })}
-                              className={cn(
-                                'w-full rounded-control border bg-surface px-3 py-2.5 text-body',
-                                curRef && linkReady(curRef) ? 'border-line' : 'border-warn',
+                          {on ? (
+                            <div className="flex flex-col gap-2.5 border-t border-brand-strong/20 px-3.5 pt-3 pb-3.5">
+                              {/* ปุ่มกลมแบบ radio ตามไฟล์ดีไซน์ ไม่ใช่แท็บสองช่อง — สองตัวเลือกนี้
+                                  แทนที่กันเสมอ (เลือกกลุ่ม = ไม่ได้เจาะเบอร์) ทรงกลมอ่านออกทันที
+                                  ว่าเลือกได้อันเดียว ส่วนแท็บอ่านได้ว่าเป็นสองหน้าที่สลับไปมา */}
+                              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                                <span className="text-caption text-ink-2">{T.dev_target_mode}</span>
+                                {([
+                                  { pick: false, label: T.dev_target_group },
+                                  { pick: true, label: T.dev_target_contacts },
+                                ] as const).map((opt) => {
+                                  const active = isPick === opt.pick;
+                                  return (
+                                    <button
+                                      key={opt.label}
+                                      type="button"
+                                      onClick={() => {
+                                        setPickMode((m) => ({ ...m, [pickKey(sel.id, et.id)]: opt.pick }));
+                                        setTarget(sel, et.id, opt.pick
+                                          ? { group_id: null, contact_ids: picked.map((c) => c.id) }
+                                          : { contact_ids: null, group_id: ref?.group_id ?? null });
+                                      }}
+                                      className="flex items-center gap-2 text-caption"
+                                    >
+                                      <span
+                                        className={cn(
+                                          'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
+                                          active ? 'border-brand-strong' : 'border-line bg-surface',
+                                        )}
+                                      >
+                                        {active ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
+                                      </span>
+                                      <span className={active ? 'font-semibold' : 'text-ink-2'}>{opt.label}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {!isPick ? (
+                                <select
+                                  value={ref?.group_id ?? ''}
+                                  onChange={(e) => setTarget(sel, et.id, {
+                                    group_id: e.target.value ? Number(e.target.value) : null,
+                                    contact_ids: null,
+                                  })}
+                                  className={cn(
+                                    'w-full rounded-control border bg-surface px-3 py-2.5 text-body',
+                                    ready ? 'border-line' : 'border-warn',
+                                  )}
+                                >
+                                  <option value="">{T.dv_group_none}</option>
+                                  {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                </select>
+                              ) : contacts.length === 0 ? (
+                                <p className="rounded-control border border-dashed border-line bg-surface px-3.5 py-3 text-caption text-ink-2">
+                                  {T.dev_no_contacts_at_all}
+                                </p>
+                              ) : (
+                                /* กล่องติ๊กเบอร์กว้างเต็มแถวแล้ว ชิปจึงเรียงได้หลายตัวต่อบรรทัด
+                                   max-h กันไว้ไม่ให้เหตุการณ์เดียวกินจอทั้งจอตอนมีเบอร์เยอะ */
+                                <div className="flex max-h-[15rem] flex-col gap-3 overflow-y-auto overscroll-contain rounded-control border border-line bg-surface p-3">
+                                  <p className="text-micro leading-[1.7] text-ink-2">{T.dev_pick_contacts_hint}</p>
+                                  {groups.map((g) => {
+                                    const mine = contacts.filter((c) => c.group_id === g.id);
+                                    if (mine.length === 0) return null;
+                                    return (
+                                      <div key={g.id}>
+                                        <p className="mb-1.5 text-micro font-semibold text-ink-2">{g.name}</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {mine.map((c) => {
+                                            const has = picked.some((x) => x.id === c.id);
+                                            return (
+                                              <button
+                                                key={c.id}
+                                                type="button"
+                                                onClick={() => setTarget(sel, et.id, {
+                                                  group_id: null,
+                                                  contact_ids: has
+                                                    ? picked.filter((x) => x.id !== c.id).map((x) => x.id)
+                                                    : picked.map((x) => x.id).concat([c.id]),
+                                                })}
+                                                className={cn(
+                                                  'rounded-full border px-3 py-1.5 text-micro',
+                                                  has
+                                                    ? 'border-brand-strong bg-brand-soft font-semibold text-brand-strong'
+                                                    : 'border-line bg-surface text-ink-2',
+                                                )}
+                                              >
+                                                {has ? '✓ ' : ''}{c.name || c.phone_number}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               )}
-                            >
-                              <option value="">{T.dv_group_none}</option>
-                              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                            </select>
-                          ) : contacts.length === 0 ? (
-                            <p className="rounded-control border border-dashed border-line bg-surface-2 px-3.5 py-3 text-caption text-ink-2">
-                              {T.dev_no_contacts_at_all}
-                            </p>
-                          ) : (
-                            /* กล่องติ๊กเบอร์ได้ความกว้างเต็มแผงแล้ว ชิปจึงเรียงได้หลายตัวต่อบรรทัด
-                               max-h กันไว้ไม่ให้ดันขั้นตอนถัดไปตกจอตอนมีเบอร์เยอะ */
-                            <div className="flex max-h-[16rem] flex-col gap-3 overflow-y-auto overscroll-contain rounded-control border border-line-2 bg-surface-2 p-3">
-                              <p className="text-micro leading-[1.7] text-ink-2">{T.dev_pick_contacts_hint}</p>
-                              {groups.map((g) => {
-                                const mine = contacts.filter((c) => c.group_id === g.id);
-                                if (mine.length === 0) return null;
-                                return (
-                                  <div key={g.id}>
-                                    <p className="mb-1.5 text-micro font-semibold text-ink-2">{g.name}</p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {mine.map((c) => {
-                                        const has = curPicked.some((x) => x.id === c.id);
-                                        return (
-                                          <button
-                                            key={c.id}
-                                            type="button"
-                                            onClick={() => setTarget(sel, curEt.id, {
-                                              group_id: null,
-                                              contact_ids: has
-                                                ? curPicked.filter((x) => x.id !== c.id).map((x) => x.id)
-                                                : curPicked.map((x) => x.id).concat([c.id]),
-                                            })}
-                                            className={cn(
-                                              'rounded-full border px-3 py-1.5 text-micro',
-                                              has
-                                                ? 'border-brand-strong bg-brand-soft font-semibold text-brand-strong'
-                                                : 'border-line bg-surface text-ink-2',
-                                            )}
-                                          >
-                                            {has ? '✓ ' : ''}{c.name || c.phone_number}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+
+                              {/* บรรทัดปิดท้ายตอบคำถามเดียวเสมอ: ยิงเหตุการณ์นี้แล้วเกิดอะไร
+                                  ครบแล้ว = ไล่ชื่อตามลำดับโทรจริง / ยังไม่ครบ = บอกว่าจะถูกปฏิเสธ
+                                  (ข้อความเตือนตามไฟล์ดีไซน์ ซึ่งเขียนผลลัพธ์ ไม่ใช่แค่ว่า "ยังไม่ครบ") */}
+                              {ref && ready ? (
+                                <p className="text-caption leading-[1.8] text-ink-2">
+                                  <span className="font-semibold text-ink">{T.dev_will_call}</span>{' '}
+                                  {recipientsOf(ref).length === 0
+                                    ? T.dev_group_empty
+                                    : recipientsOf(ref).map((n, i) => `${i + 1}. ${n}`).join('  ·  ')}
+                                </p>
+                              ) : (
+                                <p className="text-caption leading-[1.8] text-warn-strong">{T.dev_target_missing}</p>
+                              )}
                             </div>
-                          )}
-
-                          {/* บรรทัดสรุปว่าจะโทรหาใครก่อนหลังจริง — ทั้งสองโหมดจบที่คำตอบเดียวกัน
-                              คนตั้งค่าจึงไม่ต้องแปลเองว่า "กลุ่มทีมช่าง" แปลว่าโทรหาใครบ้าง */}
-                          {curRef && linkReady(curRef) ? (
-                            <p className="text-caption leading-[1.8] text-ink-2">
-                              <span className="font-semibold text-ink">{T.dev_will_call}</span>{' '}
-                              {recipientsOf(curRef).length === 0
-                                ? T.dev_group_empty
-                                : recipientsOf(curRef).map((n, i) => `${i + 1}. ${n}`).join('  ·  ')}
-                            </p>
-                          ) : (
-                            <p className="text-caption leading-[1.8] text-warn-strong">{T.dev_target_missing}</p>
-                          )}
+                          ) : null}
                         </div>
-                      )}
-                    </section>
-
-                    {/* ── ตั้งไว้แล้วอะไรบ้าง ──────────────────────────────────
-                        แทนที่ภาพรวมที่ตารางเดิมให้ไว้ แต่เหลือเฉพาะแถวที่เปิดจริง
-                        ซึ่งเป็นแถวที่มีข้อมูลให้อ่าน ส่วนตัวที่ยังไม่เปิดอยู่ในช่องเลือกอยู่แล้ว
-                        กดแถวไหนก็เด้งขึ้นไปแก้ที่ขั้นที่ 1-2 ของตัวนั้น */}
-                    <section>
-                      <p className="border-b border-line bg-surface-2 px-5 py-2 font-mono text-micro tracking-wider text-ink-2 uppercase">
-                        {fill(T.dv_done_title, { n: sel.allowed_event_types.length })}
-                      </p>
-                      {sel.allowed_event_types.length === 0 ? (
-                        <p className="px-5 py-4 text-caption leading-[1.8] text-ink-2">{T.dv_done_none}</p>
-                      ) : (
-                        sel.allowed_event_types.map((ref) => {
-                          const names = recipientsOf(ref);
-                          const ready = linkReady(ref);
-                          const on = ref.id === curEt?.id;
-                          return (
-                            /* ทั้งแถวเป็นปุ่มกดไปแก้ ยกเว้นปุ่มปิดท้ายแถวซึ่งต้องซ้อนอยู่ข้างใน
-                               ไม่ได้ (ปุ่มซ้อนปุ่มเป็น HTML ที่ไม่ถูกต้อง) จึงเป็น div
-                               ที่มีปุ่มสองอันอยู่ข้างในแทน */
-                            <div
-                              key={ref.id}
-                              className={cn(
-                                'flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-2 ps-5 pe-3 py-2 last:border-b-0',
-                                on ? 'bg-brand-soft' : 'bg-surface',
-                              )}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => setEtId(ref.id)}
-                                className="flex min-w-0 flex-1 basis-[16rem] flex-wrap items-center gap-x-3 gap-y-1 py-0.5 text-start"
-                              >
-                                <span className={cn('min-w-0 flex-1 basis-[9rem] truncate text-caption', on ? 'font-semibold' : '')}>
-                                  {ref.display_name}
-                                </span>
-                                <span className="min-w-0 flex-[1.4] basis-[10rem] truncate text-caption text-ink-2">
-                                  {ready
-                                    ? (ref.contacts.length > 0
-                                        ? fill(T.dv_matrix_picked, { n: ref.contacts.length })
-                                        : ref.group_name ?? '') + (names.length ? ` · ${names.join(', ')}` : '')
-                                    : '—'}
-                                </span>
-                              </button>
-                              <Pill tone={ready ? 'ok' : 'warn'}>{ready ? T.dv_st_ready : T.dv_st_notarget}</Pill>
-                              {/* ที่เดียวที่ปิดเหตุการณ์ได้ หลังเอาปุ่มติ๊กข้างช่องเลือกออก
-                                  อยู่ตรงนี้ถูกที่กว่า เพราะเห็นพร้อมกันว่ากำลังจะปิดอะไร
-                                  และตัวนั้นตั้งผู้รับสายอะไรค้างไว้ (ปิดแล้วการตั้งค่านั้นหายไป) */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  toggleEvent(sel, ref.id);
-                                  if (etId === ref.id) setEtId(null);
-                                }}
-                                aria-label={T.dv_done_remove}
-                                title={T.dv_done_remove}
-                                className="grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
-                              >
-                                <X className="size-4" />
-                              </button>
-                            </div>
-                          );
-                        })
-                      )}
-                    </section>
-                  </>
+                      );
+                    })}
+                  </section>
                 )}
               </div>
-
             </div>
           ) : null}
         </div>
