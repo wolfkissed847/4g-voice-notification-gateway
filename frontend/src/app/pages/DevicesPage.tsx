@@ -1,32 +1,43 @@
 /**
- * DevicesPage — "อุปกรณ์ & key" แบบรายการซ้าย + ตั้งค่าขวา อยู่จอเดียว
+ * DevicesPage — "อุปกรณ์ & key"
  *
- * ── ทำไมรื้อจากของเดิม ────────────────────────────────────────────────────
- * ของเดิมเป็นกริดการ์ด → กดการ์ดเปิดป๊อปอัพ → กดปุ่มในป๊อปอัพเด้งไปหน้า /devices/:id
- * สามชั้นกว่าจะได้แก้ค่า และกดกลับมาก็หลงทางว่าเมื่อกี้อยู่ตัวไหน ทั้งที่งานที่คนเข้าหน้านี้
- * มาทำจริงๆ คือ "ตั้งว่าอุปกรณ์ตัวนี้ยิงอะไรได้ แล้วโทรหาใคร" ซึ่งเป็นงานเดียว
+ * ── รูปทรงมาจากไฟล์ดีไซน์ ─────────────────────────────────────────────────
+ * figma/Redesign Notification Settings Page/src/pages/DevicesPage.tsx
+ * (แผน: plans/misty-forging-whistle.md) แต่ใช้ token ของธีมเราทั้งหมด
+ * ไม่ใช่ slate/blue ของไฟล์นั้น
  *
- * ปัญหาที่ตั้งใจแก้:
- *   1. กดลึก 3 ชั้น        → รายการกับแผงตั้งค่าอยู่จอเดียวกัน กดชื่อแล้วแก้ได้เลย
- *   2. ตั้งค่ายาก           → แผงขวาเป็นรายการติ๊ก ติ๊กเหตุการณ์ไหน อันนั้นกางออกมา
- *                            ให้เลือกผู้รับสายตรงนั้นเลย เต็มความกว้างของแถว
- *                            (ผ่านมาสองแบบก่อนหน้า: ตาราง 4 คอลัมน์ที่บีบจนกดยาก
- *                             และ select ทีละอันที่ต้องเปิด dropdown ถึงจะเห็นรายการ
- *                             — ผู้ใช้เลือกแบบนี้จากไฟล์ดีไซน์ figma)
- *   3. มองไม่เห็นภาพรวม    → รายการติ๊กเห็นทุกเหตุการณ์พร้อมกัน ตัวที่เปิดอยู่ย้อมสีแบรนด์
- *                            + มุมมอง "ตารางรวม" อุปกรณ์ × เหตุการณ์
+ * สาระของดีไซน์นี้ ตามที่แผนเขียนไว้เอง: การจับคู่ (อุปกรณ์ × เหตุการณ์) → ผู้รับสาย
+ * เป็นความสัมพันธ์สองมิติ ถ้าเอาไปทำเป็นขั้นตอนให้เดินทีละขั้น จะเสียบริบทว่า
+ * "ตอนนี้ตั้งอะไรไว้แล้วบ้าง" ทุกครั้งที่เดินไปอีกขั้น
  *
- * เคยมีแถบ "เปิดทุกเหตุการณ์แล้วให้โทรหา" (ตั้งกลุ่มเดียวให้ทุกเหตุการณ์รวดเดียว)
- * และแถบบอกลำดับการตั้งค่าอยู่บนสุด — ผู้ใช้สั่งเอาออกทั้งคู่หลังลองใช้จริง
+ * ทางแก้คือการ์ดใบละอุปกรณ์ที่กางค้างไว้เสมอ ข้างในเป็นรายการเหตุการณ์ที่เปิดใช้
+ * บรรทัดละเหตุการณ์ พร้อมสรุปผู้รับสายในบรรทัดเดียวกัน — เปิดหน้ามาก็เห็นครบทุกคู่
+ * ของทุกอุปกรณ์โดยไม่ต้องกดอะไรเลย ส่วนการ "แก้" ไปอยู่ในลิ้นชักที่เลื่อนออกมาจากขวา
+ * ซึ่งมีที่พอให้เลือกกลุ่มหรือไล่ติ๊กเบอร์ได้เต็มที่ โดยที่การ์ดข้างหลังยังอยู่ให้เห็น
  *
- * ── บันทึกทันทีทุกครั้งที่แตะ ไม่มีปุ่ม "บันทึก" ──────────────────────────
- * หน้าเดิมสะสมการแก้ไว้แล้วให้กดบันทึกทีเดียว ซึ่งเป็นอีกจังหวะที่ลืมกดแล้วค่าหาย
- * ที่นี่ทุกการแตะยิง PUT ทันทีแบบ optimistic (เปลี่ยนหน้าจอก่อน แล้วค่อยรอผล)
- * ถ้าเซิร์ฟเวอร์ปฏิเสธจะถอยกลับค่าเดิมพร้อมบอกเหตุผล — ผู้ใช้ไม่ต้องจำว่าแก้อะไรค้างไว้
+ * ผ่านมาสามแบบก่อนหน้านี้ ผู้ใช้ตีกลับทั้งหมด: กริดการ์ด → ป๊อปอัพ → หน้าแยก (กดลึก 3 ชั้น),
+ * ตาราง 4 คอลัมน์ (ของที่ต้องกดถูกบีบจนเล็ก), และ select ทีละอัน (ต้องเปิด dropdown
+ * ก่อนถึงจะรู้ว่ามีอะไรให้เลือก)
+ *
+ * ── ที่ต่างจากไฟล์ดีไซน์โดยตั้งใจ ──────────────────────────────────────────
+ * 1. เก็บช่องค้นหาไว้ (ต้นฉบับไม่มี) — ของจริงมีอุปกรณ์เกือบ 20 ตัว การ์ดกางค้างทุกใบ
+ *    แปลว่าเลื่อนหาอย่างเดียวไม่ไหว
+ * 2. เก็บมุมมอง "ตารางรวม" ไว้ — เป็นของที่มีอยู่ก่อนและตอบคำถามข้ามอุปกรณ์
+ *    ("เหตุการณ์นี้อุปกรณ์ไหนตั้งไว้บ้าง") ซึ่งการ์ดเรียงกันตอบไม่ได้
+ * 3. เก็บสวิตช์เปิด/ปิดอุปกรณ์ กับปุ่มทดสอบโทรไว้ในหัวการ์ด — เป็นฟังก์ชันจริงของระบบ
+ *    ที่ต้นฉบับ (mock) ไม่มี
+ * 4. ปุ่มแก้/ลบในแถวเหตุการณ์ไม่ซ่อนจนกว่าจะ hover แบบต้นฉบับ — ปุ่มที่มองไม่เห็น
+ *    จนกว่าจะเอาเมาส์ไปวางคือปุ่มที่คนหาไม่เจอ
+ * 5. เพิ่มป๊อปอัพยืนยันตอนเอาเหตุการณ์ออก — เอาออกแล้วผู้รับสายที่ตั้งไว้ของคู่นั้นหายด้วย
+ *
+ * ── บันทึก ────────────────────────────────────────────────────────────────
+ * ติ๊ก/เอาออก/เปิด-ปิดอุปกรณ์ = ยิงทันทีแบบ optimistic (ถอยกลับถ้าเซิร์ฟเวอร์ปฏิเสธ)
+ * ส่วนการเลือกผู้รับสายอยู่ในลิ้นชักที่มีปุ่มบันทึก/ยกเลิกของตัวเองตามไฟล์ดีไซน์ —
+ * ลิ้นชักเป็น modal ปิดตัวเองไม่ได้ จึงไม่มีจังหวะ "ลืมกดบันทึกแล้วเดินจากไป"
+ * แบบฟอร์มที่ฝังอยู่ในหน้า
  *
  * ── เกณฑ์ "พร้อม" ใช้ตัวเดียวกับหน้าภาพรวม ────────────────────────────────
  * อยู่ที่ lib/deviceReadiness.ts จุดเดียว ห้ามเขียนเงื่อนไขซ้ำที่นี่
- * (เคยเพี้ยนกันมาแล้วตอนแก้ online/offline ที่หน้าอุปกรณ์แต่ลืมหน้าภาพรวม)
  */
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -34,20 +45,24 @@ import { toast } from 'sonner';
 import { Cpu, PhoneOutgoing, Plus, Power, Search, Trash2 } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
-import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
+import { listApiKeys, deleteApiKey, revealApiKey, updateApiKey } from '../api/apiKeys';
 import { ApiError } from '../api/client';
 import { listEventTypes, sendTestNotify } from '../api/eventTypes';
 import { listContacts, listGroups } from '../api/groups';
 import { AddDeviceDialog } from '../components/AddDeviceDialog';
-import { Pill } from '../components/primitives';
+import { Btn, Dot, Pill } from '../components/primitives';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '../components/ui/dialog';
+import { Sheet, SheetContent } from '../components/ui/sheet';
 import { useApp } from '../context/AppContext';
 import { readiness } from '../lib/deviceReadiness';
 import { SNAP, readSnapshot, writeSnapshot } from '../lib/snapshot';
-import type { ApiKey, ApiKeyEventLink, Contact, EventType, Group } from '../types';
+import type { ApiKey, ApiKeyEventLink, ApiKeyEventTypeRef, Contact, EventType, Group } from '../types';
 
 /** เติมค่าลงข้อความแปล — คีย์ที่มี {n} / {all} ใช้ตัวนี้แทนการต่อสตริงเอง
  *  (ต่อสตริงเองแล้วภาษาอังกฤษจะเรียงคำผิด เพราะตัวเลขอยู่คนละตำแหน่งกับไทย) */
@@ -62,6 +77,15 @@ function linkReady(ref: { group_id: number | null; contacts: unknown[] }): boole
   return ref.contacts.length > 0 || ref.group_id !== null;
 }
 
+/** ค่าที่กำลังแก้อยู่ในลิ้นชัก — เป็นสำเนา ยังไม่ถูกส่งจนกว่าจะกดบันทึก */
+type DrawerState = {
+  deviceId: number;
+  eventTypeId: number;
+  mode: 'group' | 'custom';
+  groupId: number | null;
+  contactIds: number[];
+};
+
 export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { T } = useApp();
 
@@ -71,18 +95,19 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [contacts, setContacts] = useState<Contact[]>([]);
 
   const [view, setView] = useState<'device' | 'matrix'>('device');
-  const [selId, setSelId] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ApiKey | null>(null);
 
-  /* แถวไหนที่ผู้ใช้กด "เลือกเบอร์เอง" ไว้ — คีย์เป็น "อุปกรณ์:เหตุการณ์"
-     ต้องจำแยกจากข้อมูล เพราะ backend ไม่มีฟิลด์บอกโหมด มีแต่ผลลัพธ์ (กลุ่ม หรือ รายชื่อ)
-     ถ้าเดาจากข้อมูลอย่างเดียว (มีคนถูกเลือก = โหมดเลือกเอง) คนที่เพิ่งกดปุ่มแต่ยังไม่ได้
-     ติ๊กใคร จะไม่เห็นรายชื่อให้ติ๊กเลย = กดแล้วไม่มีอะไรเกิดขึ้น */
-  const [pickMode, setPickMode] = useState<Record<string, boolean>>({});
-  const pickKey = (deviceId: number, etId: number) => `${deviceId}:${etId}`;
+  /* เพิ่มเหตุการณ์ให้อุปกรณ์ — เก็บ id อุปกรณ์ที่กดมา + ตัวที่เลือกในช่อง */
+  const [addEventFor, setAddEventFor] = useState<ApiKey | null>(null);
+  const [addEventId, setAddEventId] = useState('');
+
+  /* เอาเหตุการณ์ออกจากอุปกรณ์ — ต้องถามก่อน เพราะผู้รับสายของคู่นี้หายไปด้วย */
+  const [removeTarget, setRemoveTarget] = useState<{ device: ApiKey; ref: ApiKeyEventTypeRef } | null>(null);
+
+  const [drawer, setDrawer] = useState<DrawerState | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -101,13 +126,12 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
     return () => { alive = false; };
   }, [T]);
 
-  /* เลือกตัวแรกให้อัตโนมัติ — หน้านี้ไม่มีสถานะ "ยังไม่ได้เลือกอะไร" ที่มีประโยชน์ */
-  useEffect(() => {
-    if (selId === null && devices.length > 0) setSelId(devices[0].id);
-    if (selId !== null && !devices.some((d) => d.id === selId)) setSelId(devices[0]?.id ?? null);
-  }, [devices, selId]);
-
-  const sel = devices.find((d) => d.id === selId) ?? null;
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return devices;
+    return devices.filter((d) =>
+      d.name.toLowerCase().includes(q) || d.key_prefix.toLowerCase().includes(q));
+  }, [devices, query]);
 
   /** ชื่อคนที่จะถูกโทรจริงของคู่นี้ เรียงตามลำดับไล่สาย
    *  โหมดกลุ่มต้องไปหยิบจากรายชื่อทั้งระบบเอง เพราะ backend ส่งมาแค่ id กับชื่อกลุ่ม */
@@ -119,13 +143,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         : [];
     return list.map((c) => c.name || c.phone_number);
   };
-
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return devices;
-    return devices.filter((d) =>
-      d.name.toLowerCase().includes(q) || d.key_prefix.toLowerCase().includes(q));
-  }, [devices, query]);
 
   /* ── บันทึก ─────────────────────────────────────────────────────────────
      ส่ง event_links ทั้งชุดเสมอ (ไม่ใช่ส่งเฉพาะตัวที่แก้) เพราะ backend ถือว่า
@@ -183,13 +200,11 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
     void saveLinks(d, links, optimisticOf(d, links));
   };
 
-  const toggleEvent = (d: ApiKey, etId: number) =>
-    mutate(d, (ls) => (ls.some((l) => l.event_type_id === etId)
-      ? ls.filter((l) => l.event_type_id !== etId)
-      : ls.concat([{ event_type_id: etId, group_id: null, contact_ids: null }])));
+  const addEvent = (d: ApiKey, etId: number) =>
+    mutate(d, (ls) => ls.concat([{ event_type_id: etId, group_id: null, contact_ids: null }]));
 
-  const setTarget = (d: ApiKey, etId: number, patch: Partial<ApiKeyEventLink>) =>
-    mutate(d, (ls) => ls.map((l) => (l.event_type_id === etId ? { ...l, ...patch } : l)));
+  const removeEvent = (d: ApiKey, etId: number) =>
+    mutate(d, (ls) => ls.filter((l) => l.event_type_id !== etId));
 
   const toggleActive = async (d: ApiKey) => {
     const before = devices;
@@ -234,6 +249,39 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
       : { tone: 'warn' as const, text: T.dv_pill_notarget };
   };
 
+  /* ── ลิ้นชักผู้รับสาย ─────────────────────────────────────────────────── */
+  const openDrawer = (d: ApiKey, ref: ApiKeyEventTypeRef) =>
+    setDrawer({
+      deviceId: d.id,
+      eventTypeId: ref.id,
+      // เดาโหมดจากข้อมูล: มีเบอร์ที่เจาะไว้ = โหมดเลือกเอง ไม่งั้นถือเป็นโหมดกลุ่ม
+      // ที่นี่เดาได้ปลอดภัย เพราะลิ้นชักเป็นสำเนา สลับโหมดเล่นแล้วกดยกเลิกก็ไม่กระทบของจริง
+      mode: ref.contacts.length > 0 ? 'custom' : 'group',
+      groupId: ref.group_id,
+      contactIds: ref.contacts.map((c) => c.id),
+    });
+
+  const saveDrawer = () => {
+    if (!drawer) return;
+    const d = devices.find((x) => x.id === drawer.deviceId);
+    if (!d) return;
+    mutate(d, (ls) => ls.map((l) => (l.event_type_id === drawer.eventTypeId
+      ? drawer.mode === 'group'
+        ? { ...l, group_id: drawer.groupId, contact_ids: null }
+        : { ...l, group_id: null, contact_ids: drawer.contactIds }
+      : l)));
+    setDrawer(null);
+  };
+
+  const drawerDevice = drawer ? devices.find((d) => d.id === drawer.deviceId) ?? null : null;
+  const drawerEvent = drawer ? eventTypes.find((e) => e.id === drawer.eventTypeId) ?? null : null;
+  const drawerInvalid = drawer
+    ? drawer.mode === 'group' ? drawer.groupId === null : drawer.contactIds.length === 0
+    : true;
+
+  const availableFor = (d: ApiKey) =>
+    eventTypes.filter((et) => !d.allowed_event_types.some((e) => e.id === et.id));
+
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col gap-4', embedded ? '' : 'p-4')}>
       {/* แถบเครื่องมือ */}
@@ -274,276 +322,44 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
       </div>
 
       {view === 'device' ? (
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[316px_minmax(0,1fr)]">
-          {/* รายการอุปกรณ์ */}
-          <div className="min-h-[10rem] min-w-0 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
-            <div className="sticky top-0 z-10 border-b border-line bg-surface px-4 py-3 font-mono text-micro tracking-wider text-ink-2 uppercase">
-              {query.trim()
-                ? fill(T.dv_count_found, { n: shown.length, all: devices.length })
-                : fill(T.dv_count_all, { n: devices.length })}
-            </div>
-            <div>
-              {shown.map((d) => {
-                const p = pillFor(d);
-                const on = d.id === selId;
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => setSelId(d.id)}
-                    className={cn(
-                      'flex w-full flex-col gap-1 border-b border-line-2 px-4 py-3 text-start',
-                      on ? 'bg-brand-soft' : 'bg-surface',
-                    )}
-                    style={{ borderInlineStartWidth: 3, borderInlineStartColor: on ? 'var(--accent)' : 'transparent' }}
-                  >
-                    <span className="flex w-full items-center gap-2">
-                      <span className={cn('min-w-0 flex-1 truncate text-body', on ? 'font-bold' : 'font-medium')}>
-                        {d.name}
-                      </span>
-                      <Pill tone={p.tone}>{p.text}</Pill>
-                    </span>
-                    <span className="w-full truncate text-micro text-ink-2">
-                      <span className="font-mono">{d.key_prefix}</span>
-                      {' · '}
-                      {d.allowed_event_types.length === 0
-                        ? T.dv_sum_none
-                        : fill(T.dv_sum_n, { n: d.allowed_event_types.length })}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        /* การ์ดเรียงลงมา ลอยบนพื้นหน้า ไม่มีกล่องนอกครอบ (ตามไฟล์ดีไซน์)
+           แต่เลื่อนอยู่ในตัวเอง ไม่ปล่อยให้ทั้งหน้าเลื่อนตามจำนวนอุปกรณ์ */
+        <div className="flex min-h-[10rem] min-w-0 flex-1 flex-col gap-4 overflow-auto overscroll-contain">
+          <p className="shrink-0 font-mono text-micro text-ink-2">
+            {query.trim()
+              ? fill(T.dv_count_found, { n: shown.length, all: devices.length })
+              : fill(T.dv_count_all, { n: devices.length })}
+          </p>
 
-          {/* แผงตั้งค่าของตัวที่เลือก */}
-          {sel ? (
-            <div className="min-h-[10rem] min-w-0 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
-              <div>
-                <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-brand-soft">
-                    <Cpu className="size-5 text-brand-strong" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-h2 font-bold">{sel.name}</span>
-                    <span className="block font-mono text-micro text-ink-2">{sel.key_prefix}</span>
-                  </span>
-                  <span className="ms-auto flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void toggleActive(sel)}
-                      className="flex items-center gap-2 rounded-control border border-line bg-surface-2 px-3 py-2 text-caption"
-                    >
-                      <Power className={cn('size-4', sel.is_active ? 'text-ok' : 'text-ink-2')} />
-                      {sel.is_active ? T.dv_active_on : T.dv_active_off}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void doTest(sel)}
-                      disabled={sel.allowed_event_types.length === 0}
-                      className="flex items-center gap-2 rounded-control border border-line bg-surface px-3 py-2 text-caption disabled:opacity-45"
-                    >
-                      <PhoneOutgoing className="size-4" />
-                      {T.device_test_call}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingDelete(sel)}
-                      className="rounded-control border border-bad bg-bad-soft px-3 py-2 text-bad-strong"
-                      aria-label={T.toast_deleted}
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </span>
-                </div>
-
-                {!sel.is_active ? (
-                  <p className="flex items-center gap-2.5 border-b border-line-2 bg-ink/5 px-5 py-2.5 text-caption text-ink-2">
-                    <Power className="size-4 shrink-0" />
-                    {T.dv_off_banner}
-                  </p>
-                ) : null}
-
-                {/* ── รายการติ๊ก: ติ๊กอันไหน อันนั้นกางออกมาให้เลือกผู้รับตรงนั้น ──
-                    รูปทรงตามไฟล์ดีไซน์ figma/Redesign Notification Settings
-                    (Screenshot_2026-08-19_113302) แต่ใช้ token ของธีมเราทั้งหมด
-                    ไม่ใช่สี slate/blue ของไฟล์นั้น
-
-                    เคยลองมาสองแบบก่อนหน้านี้ ผู้ใช้ตีกลับทั้งคู่:
-                      1) ตาราง 4 คอลัมน์ เอาทุกเหตุการณ์มาเรียงพร้อมกัน — ของที่ต้องกดจริง
-                         ถูกบีบอยู่ในคอลัมน์ 1.5fr ชิปเบอร์ตกบรรทัดมั่ว
-                      2) select เลือกเหตุการณ์ทีละอัน — แก้เรื่องที่แคบได้ แต่ต้องเปิด
-                         dropdown ก่อนถึงจะรู้ว่ามีเหตุการณ์อะไรให้เลือกบ้าง
-
-                    แบบนี้ได้ทั้งสองอย่าง: เห็นรายการทั้งหมดพร้อมกันเหมือนแบบ 1
-                    และตัวที่เปิดอยู่ได้ความกว้างเต็มแผงเหมือนแบบ 2 — เพราะของที่ต้องกด
-                    ไม่ได้อยู่ในคอลัมน์ของตัวเอง แต่กางลงมาเป็นบรรทัดใหม่ใต้ชื่อ
-
-                    ติ๊ก = เปิดใช้เลย ไม่มีปุ่มยืนยันซ้ำ ติ๊กออก = ปิด (ตามที่ผู้ใช้สั่งไว้) */}
-                {eventTypes.length === 0 ? (
-                  <p className="px-5 py-6 text-caption text-ink-2">{T.dv_no_events}</p>
-                ) : (
-                  <section className="flex flex-col gap-2.5 px-5 py-4">
-                    <p className="text-lead font-bold">{T.dv_pick_events_title}</p>
-
-                    {eventTypes.map((et) => {
-                      const ref = sel.allowed_event_types.find((e) => e.id === et.id) ?? null;
-                      const on = ref !== null;
-                      const picked = ref?.contacts ?? [];
-                      const isPick = on && (picked.length > 0 || pickMode[pickKey(sel.id, et.id)] === true);
-                      const ready = ref ? linkReady(ref) : false;
-                      return (
-                        <div
-                          key={et.id}
-                          className={cn(
-                            'min-w-0 rounded-card border transition-colors',
-                            on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface',
-                          )}
-                        >
-                          {/* ทั้งแถวหัวเป็นปุ่มติ๊ก ไม่ใช่เฉพาะช่องสี่เหลี่ยมเล็กๆ ตรงหัวแถว
-                              เป้ากดกว้างเต็มแถวแล้วพลาดยาก และไม่ต้องเล็งกล่อง 20px */}
-                          <button
-                            type="button"
-                            onClick={() => toggleEvent(sel, et.id)}
-                            aria-pressed={on}
-                            className="flex w-full items-center gap-3 px-3.5 py-3 text-start"
-                          >
-                            <span
-                              className={cn(
-                                'grid size-5 shrink-0 place-items-center rounded-[6px] border-[1.5px]',
-                                on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line bg-surface',
-                              )}
-                            >
-                              {on ? <span className="text-micro leading-none">✓</span> : null}
-                            </span>
-                            <span className={cn('min-w-0 flex-1 truncate text-body', on ? 'font-semibold' : 'text-ink-2')}>
-                              {et.display_name}
-                            </span>
-                            <span className="shrink-0 font-mono text-micro text-ink-2">{et.code}</span>
-                          </button>
-
-                          {on ? (
-                            <div className="flex flex-col gap-2.5 border-t border-brand-strong/20 px-3.5 pt-3 pb-3.5">
-                              {/* ปุ่มกลมแบบ radio ตามไฟล์ดีไซน์ ไม่ใช่แท็บสองช่อง — สองตัวเลือกนี้
-                                  แทนที่กันเสมอ (เลือกกลุ่ม = ไม่ได้เจาะเบอร์) ทรงกลมอ่านออกทันที
-                                  ว่าเลือกได้อันเดียว ส่วนแท็บอ่านได้ว่าเป็นสองหน้าที่สลับไปมา */}
-                              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                                <span className="text-caption text-ink-2">{T.dev_target_mode}</span>
-                                {([
-                                  { pick: false, label: T.dev_target_group },
-                                  { pick: true, label: T.dev_target_contacts },
-                                ] as const).map((opt) => {
-                                  const active = isPick === opt.pick;
-                                  return (
-                                    <button
-                                      key={opt.label}
-                                      type="button"
-                                      onClick={() => {
-                                        setPickMode((m) => ({ ...m, [pickKey(sel.id, et.id)]: opt.pick }));
-                                        setTarget(sel, et.id, opt.pick
-                                          ? { group_id: null, contact_ids: picked.map((c) => c.id) }
-                                          : { contact_ids: null, group_id: ref?.group_id ?? null });
-                                      }}
-                                      className="flex items-center gap-2 text-caption"
-                                    >
-                                      <span
-                                        className={cn(
-                                          'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
-                                          active ? 'border-brand-strong' : 'border-line bg-surface',
-                                        )}
-                                      >
-                                        {active ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
-                                      </span>
-                                      <span className={active ? 'font-semibold' : 'text-ink-2'}>{opt.label}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              {!isPick ? (
-                                <select
-                                  value={ref?.group_id ?? ''}
-                                  onChange={(e) => setTarget(sel, et.id, {
-                                    group_id: e.target.value ? Number(e.target.value) : null,
-                                    contact_ids: null,
-                                  })}
-                                  className={cn(
-                                    'w-full rounded-control border bg-surface px-3 py-2.5 text-body',
-                                    ready ? 'border-line' : 'border-warn',
-                                  )}
-                                >
-                                  <option value="">{T.dv_group_none}</option>
-                                  {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                                </select>
-                              ) : contacts.length === 0 ? (
-                                <p className="rounded-control border border-dashed border-line bg-surface px-3.5 py-3 text-caption text-ink-2">
-                                  {T.dev_no_contacts_at_all}
-                                </p>
-                              ) : (
-                                /* กล่องติ๊กเบอร์กว้างเต็มแถวแล้ว ชิปจึงเรียงได้หลายตัวต่อบรรทัด
-                                   max-h กันไว้ไม่ให้เหตุการณ์เดียวกินจอทั้งจอตอนมีเบอร์เยอะ */
-                                <div className="flex max-h-[15rem] flex-col gap-3 overflow-y-auto overscroll-contain rounded-control border border-line bg-surface p-3">
-                                  <p className="text-micro leading-[1.7] text-ink-2">{T.dev_pick_contacts_hint}</p>
-                                  {groups.map((g) => {
-                                    const mine = contacts.filter((c) => c.group_id === g.id);
-                                    if (mine.length === 0) return null;
-                                    return (
-                                      <div key={g.id}>
-                                        <p className="mb-1.5 text-micro font-semibold text-ink-2">{g.name}</p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                          {mine.map((c) => {
-                                            const has = picked.some((x) => x.id === c.id);
-                                            return (
-                                              <button
-                                                key={c.id}
-                                                type="button"
-                                                onClick={() => setTarget(sel, et.id, {
-                                                  group_id: null,
-                                                  contact_ids: has
-                                                    ? picked.filter((x) => x.id !== c.id).map((x) => x.id)
-                                                    : picked.map((x) => x.id).concat([c.id]),
-                                                })}
-                                                className={cn(
-                                                  'rounded-full border px-3 py-1.5 text-micro',
-                                                  has
-                                                    ? 'border-brand-strong bg-brand-soft font-semibold text-brand-strong'
-                                                    : 'border-line bg-surface text-ink-2',
-                                                )}
-                                              >
-                                                {has ? '✓ ' : ''}{c.name || c.phone_number}
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* บรรทัดปิดท้ายตอบคำถามเดียวเสมอ: ยิงเหตุการณ์นี้แล้วเกิดอะไร
-                                  ครบแล้ว = ไล่ชื่อตามลำดับโทรจริง / ยังไม่ครบ = บอกว่าจะถูกปฏิเสธ
-                                  (ข้อความเตือนตามไฟล์ดีไซน์ ซึ่งเขียนผลลัพธ์ ไม่ใช่แค่ว่า "ยังไม่ครบ") */}
-                              {ref && ready ? (
-                                <p className="text-caption leading-[1.8] text-ink-2">
-                                  <span className="font-semibold text-ink">{T.dev_will_call}</span>{' '}
-                                  {recipientsOf(ref).length === 0
-                                    ? T.dev_group_empty
-                                    : recipientsOf(ref).map((n, i) => `${i + 1}. ${n}`).join('  ·  ')}
-                                </p>
-                              ) : (
-                                <p className="text-caption leading-[1.8] text-warn-strong">{T.dev_target_missing}</p>
-                              )}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </section>
-                )}
-              </div>
+          {shown.length === 0 ? (
+            <div className="flex flex-col items-center gap-2.5 rounded-card border border-dashed border-line px-4 py-10 text-center">
+              <span className="grid size-14 place-items-center rounded-card bg-surface-2">
+                <Cpu size={26} className="text-ink-2" strokeWidth={1.5} />
+              </span>
+              <p className="text-lead font-semibold">{T.devices_empty_title}</p>
+              <p className="text-caption text-ink-2">{T.devices_empty_body}</p>
             </div>
           ) : null}
+
+          {shown.map((d) => {
+            const p = pillFor(d);
+            const avail = availableFor(d);
+            return (
+              <DeviceCard
+                key={d.id}
+                device={d}
+                pill={p}
+                canAddEvent={avail.length > 0}
+                recipientsOf={recipientsOf}
+                onAddEvent={() => { setAddEventFor(d); setAddEventId(''); }}
+                onEditEvent={(ref) => openDrawer(d, ref)}
+                onRemoveEvent={(ref) => setRemoveTarget({ device: d, ref })}
+                onToggleActive={() => void toggleActive(d)}
+                onTest={() => void doTest(d)}
+                onDelete={() => setPendingDelete(d)}
+              />
+            );
+          })}
         </div>
       ) : (
         /* ── ตารางรวม — คลิกช่องแล้วกระโดดไปแก้ ───────────────────────────── */
@@ -579,11 +395,11 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   </div>
                   {eventTypes.map((et) => {
                     const ref = d.allowed_event_types.find((e) => e.id === et.id);
-                    const jump = () => { setView('device'); setSelId(d.id); };
+                    const jump = () => { setView('device'); setQuery(d.name); };
                     let text: string = T.dv_matrix_notset;
                     let cls: string = 'bg-ink/[0.02] text-ink-2/70';
                     if (ref) {
-                      if (!linkReady(ref)) { text = T.dv_st_notarget; cls = 'bg-warn-soft text-warn-strong'; }
+                      if (!linkReady(ref)) { text = T.dv_recip_none; cls = 'bg-warn-soft text-warn-strong'; }
                       else if (ref.contacts.length > 0) { text = fill(T.dv_matrix_picked, { n: ref.contacts.length }); cls = 'text-ink'; }
                       else { text = ref.group_name ?? ''; cls = 'text-ink'; }
                     }
@@ -605,6 +421,230 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         </div>
       )}
 
+      {/* ── ลิ้นชักเลือกผู้รับสาย ─────────────────────────────────────────────
+          เลื่อนออกมาจากขวาแทนที่จะเป็นป๊อปอัพกลางจอ เพราะการ์ดของอุปกรณ์ที่กำลังแก้
+          ยังอยู่ให้เห็นข้างหลัง — เห็นได้ตลอดว่าเหตุการณ์อื่นของอุปกรณ์นี้ตั้งอะไรไว้
+          ใช้ Sheet ของ Radix (portal) ไม่ใช่ div ที่เขียน fixed เอง เพราะ AppShell
+          ห่อทุกหน้าไว้ด้วย div ที่มี transform ซึ่งกลายเป็น containing block
+          ของ position:fixed — กล่องที่เขียน fixed เองจะไปอิงขอบ <main> แทนขอบจอ */}
+      <Sheet open={drawer !== null} onOpenChange={(o) => { if (!o) setDrawer(null); }}>
+        <SheetContent
+          side="right"
+          className="w-full gap-0 border-line bg-surface p-0 sm:max-w-[26rem]"
+        >
+          {drawer && drawerEvent ? (
+            <>
+              <div className="border-b border-line px-5 py-4 pe-12">
+                <p className="truncate text-micro text-ink-2">{drawerDevice?.name}</p>
+                <p className="truncate text-lead font-bold">{drawerEvent.display_name}</p>
+                <p className="truncate font-mono text-micro text-ink-2">{drawerEvent.code}</p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+                <p className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dev_target_mode}</p>
+
+                {/* สองตัวเลือกเป็นการ์ดที่มีคำอธิบายใต้ชื่อ ไม่ใช่แค่ radio เปล่าๆ
+                    "ทั้งกลุ่ม" กับ "เลือกเบอร์เอง" ต่างกันตรงพฤติกรรมตอนโทร ไม่ใช่ตรงชื่อ */}
+                <div className="mt-2.5 flex flex-col gap-2">
+                  {([
+                    { v: 'group' as const, label: T.dev_target_group, desc: T.dv_mode_group_desc },
+                    { v: 'custom' as const, label: T.dev_target_contacts, desc: T.dv_mode_custom_desc },
+                  ]).map((o) => {
+                    const on = drawer.mode === o.v;
+                    return (
+                      <button
+                        key={o.v}
+                        type="button"
+                        onClick={() => setDrawer({ ...drawer, mode: o.v })}
+                        className={cn(
+                          'flex items-start gap-3 rounded-control border px-3.5 py-3 text-start transition-colors',
+                          on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface hover:border-brand-strong',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
+                            on ? 'border-brand-strong' : 'border-line',
+                          )}
+                        >
+                          {on ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-caption font-semibold">{o.label}</span>
+                          <span className="block text-micro leading-[1.6] text-ink-2">{o.desc}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {drawer.mode === 'group' ? (
+                  <div className="mt-5">
+                    <p className="mb-2 text-caption text-ink-2">{T.dv_pick_group}</p>
+                    {groups.length === 0 ? (
+                      <p className="rounded-control border border-warn bg-warn-soft px-3.5 py-2.5 text-micro leading-[1.7] text-warn-strong">
+                        {T.dv_no_groups}
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {groups.map((g) => {
+                          const on = drawer.groupId === g.id;
+                          const mine = contacts.filter((c) => c.group_id === g.id);
+                          return (
+                            <button
+                              key={g.id}
+                              type="button"
+                              onClick={() => setDrawer({ ...drawer, groupId: g.id })}
+                              className={cn(
+                                'flex items-center gap-3 rounded-control border px-3.5 py-2.5 text-start transition-colors',
+                                on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface hover:border-brand-strong',
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
+                                  on ? 'border-brand-strong' : 'border-line',
+                                )}
+                              >
+                                {on ? <span className="size-2 rounded-full bg-brand-strong" /> : null}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-caption font-semibold">{g.name}</span>
+                                {/* บอกด้วยว่าในกลุ่มมีใคร — เลือกกลุ่มโดยไม่รู้ว่ามีใครอยู่
+                                    คือการเดา และเป็นจุดที่พลาดแล้วสายไปหาคนผิด */}
+                                <span className="block truncate text-micro text-ink-2">
+                                  {mine.length === 0
+                                    ? T.dev_group_empty
+                                    : `${T.ct_people_count(mine.length)} — ${mine.map((c) => c.name || c.phone_number).join(', ')}`}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-5">
+                    <p className="mb-2 text-caption text-ink-2">{T.dv_pick_contacts}</p>
+                    {contacts.length === 0 ? (
+                      <p className="rounded-control border border-warn bg-warn-soft px-3.5 py-2.5 text-micro leading-[1.7] text-warn-strong">
+                        {T.dev_no_contacts_at_all}
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        <p className="text-micro leading-[1.7] text-ink-2">{T.dev_pick_contacts_hint}</p>
+                        {groups.map((g) => {
+                          const mine = contacts.filter((c) => c.group_id === g.id);
+                          if (mine.length === 0) return null;
+                          return (
+                            <div key={g.id} className="flex flex-col gap-1.5">
+                              <p className="text-micro font-semibold text-ink-2">{g.name}</p>
+                              {mine.map((c) => {
+                                const on = drawer.contactIds.includes(c.id);
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => setDrawer({
+                                      ...drawer,
+                                      contactIds: on
+                                        ? drawer.contactIds.filter((x) => x !== c.id)
+                                        : drawer.contactIds.concat([c.id]),
+                                    })}
+                                    className={cn(
+                                      'flex items-center gap-3 rounded-control border px-3.5 py-2.5 text-start transition-colors',
+                                      on ? 'border-brand-strong bg-brand-soft' : 'border-line bg-surface hover:border-brand-strong',
+                                    )}
+                                  >
+                                    <span
+                                      className={cn(
+                                        'grid size-4 shrink-0 place-items-center rounded-[5px] border-[1.5px]',
+                                        on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line',
+                                      )}
+                                    >
+                                      {on ? <span className="text-[0.55rem] leading-none">✓</span> : null}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-caption font-medium">
+                                        {c.name?.trim() || c.phone_number}
+                                      </span>
+                                      <span className="block truncate font-mono text-micro text-ink-2">
+                                        {c.phone_number}
+                                      </span>
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 border-t border-line px-5 py-3.5">
+                <Btn className="flex-1 justify-center" onClick={() => setDrawer(null)}>{T.cancel}</Btn>
+                <Btn variant="primary" className="flex-1 justify-center" onClick={saveDrawer} disabled={drawerInvalid}>
+                  {T.save}
+                </Btn>
+              </div>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+
+      {/* ── เพิ่มเหตุการณ์ให้อุปกรณ์ ─────────────────────────────────────────
+          ช่องนี้โชว์เฉพาะเหตุการณ์ที่อุปกรณ์นี้ "ยังไม่มี" — เลือกตัวที่มีอยู่แล้วซ้ำ
+          ไม่มีความหมายอะไรเลย และเป็นทางเดียวที่จะสร้างแถวซ้ำในตารางได้ */}
+      <Dialog open={addEventFor !== null} onOpenChange={(o) => { if (!o) setAddEventFor(null); }}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-[28rem]">
+          <DialogHeader className="text-start">
+            <DialogTitle className="text-lead font-bold">{T.dv_add_event_title}</DialogTitle>
+          </DialogHeader>
+          {addEventFor ? (
+            availableFor(addEventFor).length === 0 ? (
+              <p className="text-caption leading-[1.8] text-ink-2">{T.dv_add_event_none}</p>
+            ) : (
+              <div>
+                <label className="mb-1.5 block text-caption text-ink-2" htmlFor="add-event-select">
+                  {T.setup_tab_events}
+                </label>
+                <select
+                  id="add-event-select"
+                  autoFocus
+                  value={addEventId}
+                  onChange={(e) => setAddEventId(e.target.value)}
+                  className="w-full rounded-control border border-line bg-surface px-3 py-2.5 text-body"
+                >
+                  <option value="">{T.dv_add_event_ph}</option>
+                  {availableFor(addEventFor).map((et) => (
+                    <option key={et.id} value={et.id}>{et.display_name} ({et.code})</option>
+                  ))}
+                </select>
+                <p className="mt-2 text-micro leading-[1.7] text-ink-2">{T.dv_add_event_hint}</p>
+              </div>
+            )
+          ) : null}
+          <DialogFooter>
+            <Btn onClick={() => setAddEventFor(null)}>{T.cancel}</Btn>
+            <Btn
+              variant="primary"
+              disabled={!addEventId}
+              onClick={() => {
+                if (addEventFor && addEventId) addEvent(addEventFor, Number(addEventId));
+                setAddEventFor(null);
+              }}
+            >
+              <Plus size={15} />
+              {T.dv_add_event}
+            </Btn>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {addOpen ? (
         <AddDeviceDialog
           eventTypes={eventTypes}
@@ -613,24 +653,238 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
             setAddOpen(false);
             void listApiKeys().then((ks) => { setDevices(ks); writeSnapshot(SNAP.devices, ks); });
           }}
-          onConfigure={(id) => { setAddOpen(false); setView('device'); setSelId(id); }}
+          onConfigure={(id) => {
+            setAddOpen(false);
+            setView('device');
+            setQuery(devices.find((d) => d.id === id)?.name ?? '');
+          }}
         />
       ) : null}
 
-      <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => { if (!o) setPendingDelete(null); }}>
+      {/* ── ยืนยันเอาเหตุการณ์ออกจากอุปกรณ์ ───────────────────────────────── */}
+      <AlertDialog open={removeTarget !== null} onOpenChange={(o) => { if (!o) setRemoveTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{pendingDelete?.name}</AlertDialogTitle>
-            <AlertDialogDescription>{T.devices_empty_body}</AlertDialogDescription>
+            <AlertDialogTitle>{T.delete_confirm_title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removeTarget
+                ? `${removeTarget.ref.display_name} · ${removeTarget.device.name} — ${T.dv_remove_event_confirm}`
+                : T.dv_remove_event_confirm}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{T.retry_action}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => pendingDelete && void doDelete(pendingDelete)}>
-              {T.toast_deleted}
+            <AlertDialogCancel>{T.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (removeTarget) removeEvent(removeTarget.device, removeTarget.ref.id);
+                setRemoveTarget(null);
+              }}
+            >
+              {T.yes_delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => { if (!o) setPendingDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{T.delete_confirm_title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete ? `${pendingDelete.name} — ${T.dv_delete_device_confirm}` : T.dv_delete_device_confirm}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{T.cancel}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => pendingDelete && void doDelete(pendingDelete)}>
+              {T.yes_delete}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/* ── การ์ดอุปกรณ์หนึ่งใบ ─────────────────────────────────────────────────
+   แยกเป็น component เพราะ "แสดง/ซ่อน key เต็ม" เป็น state ของการ์ดใบนั้นใบเดียว
+   ถ้าเก็บไว้ที่หน้าแม่ต้องทำเป็น Record<deviceId, boolean> โดยไม่ได้อะไรกลับมา */
+function DeviceCard({
+  device, pill, canAddEvent, recipientsOf,
+  onAddEvent, onEditEvent, onRemoveEvent, onToggleActive, onTest, onDelete,
+}: {
+  device: ApiKey;
+  pill: { tone: 'ok' | 'warn' | 'muted'; text: string };
+  canAddEvent: boolean;
+  recipientsOf: (ref: { group_id: number | null; contacts: { name: string | null; phone_number: string }[] }) => string[];
+  onAddEvent: () => void;
+  onEditEvent: (ref: ApiKeyEventTypeRef) => void;
+  onRemoveEvent: (ref: ApiKeyEventTypeRef) => void;
+  onToggleActive: () => void;
+  onTest: () => void;
+  onDelete: () => void;
+}) {
+  const { T } = useApp();
+  const [fullKey, setFullKey] = useState<string | null>(null);
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  /* key เต็มไม่ได้มากับรายการอุปกรณ์ ต้องขอแยกตอนกด "แสดง" — ถ้าแนบมาทุกครั้ง
+     มันจะไปโผล่ใน log/cache ของทุกคำขอโดยไม่จำเป็น (ดู api/apiKeys.ts) */
+  const reveal = async () => {
+    if (shown) { setShown(false); return; }
+    if (fullKey) { setShown(true); return; }
+    try {
+      const r = await revealApiKey(device.id);
+      if (r.key) { setFullKey(r.key); setShown(true); }
+      else toast.error(T.dev_key_locked); // อุปกรณ์ที่สร้างก่อนระบบเก็บ key ไว้ถอดกลับได้
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : T.error_generic);
+    }
+  };
+
+  const copy = async () => {
+    const text = fullKey ?? device.key_prefix;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      toast.error(T.copy_failed);
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        'min-w-0 shrink-0 overflow-hidden rounded-card border border-line bg-surface shadow-card',
+        device.is_active ? '' : 'opacity-70',
+      )}
+    >
+      {/* หัวการ์ด: ชื่อ + สถานะ + key แถวบน / ปุ่มจัดการชิดขวา */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2.5 border-b border-line bg-surface-2 px-5 py-3.5">
+        <span className="grid size-9 shrink-0 place-items-center rounded-control bg-brand-soft">
+          <Cpu className="size-4.5 text-brand-strong" />
+        </span>
+        <span className="min-w-0 flex-1 basis-[12rem]">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 truncate text-body font-bold">{device.name}</span>
+            <Pill tone={pill.tone}>{pill.text}</Pill>
+          </span>
+          <span className="mt-1 flex flex-wrap items-center gap-2">
+            <code className="min-w-0 truncate font-mono text-micro text-ink-2">
+              {shown && fullKey ? fullKey : `${device.key_prefix}••••••••`}
+            </code>
+            <button type="button" onClick={() => void reveal()} className="text-micro text-ink-2 hover:text-ink">
+              {shown ? T.dv_key_hide : T.dv_key_show}
+            </button>
+            <button type="button" onClick={() => void copy()} className="text-micro text-brand-strong hover:brightness-110">
+              {copied ? T.copied : T.copy}
+            </button>
+          </span>
+        </span>
+        <span className="ms-auto flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleActive}
+            className="flex items-center gap-2 rounded-control border border-line bg-surface px-3 py-1.5 text-caption"
+          >
+            <Power className={cn('size-4', device.is_active ? 'text-ok' : 'text-ink-2')} />
+            {device.is_active ? T.dv_active_on : T.dv_active_off}
+          </button>
+          <button
+            type="button"
+            onClick={onTest}
+            disabled={device.allowed_event_types.length === 0}
+            className="flex items-center gap-2 rounded-control border border-line bg-surface px-3 py-1.5 text-caption disabled:opacity-45"
+          >
+            <PhoneOutgoing className="size-4" />
+            {T.device_test_call}
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="grid size-8 place-items-center rounded-control border border-bad bg-bad-soft text-bad-strong"
+            aria-label={T.delete}
+            title={T.delete}
+          >
+            <Trash2 className="size-4" />
+          </button>
+        </span>
+      </div>
+
+      {!device.is_active ? (
+        <p className="flex items-center gap-2.5 border-b border-line-2 bg-ink/5 px-5 py-2 text-micro text-ink-2">
+          <Power className="size-3.5 shrink-0" />
+          {T.dv_off_banner}
+        </p>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3 border-b border-line-2 px-5 py-2">
+        <span className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dv_events_on}</span>
+        <button
+          type="button"
+          onClick={onAddEvent}
+          disabled={!canAddEvent}
+          className="flex items-center gap-1.5 text-caption font-medium text-brand-strong disabled:text-ink-2/50"
+        >
+          <Plus size={14} />
+          {T.dv_add_event}
+        </button>
+      </div>
+
+      {device.allowed_event_types.length === 0 ? (
+        <p className="px-5 py-5 text-center text-caption text-ink-2">{T.dv_no_events_yet}</p>
+      ) : (
+        device.allowed_event_types.map((ref) => {
+          const ready = linkReady(ref);
+          const names = recipientsOf(ref);
+          return (
+            <div
+              key={ref.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line-2 px-5 py-2.5 transition-colors last:border-b-0 hover:bg-surface-2"
+            >
+              <span className="shrink-0 rounded-control bg-surface-2 px-2 py-0.5 font-mono text-micro text-ink-2">
+                {ref.code}
+              </span>
+              <span className="min-w-0 flex-1 basis-[8rem] truncate text-caption">{ref.display_name}</span>
+
+              {/* สรุปผู้รับในบรรทัดเดียวกับชื่อเหตุการณ์ — นี่คือทั้งหมดที่การ์ดนี้มีไว้ตอบ
+                  จุดสีคือคำตอบระดับกวาดตา ส่วนข้อความคือคำตอบระดับอ่าน */}
+              <span className="flex min-w-0 shrink-0 items-center gap-1.5">
+                <Dot tone={ready ? 'ok' : 'warn'} />
+                {ready ? (
+                  <span className="min-w-0 truncate text-micro text-ink-2">
+                    {ref.contacts.length > 0
+                      ? fill(T.dv_recip_custom, { n: ref.contacts.length })
+                      : `${T.dv_recip_group} ${ref.group_name ?? ''}`}
+                    {names.length ? ` · ${names.join(', ')}` : ''}
+                  </span>
+                ) : (
+                  <span className="text-micro font-medium text-warn-strong">{T.dv_recip_none}</span>
+                )}
+              </span>
+
+              <span className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onEditEvent(ref)}
+                  className="rounded-control px-2.5 py-1 text-micro font-medium text-brand-strong transition-colors hover:bg-brand-soft"
+                >
+                  {ready ? T.edit : T.dv_configure}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRemoveEvent(ref)}
+                  className="rounded-control px-2.5 py-1 text-micro text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
+                >
+                  {T.delete}
+                </button>
+              </span>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
