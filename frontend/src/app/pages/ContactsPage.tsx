@@ -91,6 +91,13 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
      ซึ่งอยู่หน้าเดียวกับปุ่มลบที่เด้งป๊อปอัพ — ปุ่มถังขยะสองอันข้างกันทำงานคนละแบบ
      และแบบสองจังหวะไม่มีที่ให้บอกว่าลบแล้วเบอร์ในกลุ่มหายไปด้วย */
   const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
+  /* ลบเบอร์รายคนก็ต้องยืนยันเหมือนกัน — เดิมกดถังขยะแล้วเบอร์หายทันทีไม่มีถามอะไรเลย
+     และไม่มีปุ่มเลิกทำ ปุ่มมันเล็ก (13px) อยู่ติดกับปุ่มดินสอ พลาดไปหนึ่งช่องคือเบอร์หาย
+     ที่สำคัญกว่านั้นคือ "หายเงียบ" — แถวล่างเลื่อนขึ้นมาแทนที่ทันที ถ้าไม่ได้จ้องอยู่พอดี
+     จะไม่รู้ด้วยซ้ำว่าเพิ่งลบอะไรไป และคนที่ควรถูกโทรลำดับ 2 ก็กลายเป็นลำดับ 1 ไปแล้ว
+     เก็บทั้ง groupId และตัว contact ไว้ เพราะป๊อปอัพต้องเอาเบอร์กับชื่อไปแสดง */
+  const [deleteContactTarget, setDeleteContactTarget] =
+    useState<{ groupId: number; contact: Contact } | null>(null);
   // มีของเก่าอยู่แล้ว = ไม่ต้องขึ้น "กำลังโหลด" ให้วาดของเก่าไปก่อนแล้วโหลดทับเงียบๆ
   const [loading, setLoading] = useState(!cached);
 
@@ -221,18 +228,22 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
       .catch((e) => toast.error(e instanceof ApiError ? e.message : T.error_generic));
   };
 
-  const removePhone = (groupId: number, contactId: number) => {
-    deleteContact(contactId)
+  const confirmDeleteContact = () => {
+    if (!deleteContactTarget) return;
+    const { groupId, contact } = deleteContactTarget;
+    deleteContact(contact.id)
       .then(() => {
         setContactsByGroup((m) => ({
           ...m,
-          [groupId]: (m[groupId] || []).filter((c) => c.id !== contactId),
+          [groupId]: (m[groupId] || []).filter((c) => c.id !== contact.id),
         }));
         setGroups((gs) =>
           gs.map((g) => (g.id === groupId ? { ...g, contact_count: Math.max(0, g.contact_count - 1) } : g)),
         );
+        toast.success(T.toast_deleted);
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : T.error_generic));
+      .catch((e) => toast.error(e instanceof ApiError ? e.message : T.error_generic))
+      .finally(() => setDeleteContactTarget(null));
   };
 
   const movePhone = (groupId: number, idx: number, dir: -1 | 1) => {
@@ -600,7 +611,7 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
                             <button
                               type="button"
-                              onClick={() => removePhone(g.id, c.id)}
+                              onClick={() => setDeleteContactTarget({ groupId: g.id, contact: c })}
                               className="shrink-0 rounded-control px-1.5 py-1 text-ink-2 transition-colors hover:text-bad-strong"
                               aria-label={T.delete}
                               title={T.delete}
@@ -719,6 +730,35 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           <AlertDialogFooter>
             <AlertDialogCancel>{T.cancel}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteGroup}>{T.yes_delete}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── ยืนยันลบเบอร์รายคน ──────────────────────────────────────────────
+          ป๊อปอัพชุดเดียวกับลบกลุ่มและลบประเภทเหตุการณ์ ทุกปุ่มถังขยะในหน้านี้
+          จึงทำงานเหมือนกันหมด ไม่ต้องจำว่าอันไหนถามอันไหนลบเลย
+
+          ขึ้นเบอร์กับชื่อในคำถามด้วย เพราะแถวเบอร์บางแถวหน้าตาใกล้กันมาก
+          (เบอร์ขึ้นต้น 08 เหมือนกัน ต่างกันสองสามหลักท้าย) — ป๊อปอัพที่ถามลอยๆ ว่า
+          "ลบเบอร์นี้?" ไม่ได้ช่วยจับว่ากดผิดแถว ซึ่งเป็นความผิดพลาดที่ต้องกันจริงๆ */}
+      <AlertDialog
+        open={!!deleteContactTarget}
+        onOpenChange={(open) => !open && setDeleteContactTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{T.delete_confirm_title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteContactTarget
+                ? `${deleteContactTarget.contact.phone_number}${
+                    deleteContactTarget.contact.name ? ` · ${deleteContactTarget.contact.name}` : ''
+                  } — ${T.contact_delete_confirm}`
+                : T.contact_delete_confirm}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{T.cancel}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteContact}>{T.yes_delete}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
