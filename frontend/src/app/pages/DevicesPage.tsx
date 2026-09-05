@@ -6,11 +6,14 @@
  * สามชั้นกว่าจะได้แก้ค่า และกดกลับมาก็หลงทางว่าเมื่อกี้อยู่ตัวไหน ทั้งที่งานที่คนเข้าหน้านี้
  * มาทำจริงๆ คือ "ตั้งว่าอุปกรณ์ตัวนี้ยิงอะไรได้ แล้วโทรหาใคร" ซึ่งเป็นงานเดียว
  *
- * สี่ปัญหาที่ตั้งใจแก้ (ผู้ใช้ระบุมาเองครบทั้งสี่ข้อ):
+ * ปัญหาที่ตั้งใจแก้:
  *   1. กดลึก 3 ชั้น        → รายการกับแผงตั้งค่าอยู่จอเดียวกัน กดชื่อแล้วแก้ได้เลย
- *   2. ตั้งทีละเหตุการณ์   → แถบ "ใช้กับทั้ง N เหตุการณ์" เปิดครบแล้วใส่กลุ่มให้ทีเดียว
- *   3. ไม่รู้ลำดับก่อนหลัง → แถบเตือนบนสุดที่นับของจริง โผล่เฉพาะตอนยังไม่ครบ
- *   4. มองไม่เห็นภาพรวม    → มุมมอง "ตารางรวม" อุปกรณ์ × เหตุการณ์ ในตารางเดียว
+ *   2. ตั้งทีละเหตุการณ์   → ทุกเหตุการณ์อยู่ในตารางเดียว แต่ละแถวมีทั้งสวิตช์เปิด
+ *                            ตัวเลือกผู้รับ และสถานะ ครบในบรรทัดเดียว ไม่ต้องเปิดทีละอัน
+ *   3. มองไม่เห็นภาพรวม    → มุมมอง "ตารางรวม" อุปกรณ์ × เหตุการณ์ ในตารางเดียว
+ *
+ * เคยมีแถบ "เปิดทุกเหตุการณ์แล้วให้โทรหา" (ตั้งกลุ่มเดียวให้ทุกเหตุการณ์รวดเดียว)
+ * และแถบบอกลำดับการตั้งค่าอยู่บนสุด — ผู้ใช้สั่งเอาออกทั้งคู่หลังลองใช้จริง
  *
  * ── บันทึกทันทีทุกครั้งที่แตะ ไม่มีปุ่ม "บันทึก" ──────────────────────────
  * หน้าเดิมสะสมการแก้ไว้แล้วให้กดบันทึกทีเดียว ซึ่งเป็นอีกจังหวะที่ลืมกดแล้วค่าหาย
@@ -24,7 +27,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { ChevronDown, Code2, Cpu, ListChecks, PhoneOutgoing, Plus, Power, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, Code2, Cpu, PhoneOutgoing, Plus, Power, Search, Trash2 } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
@@ -66,7 +69,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [view, setView] = useState<'device' | 'matrix'>('device');
   const [selId, setSelId] = useState<number | null>(null);
   const [query, setQuery] = useState('');
-  const [bulk, setBulk] = useState('');
   const [apiOpen, setApiOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -175,16 +177,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const setTarget = (d: ApiKey, etId: number, patch: Partial<ApiKeyEventLink>) =>
     mutate(d, (ls) => ls.map((l) => (l.event_type_id === etId ? { ...l, ...patch } : l)));
 
-  /** เปิดทุกเหตุการณ์แล้วใส่กลุ่มเดียวกันให้ทั้งหมด
-   *  จงใจให้ครอบคลุมเหตุการณ์ที่ "ยังไม่ได้เปิด" ด้วย — ของเดิมแตะเฉพาะที่เปิดไว้แล้ว
-   *  ทำให้กดบนอุปกรณ์ที่ยังไม่ได้ผูกอะไรเลยแล้วเงียบสนิท ซึ่งคือกรณีที่ต้องใช้ที่สุด */
-  const applyBulk = (d: ApiKey) => {
-    const gid = Number(bulk);
-    if (!gid) return;
-    mutate(d, () => eventTypes.map((et) => ({ event_type_id: et.id, group_id: gid, contact_ids: null })));
-    setBulk('');
-  };
-
   const toggleActive = async (d: ApiKey) => {
     const before = devices;
     setDevices((ds) => ds.map((x) => (x.id === d.id ? { ...x, is_active: !x.is_active } : x)));
@@ -284,7 +276,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   <button
                     key={d.id}
                     type="button"
-                    onClick={() => { setSelId(d.id); setBulk(''); }}
+                    onClick={() => setSelId(d.id)}
                     className={cn(
                       'flex w-full flex-col gap-1 border-b border-line-2 px-4 py-3 text-start',
                       on ? 'bg-brand-soft' : 'bg-surface',
@@ -357,31 +349,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                     {T.dv_off_banner}
                   </p>
                 ) : null}
-
-                {/* ตั้งผู้รับพร้อมกันทุกเหตุการณ์ */}
-                <div className="flex flex-wrap items-center gap-3 border-b border-line-2 bg-brand-soft px-5 py-3">
-                  <ListChecks className="size-4 shrink-0 text-brand-strong" />
-                  <span className="text-caption">{T.dv_bulk_label}</span>
-                  <select
-                    value={bulk}
-                    onChange={(e) => setBulk(e.target.value)}
-                    className="rounded-control border border-line bg-surface px-3 py-1.5 text-caption"
-                  >
-                    <option value="">{T.dev_call_group_none}</option>
-                    {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => applyBulk(sel)}
-                    disabled={!bulk}
-                    className="rounded-control bg-brand px-4 py-2 text-caption font-semibold text-brand-ink disabled:opacity-40"
-                  >
-                    {fill(T.dv_bulk_apply, { n: eventTypes.length })}
-                  </button>
-                  <span className="ms-auto text-micro text-ink-2">
-                    {bulk ? T.dv_bulk_hint_ready : T.dv_bulk_hint_idle}
-                  </span>
-                </div>
 
                 {/* เหตุการณ์ + ผู้รับ อยู่แถวเดียวกัน */}
                 <div className="grid grid-cols-[40px_minmax(0,1fr)_minmax(0,1.5fr)_136px] border-b border-line px-5 py-2.5 text-micro text-ink-2">
@@ -575,7 +542,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   </div>
                   {eventTypes.map((et) => {
                     const ref = d.allowed_event_types.find((e) => e.id === et.id);
-                    const jump = () => { setView('device'); setSelId(d.id); setBulk(''); };
+                    const jump = () => { setView('device'); setSelId(d.id); };
                     let text: string = T.dv_matrix_notset;
                     let cls: string = 'bg-ink/[0.02] text-ink-2/70';
                     if (ref) {
