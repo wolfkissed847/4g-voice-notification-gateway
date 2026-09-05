@@ -340,8 +340,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         </button>
       </div>
 
-      /* การ์ดเรียงลงมา ลอยบนพื้นหน้า ไม่มีกล่องนอกครอบ (ตามไฟล์ดีไซน์)
-         แต่เลื่อนอยู่ในตัวเอง ไม่ปล่อยให้ทั้งหน้าเลื่อนตามจำนวนอุปกรณ์ */
       <div className="flex min-h-[10rem] min-w-0 flex-1 flex-col gap-4 overflow-auto overscroll-contain">
         <p className="shrink-0 font-mono text-micro text-ink-2">
           {query.trim()
@@ -462,9 +460,12 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* ฝั่งขวา — ตารางที่ค้นได้ */}
                 <div className="flex min-h-0 min-w-0 flex-col">
                   <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-line px-5 py-3">
-                    <p className="text-caption text-ink-2">
-                      {drawer.mode === 'group' ? T.dv_pick_group : T.dv_pick_contacts}
-                    </p>
+                    {/* โหมดเลือกเบอร์เองไม่มีป้ายกำกับ — หัวคอลัมน์ "ลำดับ / ชื่อผู้รับสาย /
+                        เบอร์โทร / อยู่กลุ่ม" ที่อยู่ใต้ลงไปบอกอยู่แล้วว่าตารางนี้คืออะไร
+                        ป้ายซ้ำอีกชั้นแค่กินที่ของช่องค้นหา */}
+                    {drawer.mode === 'group' ? (
+                      <p className="text-caption text-ink-2">{T.dv_pick_group}</p>
+                    ) : null}
                     <span className="relative ms-auto min-w-0 flex-1 basis-[11rem]">
                       <Search
                         size={14}
@@ -549,7 +550,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   ) : (
                     <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
                       <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-surface-2 px-4 py-1.5 font-mono text-micro text-ink-2">
-                        <span className="w-4 shrink-0" />
+                        <span className="w-6 shrink-0 text-center">{T.dv_col_order}</span>
                         <span className="min-w-0 flex-1 basis-[7rem]">{T.dv_col_person}</span>
                         <span className="min-w-0 flex-1 basis-[6rem]">{T.col_phone}</span>
                         <span className="min-w-0 flex-1 basis-[6rem]">{T.dv_col_in_group}</span>
@@ -558,7 +559,14 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                         <p className="px-4 py-8 text-center text-caption text-ink-2">{T.dv_search_none}</p>
                       ) : (
                         drawerContacts.map((c) => {
-                          const on = drawer.contactIds.includes(c.id);
+                          /* เลขลำดับ ไม่ใช่เครื่องหมายถูก — โหมดนี้ลำดับที่กดคือลำดับที่
+                             ระบบจะไล่โทรจริง เครื่องหมายถูกบอกได้แค่ "เลือกแล้ว" ซึ่งทำให้
+                             ข้อมูลสำคัญที่สุดของโหมดนี้มองไม่เห็นเลยจนกว่าจะไปอ่านบรรทัดสรุป
+
+                             indexOf ทำให้เลขไล่ใหม่เองตอนเอาคนกลางออก — คนที่อยู่ถัดไป
+                             เลื่อนขึ้นมาเป็นลำดับก่อนหน้าทันที ตรงกับที่ระบบจะโทรจริง */
+                          const order = drawer.contactIds.indexOf(c.id);
+                          const on = order >= 0;
                           return (
                             <button
                               key={c.id}
@@ -576,11 +584,11 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                             >
                               <span
                                 className={cn(
-                                  'grid size-4 shrink-0 place-items-center rounded-[5px] border-[1.5px]',
+                                  'grid size-6 shrink-0 place-items-center rounded-full border-[1.5px] font-mono text-micro font-bold',
                                   on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line',
                                 )}
                               >
-                                {on ? <span className="text-[0.55rem] leading-none">✓</span> : null}
+                                {on ? order + 1 : ''}
                               </span>
                               <span className={cn('min-w-0 flex-1 basis-[7rem] truncate text-caption', on ? 'font-semibold' : 'font-medium')}>
                                 {c.name?.trim() || '—'}
