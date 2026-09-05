@@ -29,11 +29,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { ChevronDown, Code2, Cpu, PhoneOutgoing, Plus, Power, Search, Trash2 } from 'lucide-react';
+import { Cpu, PhoneOutgoing, Plus, Power, Search, Trash2, X } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
-import { API_BASE_URL, ApiError } from '../api/client';
+import { ApiError } from '../api/client';
 import { listEventTypes, sendTestNotify } from '../api/eventTypes';
 import { listContacts, listGroups } from '../api/groups';
 import { AddDeviceDialog } from '../components/AddDeviceDialog';
@@ -71,7 +71,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [view, setView] = useState<'device' | 'matrix'>('device');
   const [selId, setSelId] = useState<number | null>(null);
   const [query, setQuery] = useState('');
-  const [apiOpen, setApiOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ApiKey | null>(null);
@@ -113,13 +112,16 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   const sel = devices.find((d) => d.id === selId) ?? null;
 
-  /* ตั้งต้นที่เหตุการณ์แรกที่อุปกรณ์นี้เปิดไว้ ถ้ายังไม่เปิดอะไรเลยก็เอาตัวแรกในระบบ
+  /* ตั้งต้นที่เหตุการณ์แรกที่อุปกรณ์นี้เปิดไว้ — ยังไม่เปิดอะไรเลยก็ปล่อยว่าง
+     ห้ามตั้งเป็นตัวแรกในระบบ เพราะตอนนี้ "เลือกในช่อง = เปิดใช้" การเลือกให้เอง
+     จึงเท่ากับไปเปิดเหตุการณ์ให้อุปกรณ์โดยที่ไม่มีใครสั่ง
+
      แตะเฉพาะตอนตัวที่เลือกอยู่หายไปจริงๆ (ถูกลบ หรือยังไม่เคยเลือก) — ไม่งั้นการสลับ
      อุปกรณ์จะดีดกลับไปเหตุการณ์แรกทุกครั้ง ทั้งที่คนกำลังไล่ตั้งเหตุการณ์เดิมอยู่ */
   useEffect(() => {
     if (eventTypes.length === 0) return;
     if (etId !== null && eventTypes.some((e) => e.id === etId)) return;
-    setEtId(sel?.allowed_event_types[0]?.id ?? eventTypes[0].id);
+    setEtId(sel?.allowed_event_types[0]?.id ?? null);
   }, [sel, eventTypes, etId]);
 
   const curEt = eventTypes.find((e) => e.id === etId) ?? null;
@@ -402,50 +404,38 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                     {/* ── ขั้นที่ 1 ────────────────────────────────────────────── */}
                     <section className="border-b border-line px-5 py-4">
                       <p className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dv_step1_title}</p>
-                      <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-                        {/* ต่อ "· เปิดอยู่" ท้ายชื่อในตัวเลือก ไม่ใช่แยกเป็นสองกลุ่มใน optgroup
-                            เพราะลำดับของเหตุการณ์ต้องคงที่ ไม่งั้นพอเปิด/ปิดตัวไหน
-                            รายการทั้งช่องจะสลับที่กันเองใต้เมาส์ที่กำลังจะกดตัวถัดไป */}
-                        <select
-                          value={curEt?.id ?? ''}
-                          onChange={(e) => setEtId(Number(e.target.value))}
-                          className="min-w-0 flex-1 basis-[15rem] rounded-control border border-line bg-surface px-3 py-2.5 text-body"
-                        >
-                          {eventTypes.map((et) => {
-                            const enabled = sel.allowed_event_types.some((e) => e.id === et.id);
-                            return (
-                              <option key={et.id} value={et.id}>
-                                {et.display_name}{enabled ? ` · ${T.dv_step1_on}` : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
+                      {/* เลือกในช่องนี้ = เปิดให้อุปกรณ์ยิงเหตุการณ์นั้นเลย ไม่มีปุ่มติ๊กซ้ำ
+                          เคยมีปุ่ม "ให้อุปกรณ์นี้ยิงเหตุการณ์นี้ได้" อยู่ข้างช่อง ซึ่งเป็นการ
+                          ให้ยืนยันสิ่งที่เพิ่งทำไปแล้ว — เลือกจากช่องอยู่ดีๆ ก็คือตั้งใจจะใช้มัน
+                          ปิดเหตุการณ์ทำที่รายการ "ตั้งไว้แล้ว" ท้ายแผงแทน ซึ่งเป็นที่ที่เห็นว่า
+                          กำลังจะปิดอะไรและมันตั้งอะไรค้างไว้อยู่
 
-                        {curEt ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleEvent(sel, curEt.id)}
-                            aria-pressed={curOn}
-                            className={cn(
-                              'flex items-center gap-2.5 rounded-control border px-3.5 py-2.5 text-caption',
-                              curOn
-                                ? 'border-brand-strong bg-brand-soft font-semibold text-brand-strong'
-                                : 'border-line bg-surface-2 text-ink-2',
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                'grid size-5 shrink-0 place-items-center rounded-[6px] border-[1.5px]',
-                                curOn ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line bg-surface',
-                              )}
-                            >
-                              {curOn ? <span className="text-micro leading-none">✓</span> : null}
-                            </span>
-                            {T.dv_enable_event}
-                          </button>
-                        ) : null}
-                      </div>
-                      {curEt ? (
+                          "— เลือกเหตุการณ์ —" โผล่เฉพาะตอนยังไม่ได้เลือกอะไร ไม่ค้างเป็น
+                          ตัวเลือกถาวร เพราะการกลับไปเลือกมันไม่มีความหมาย (ไม่ใช่การปิด) */}
+                      <select
+                        value={curOn && curEt ? curEt.id : ''}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          const id = Number(e.target.value);
+                          setEtId(id);
+                          if (!sel.allowed_event_types.some((x) => x.id === id)) toggleEvent(sel, id);
+                        }}
+                        className="mt-2.5 w-full rounded-control border border-line bg-surface px-3 py-2.5 text-body"
+                      >
+                        {!curOn ? <option value="">{T.dv_pick_event_ph}</option> : null}
+                        {/* ต่อ "· เปิดอยู่" ท้ายชื่อ ไม่ใช่แยกเป็นสองกลุ่มใน optgroup
+                            เพราะลำดับต้องคงที่ ไม่งั้นพอเปิดตัวไหน รายการทั้งช่อง
+                            จะสลับที่กันเองใต้เมาส์ที่กำลังจะกดตัวถัดไป */}
+                        {eventTypes.map((et) => {
+                          const enabled = sel.allowed_event_types.some((e) => e.id === et.id);
+                          return (
+                            <option key={et.id} value={et.id}>
+                              {et.display_name}{enabled ? ` · ${T.dv_step1_on}` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      {curOn && curEt ? (
                         <p className="mt-2 font-mono text-micro text-ink-2">{curEt.code}</p>
                       ) : null}
                     </section>
@@ -584,29 +574,49 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                           const ready = linkReady(ref);
                           const on = ref.id === curEt?.id;
                           return (
-                            <button
+                            /* ทั้งแถวเป็นปุ่มกดไปแก้ ยกเว้นปุ่มปิดท้ายแถวซึ่งต้องซ้อนอยู่ข้างใน
+                               ไม่ได้ (ปุ่มซ้อนปุ่มเป็น HTML ที่ไม่ถูกต้อง) จึงเป็น div
+                               ที่มีปุ่มสองอันอยู่ข้างในแทน */
+                            <div
                               key={ref.id}
-                              type="button"
-                              onClick={() => setEtId(ref.id)}
                               className={cn(
-                                'flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-2 px-5 py-2.5 text-start last:border-b-0',
+                                'flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-2 ps-5 pe-3 py-2 last:border-b-0',
                                 on ? 'bg-brand-soft' : 'bg-surface',
                               )}
                             >
-                              <span className={cn('min-w-0 flex-1 basis-[9rem] truncate text-caption', on ? 'font-semibold' : '')}>
-                                {ref.display_name}
-                              </span>
-                              <span className="min-w-0 flex-[1.4] basis-[10rem] truncate text-caption text-ink-2">
-                                {ready
-                                  ? (ref.contacts.length > 0
-                                      ? fill(T.dv_matrix_picked, { n: ref.contacts.length })
-                                      : ref.group_name ?? '') + (names.length ? ` · ${names.join(', ')}` : '')
-                                  : '—'}
-                              </span>
-                              <span className="shrink-0">
-                                <Pill tone={ready ? 'ok' : 'warn'}>{ready ? T.dv_st_ready : T.dv_st_notarget}</Pill>
-                              </span>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => setEtId(ref.id)}
+                                className="flex min-w-0 flex-1 basis-[16rem] flex-wrap items-center gap-x-3 gap-y-1 py-0.5 text-start"
+                              >
+                                <span className={cn('min-w-0 flex-1 basis-[9rem] truncate text-caption', on ? 'font-semibold' : '')}>
+                                  {ref.display_name}
+                                </span>
+                                <span className="min-w-0 flex-[1.4] basis-[10rem] truncate text-caption text-ink-2">
+                                  {ready
+                                    ? (ref.contacts.length > 0
+                                        ? fill(T.dv_matrix_picked, { n: ref.contacts.length })
+                                        : ref.group_name ?? '') + (names.length ? ` · ${names.join(', ')}` : '')
+                                    : '—'}
+                                </span>
+                              </button>
+                              <Pill tone={ready ? 'ok' : 'warn'}>{ready ? T.dv_st_ready : T.dv_st_notarget}</Pill>
+                              {/* ที่เดียวที่ปิดเหตุการณ์ได้ หลังเอาปุ่มติ๊กข้างช่องเลือกออก
+                                  อยู่ตรงนี้ถูกที่กว่า เพราะเห็นพร้อมกันว่ากำลังจะปิดอะไร
+                                  และตัวนั้นตั้งผู้รับสายอะไรค้างไว้ (ปิดแล้วการตั้งค่านั้นหายไป) */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  toggleEvent(sel, ref.id);
+                                  if (etId === ref.id) setEtId(null);
+                                }}
+                                aria-label={T.dv_done_remove}
+                                title={T.dv_done_remove}
+                                className="grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
+                              >
+                                <X className="size-4" />
+                              </button>
+                            </div>
                           );
                         })
                       )}
@@ -615,31 +625,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 )}
               </div>
 
-              {/* วิธียิงเข้ามา — พับไว้ กางได้ (อยู่ในการ์ดเดียวกัน ไม่แยกใบ
-                  ไม่งั้นคอลัมน์ขวาจะมีสองกล่องซ้อนกันแล้วสูงไม่เท่าคอลัมน์ซ้าย) */}
-              <div className="border-t border-line">
-                <button
-                  type="button"
-                  onClick={() => setApiOpen((v) => !v)}
-                  className="flex w-full flex-wrap items-center gap-3 px-5 py-3.5 text-start"
-                >
-                  <Code2 className="size-4 shrink-0 text-ink-2" />
-                  <span className="text-body">{T.dev_api_title}</span>
-                  <span className="font-mono text-micro text-ink-2">POST /notify · X-API-Key</span>
-                  <span className="ms-auto flex items-center gap-1.5 text-micro text-ink-2">
-                    {apiOpen ? T.dv_api_hide : T.dv_api_show}
-                    <ChevronDown className={cn('size-4 transition-transform', apiOpen ? 'rotate-180' : '')} />
-                  </span>
-                </button>
-                {apiOpen ? (
-                  <pre className="mx-5 mb-4 overflow-x-auto rounded-control border border-line-2 bg-surface-2 p-4 font-mono text-micro leading-loose">
-{`curl -X POST ${API_BASE_URL}/notify \\
-  -H "X-API-Key: ${sel.key_prefix}..." \\
-  -H "Content-Type: application/json" \\
-  -d '{"event_type_code": "${sel.allowed_event_types[0]?.code ?? eventTypes[0]?.code ?? 'your_event'}"}'`}
-                  </pre>
-                ) : null}
-              </div>
             </div>
           ) : null}
         </div>
