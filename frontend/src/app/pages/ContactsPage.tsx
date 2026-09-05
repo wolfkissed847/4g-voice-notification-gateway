@@ -403,17 +403,39 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                         <div
                           key={c.id}
                           className={cn(
-                            'flex items-center gap-3 border-b border-line-2 px-4 py-2 last:border-b-0',
+                            'flex items-stretch border-b border-line-2 ps-3.5 pe-4 last:border-b-0',
                             q !== '' && contactMatches(c, q, qDigits) && 'bg-brand-soft',
                           )}
                         >
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft font-mono text-micro font-bold text-brand-strong">
-                            {i + 1}
+                          {/* เส้นโยงแบบต้นไม้ — ขีดตั้งไล่ลงมาจากแถวกลุ่ม แล้วแตกขีดนอน
+                              เข้าหาสมาชิกแต่ละคน คนสุดท้ายขีดตั้งจบครึ่งแถว (เป็นมุม └)
+                              บอกว่าหมดกลุ่มแล้วโดยไม่ต้องมีเส้นคั่นหรือคำกำกับเพิ่ม
+
+                              วางกึ่งกลางไว้ที่ 24px เท่ากับกึ่งกลางลูกศรกาง/หุบของแถวกลุ่ม
+                              (ps-3.5 = 14px + ครึ่งของ w-5 = 10px) เส้นจึงลากลงมาจากลูกศร
+                              ตรงๆ ไม่ใช่ลอยอยู่ข้างๆ
+
+                              items-stretch ที่แถว + self-stretch ตรงนี้ ทำให้ขีดตั้งของแต่ละแถว
+                              ยาวเต็มความสูงแถวและไปบรรจบกับของแถวถัดไปพอดี ไม่ขาดเป็นท่อนๆ */}
+                          <span aria-hidden className="relative w-5 shrink-0 self-stretch">
+                            <span
+                              className={cn(
+                                'absolute start-1/2 top-0 w-px -translate-x-1/2 bg-line',
+                                i === members.length - 1 ? 'h-1/2' : 'bottom-0',
+                              )}
+                            />
+                            <span className="absolute start-1/2 top-1/2 h-px w-2 bg-line" />
                           </span>
-                          <span className="min-w-0 flex-1 truncate text-caption font-medium">
-                            {c.name?.trim() || '—'}
+
+                          <span className="flex min-w-0 flex-1 items-center gap-3 py-2 ps-2">
+                            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft font-mono text-micro font-bold text-brand-strong">
+                              {i + 1}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-caption font-medium">
+                              {c.name?.trim() || '—'}
+                            </span>
+                            <span className="shrink-0 font-mono text-caption text-ink-2">{c.phone_number}</span>
                           </span>
-                          <span className="shrink-0 font-mono text-caption text-ink-2">{c.phone_number}</span>
                         </div>
                       ))
                     )}
