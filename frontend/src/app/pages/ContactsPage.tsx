@@ -10,7 +10,9 @@
  * 2. ตัด MOCK_GROUPS_PREVIEW ออก — เดิมพอไม่มีกลุ่มจะโชว์ "ทีมเครือข่าย/ทีมไฟฟ้า"
  *    พร้อมเบอร์ปลอม 5 เบอร์ (แม้จะ pointer-events-none) ซึ่งอ่านผิดได้ว่าตั้งค่าไว้แล้ว
  *    หน้านี้คือที่ที่บอกว่า "ระบบจะโทรหาใคร" — ต้องไม่มีเบอร์ปลอมโผล่เลย
- * 3. เปลี่ยน window.confirm ตอนลบกลุ่ม → ยืนยัน 2 จังหวะในปุ่มเดิมตามดีไซน์
+ * 3. เปลี่ยน window.confirm ตอนลบกลุ่ม → ป๊อปอัพยืนยันชุดเดียวกับแท็บประเภทเหตุการณ์
+ *    (เคยเป็นยืนยัน 2 จังหวะในปุ่มเดิมอยู่ช่วงหนึ่ง แต่กลายเป็นปุ่มถังขยะที่ทำงาน
+ *     ไม่เหมือนอีกแท็บที่อยู่หน้าเดียวกัน และไม่มีที่ให้บอกว่าเบอร์ในกลุ่มหายไปด้วย)
  * 4. ลำดับเบอร์ = ลำดับที่ระบบจะไล่โทร จึงเน้นเลขลำดับให้เห็นชัดกว่าเดิม
  * 5. เพิ่ม "แก้ไข" ที่ยังขาดไป — เดิมเพิ่มกับลบได้อย่างเดียว พิมพ์เบอร์ผิดตัวเดียว
  *    ต้องลบทิ้งแล้วเพิ่มใหม่ ซึ่งทำให้เบอร์ไปต่อท้ายลำดับไล่สายแทนที่จะอยู่ที่เดิม
@@ -28,6 +30,10 @@ import {
   reorderContacts, updateContact, updateGroup,
 } from '../api/groups';
 import { Btn, PageHeader, inputCls } from '../components/primitives';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '../components/ui/alert-dialog';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
@@ -80,7 +86,11 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [newName, setNewName] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [query, setQuery] = useState('');
-  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  /* ยืนยันการลบกลุ่มด้วยป๊อปอัพชุดเดียวกับแท็บประเภทเหตุการณ์
+     เดิมเป็นยืนยันสองจังหวะในปุ่มเดิม (กดครั้งแรกปุ่มเปลี่ยนเป็น "กดอีกครั้งเพื่อยืนยัน")
+     ซึ่งอยู่หน้าเดียวกับปุ่มลบที่เด้งป๊อปอัพ — ปุ่มถังขยะสองอันข้างกันทำงานคนละแบบ
+     และแบบสองจังหวะไม่มีที่ให้บอกว่าลบแล้วเบอร์ในกลุ่มหายไปด้วย */
+  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
   // มีของเก่าอยู่แล้ว = ไม่ต้องขึ้น "กำลังโหลด" ให้วาดของเก่าไปก่อนแล้วโหลดทับเงียบๆ
   const [loading, setLoading] = useState(!cached);
 
@@ -156,7 +166,9 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
       .catch((e) => toast.error(e instanceof ApiError ? e.message : T.error_generic));
   };
 
-  const removeGroup = (groupId: number) => {
+  const confirmDeleteGroup = () => {
+    if (!deleteTarget) return;
+    const groupId = deleteTarget.id;
     deleteGroup(groupId)
       .then(() => {
         setGroups((gs) => gs.filter((g) => g.id !== groupId));
@@ -164,11 +176,11 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           const { [groupId]: _drop, ...rest } = m;
           return rest;
         });
-        setPendingDelete(null);
         toast.success(T.toast_deleted);
       })
       // backend ตอบ 409 ถ้ากลุ่มยังถูกอุปกรณ์ใช้อยู่ — ข้อความจาก detail อธิบายชัดแล้ว
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : T.error_generic));
+      .catch((e) => toast.error(e instanceof ApiError ? e.message : T.error_generic))
+      .finally(() => setDeleteTarget(null));
   };
 
   /* ชื่อบังคับพอๆ กับเบอร์ — รายชื่อนี้ถูกอ่านตอนเกิดเหตุจริง ("โทรหาใครไปแล้วบ้าง")
@@ -343,10 +355,30 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
             <p className="px-4 py-10 text-center text-caption text-ink-2">{T.contacts_search_none}</p>
           ) : null}
 
+          {/* ── ตารางชุดเดียวกับแท็บประเภทเหตุการณ์ ────────────────────
+              เดิมแถวกลุ่มเป็นการ์ดในตัวเอง: ไอคอนวงกลม ชื่อตัวหนา แล้วบรรทัดที่สอง
+              เอา "3 เบอร์โทร · ช่างต้น, ช่างเอ" มาต่อกันด้วยจุดคั่น อ่านทีละแถวได้
+              แต่กวาดตาลงมาเทียบข้ามแถวไม่ได้เลย เพราะไม่มีอะไรอยู่ตรงคอลัมน์เดียวกัน
+              พอแยกเป็นคอลัมน์แบบตารางเดียวกับอีกแท็บ คำถามที่คนเปิดหน้านี้ถามจริง
+              ("กลุ่มไหนยังไม่มีเบอร์" / "ใครอยู่กลุ่มไหน") ตอบได้ด้วยการกวาดตารอบเดียว
+              และปุ่มแก้/ลบก็ไปอยู่ตำแหน่งเดียวกับของอีกแท็บ ไม่ต้องหาใหม่ทุกครั้งที่สลับ
+
+              ลูกศรกาง/หุบย้ายมาไว้หน้าชื่อ ไม่ใช่ท้ายแถวแบบเดิม — มันบอกว่า "แถวนี้กางได้"
+              ซึ่งเป็นเรื่องของตัวแถวเอง ไม่ใช่คอลัมน์ข้อมูลอีกคอลัมน์ และวางไว้หน้าชื่อ
+              ทำให้เห็นได้ทันทีว่าแถวไหนกางอยู่โดยไม่ต้องกวาดตาไปสุดขอบขวา */}
+          {visible.length > 0 ? (
+            <div className="sticky top-0 z-10 hidden flex-wrap items-center gap-x-3 border-b border-line bg-surface-2 px-3.5 py-1.5 font-mono text-body font-bold text-ink-2 sm:flex">
+              <span className="min-w-0 flex-1 basis-[10rem]">{T.group_name_label}</span>
+              <span className="min-w-0 flex-[0.7] basis-[6rem]">{T.ct_col_phones}</span>
+              <span className="min-w-0 flex-[1.3] basis-[10rem]">{T.ct_col_members}</span>
+              <span className="w-[4.25rem] shrink-0 text-end">{T.col_actions}</span>
+            </div>
+          ) : null}
+
           {visible.map((g) => {
             const phones = contactsByGroup[g.id] || [];
-            const pending = pendingDelete === g.id;
             const renaming = editingGroup === g.id;
+            const preview = memberPreview(contactsByGroup[g.id]);
             /* ตอนค้นเจอคนในกลุ่ม ให้กางกลุ่มนั้นเองโดยไม่ต้องกด — คนค้นชื่อคนอยากเห็นคนนั้น
                ไม่ใช่แค่ชื่อกลุ่มที่เขาอยู่ คิดเป็นค่าจาก q ตรงนี้แทนที่จะไปแก้ state expanded
                เพราะถ้าไปเขียน state ทับ พอลบคำค้นออกกลุ่มจะค้างกางอยู่ทั้งที่ผู้ใช้ไม่ได้กดเอง */
@@ -374,14 +406,17 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                         }
                   }
                   className={cn(
-                    'flex w-full items-center gap-2.5 px-4 py-3.5',
-                    !renaming && 'cursor-pointer transition-colors hover:bg-surface-2',
+                    'flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2 transition-colors',
+                    !renaming && 'cursor-pointer hover:bg-surface-2',
+                    open && 'bg-surface-2',
                   )}
                 >
                   {renaming ? (
                     <>
+                      {/* ช่องแก้ชื่อกินที่ของสามคอลัมน์แรกรวมกัน — ชื่อกลุ่มยาวกว่าคอลัมน์ชื่อ
+                          ได้ง่าย และตอนกำลังพิมพ์ก็ไม่มีอะไรให้อ่านในอีกสองคอลัมน์อยู่แล้ว */}
                       <input
-                        className={cn(inputCls, 'min-w-0 flex-1 py-1.5 text-caption')}
+                        className={cn(inputCls, 'min-w-0 flex-1 basis-[14rem] py-1.5 text-caption')}
                         value={groupDraft}
                         onChange={(e) => setGroupDraft(e.target.value)}
                         onKeyDown={(e) => {
@@ -390,74 +425,67 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
                         }}
                         autoFocus
                       />
-                      <button
-                        type="button"
-                        onClick={() => saveGroupName(g.id)}
-                        disabled={!groupDraft.trim()}
-                        className="shrink-0 rounded-control px-1.5 py-1 text-ok-strong disabled:opacity-40"
-                        aria-label={T.save}
-                      >
-                        <Check size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingGroup(null)}
-                        className="shrink-0 rounded-control px-1.5 py-1 text-ink-2"
-                        aria-label={T.cancel}
-                      >
-                        <X size={15} />
-                      </button>
+                      <span className="flex w-[4.25rem] shrink-0 items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => saveGroupName(g.id)}
+                          disabled={!groupDraft.trim()}
+                          className="grid size-8 place-items-center rounded-control text-ok-strong disabled:opacity-40"
+                          aria-label={T.save}
+                          title={T.save}
+                        >
+                          <Check size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingGroup(null)}
+                          className="ms-1 grid size-8 place-items-center rounded-control text-ink-2"
+                          aria-label={T.cancel}
+                          title={T.cancel}
+                        >
+                          <X size={15} />
+                        </button>
+                      </span>
                     </>
                   ) : (
                     <>
-                      <span className="flex min-w-0 flex-1 items-center gap-2.5 text-start">
-                        <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft">
-                          <Users size={15} className="text-brand-strong" strokeWidth={1.8} />
+                      <span className="flex min-w-0 flex-1 basis-[10rem] items-center gap-2">
+                        <span aria-hidden className="grid size-5 shrink-0 place-items-center text-ink-2">
+                          {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                         </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-caption font-semibold">{g.name}</span>
-                          <span className="block truncate text-micro text-ink-2">
-                            <span className="font-mono">{T.phones_count(g.contact_count)}</span>
-                            {memberPreview(contactsByGroup[g.id]) ? ` · ${memberPreview(contactsByGroup[g.id])}` : ''}
-                          </span>
-                        </span>
+                        <span className="truncate text-caption font-medium">{g.name}</span>
                       </span>
 
-                      {/* ปุ่มไอคอนขนาด 32px ไม่ใช่ ~24px แบบเดิม และเว้นช่องก่อนปุ่มลบ
-                          ของเดิมดินสอกับถังขยะติดกันเกือบชิด ทั้งคู่เล็กและไม่มีข้อความกำกับ
-                          พลาดไปหนึ่งช่องคือลบทั้งกลุ่ม (มียืนยันสองจังหวะก็จริง แต่การกดพลาด
-                          ไม่ควรเริ่มต้นที่ปุ่มทำลายตั้งแต่แรก) */}
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setEditingGroup(g.id); setGroupDraft(g.name); }}
-                        className="grid size-8 shrink-0 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
-                        aria-label={T.edit_group_name}
-                        title={T.edit_group_name}
-                      >
-                        <Pencil size={15} />
-                      </button>
+                      <span className="min-w-0 flex-[0.7] basis-[6rem] truncate font-mono text-caption text-ink-2">
+                        {T.phones_count(g.contact_count)}
+                      </span>
 
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); pending ? removeGroup(g.id) : setPendingDelete(g.id); }}
-                        title={T.device_remove}
-                        className={cn(
-                          'ms-1 shrink-0 rounded-control text-micro transition-colors',
-                          pending
-                            ? 'bg-bad-strong px-2.5 py-1.5 text-status-ink'
-                            : 'grid size-8 place-items-center text-ink-2 hover:bg-bad-soft hover:text-bad-strong',
-                        )}
-                      >
-                        {pending ? T.device_remove_confirm : <Trash2 size={15} />}
-                      </button>
+                      {/* ยังไม่มีเบอร์ = ขีดเดียว ไม่ใช่ช่องว่าง — ช่องว่างอ่านได้ว่าโหลดไม่ขึ้น */}
+                      <span className="min-w-0 flex-[1.3] basis-[10rem] truncate text-caption text-ink-2">
+                        {preview || '—'}
+                      </span>
 
-                      {/* ลูกศรเป็นแค่สัญลักษณ์บอกว่ากางได้ — ทั้งแถวรับคลิกอยู่แล้ว
-                          จึงไม่ต้องเป็นปุ่มซ้อนปุ่ม (และไม่ต้องมี tab stop ของตัวเอง) */}
-                      <span
-                        aria-hidden="true"
-                        className="grid size-8 shrink-0 place-items-center text-ink-2"
-                      >
-                        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      {/* ขนาดปุ่มและระยะห่างชุดเดียวกับแท็บประเภทเหตุการณ์ — 32px และเว้นช่อง
+                          ก่อนปุ่มลบ สามแท็บนี้อยู่หน้าเดียวกัน ปุ่มแก้/ลบต้องกดเหมือนกันหมด */}
+                      <span className="flex w-[4.25rem] shrink-0 items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setEditingGroup(g.id); setGroupDraft(g.name); }}
+                          className="grid size-8 place-items-center rounded-control text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                          aria-label={T.edit_group_name}
+                          title={T.edit_group_name}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}
+                          className="ms-1 grid size-8 place-items-center rounded-control text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
+                          aria-label={T.delete}
+                          title={T.delete}
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </span>
                     </>
                   )}
@@ -673,6 +701,27 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── ยืนยันลบกลุ่ม ───────────────────────────────────────────────────
+          ชุดเดียวกับแท็บประเภทเหตุการณ์ทั้งหัวข้อ ปุ่ม และคำถาม
+          บอกจำนวนเบอร์ที่จะหายไปด้วย เพราะกลุ่มที่มีเบอร์ 8 คนกับกลุ่มเปล่า
+          กดผิดแล้วเสียหายไม่เท่ากัน และตัวเลขนั้นอ่านจากป๊อปอัพได้เลยโดยไม่ต้องกางกลุ่มดู */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{T.delete_confirm_title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `${deleteTarget.name} · ${T.phones_count(deleteTarget.contact_count)} — ${T.group_delete_confirm}`
+                : T.group_delete_confirm}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{T.cancel}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteGroup}>{T.yes_delete}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

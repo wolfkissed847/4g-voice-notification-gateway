@@ -32,15 +32,18 @@ import { Btn, PageHeader, inputCls } from "../components/primitives";
 import { SNAP, readSnapshot, writeSnapshot } from "../lib/snapshot";
 import type { EventType } from "../types";
 
+/* ไม่มี is_active ในฟอร์ม — สวิตช์เปิด/ปิดอยู่ที่คอลัมน์ "สถานะ" ในตารางจุดเดียว
+   เดิมมีอยู่ทั้งสองที่ ซึ่งแปลว่าปิดเหตุการณ์ได้สองทางแต่เห็นผลทางเดียว (ตาราง)
+   และในป๊อปอัพแก้ไขมันก็เป็นของแปลกปลอม — อีกสามช่องคือ "ให้พูดว่าอะไร"
+   ส่วนสวิตช์นี้คือ "ยังใช้อยู่ไหม" ซึ่งเป็นคนละคำถามและกดจากตารางได้เร็วกว่าอยู่แล้ว */
 interface FormState {
   id?: number;
   code: string;
   display_name: string;
   message_template: string;
-  is_active: boolean;
 }
 
-const EMPTY_FORM: FormState = { code: "", display_name: "", message_template: "", is_active: true };
+const EMPTY_FORM: FormState = { code: "", display_name: "", message_template: "" };
 
 /**
  * กล่องช่วยตอนพิมพ์ข้อความ — อ่าน {ชื่อตัวแปร} จากสิ่งที่พิมพ์อยู่แล้วบอกว่า
@@ -183,7 +186,7 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
   const openEdit = (et: EventType) => {
     setForm({
       id: et.id, code: et.code, display_name: et.display_name,
-      message_template: et.message_template, is_active: et.is_active,
+      message_template: et.message_template,
     });
     setFormErr("");
     setFormOpen(true);
@@ -201,7 +204,6 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
         const updated = await updateEventType(form.id, {
           display_name: form.display_name,
           message_template: form.message_template,
-          is_active: form.is_active,
         });
         setEventTypes((ets) => ets.map((e) => (e.id === updated.id ? updated : e)));
         toast.success(T.toast_updated);
@@ -407,13 +409,6 @@ export function EventTypesPage({ embedded = false }: { embedded?: boolean } = {}
                   className={cn(inputCls, 'min-h-[5.25rem] max-h-[16rem] flex-1 resize-y')} />
                 <p className="text-micro leading-[1.7] text-ink-2 mt-1">{T.message_template_hint}</p>
               </div>
-              {form.id && (
-                /* ใส่กรอบให้เท่ากับช่องกรอกด้านบน ไม่งั้นสวิตช์ลอยเดี่ยวๆ ในคอลัมน์ที่เหลือแต่ที่ว่าง */
-                <div className="flex items-center justify-between gap-3 rounded-control border border-line bg-surface-2 px-3 py-2.5">
-                  <label className="text-caption text-ink-2">{T.active_label}</label>
-                  <Toggle on={form.is_active} onChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
-                </div>
-              )}
             </div>
 
             <div className="mt-4 min-w-0 border-t border-line pt-4 sm:mt-0 sm:border-t-0 sm:border-s sm:ps-5 sm:pt-0">
