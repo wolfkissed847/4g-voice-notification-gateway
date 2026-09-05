@@ -12,8 +12,9 @@
  *
  * ทางแก้คือการ์ดใบละอุปกรณ์ที่กางค้างไว้เสมอ ข้างในเป็นรายการเหตุการณ์ที่เปิดใช้
  * บรรทัดละเหตุการณ์ พร้อมสรุปผู้รับสายในบรรทัดเดียวกัน — เปิดหน้ามาก็เห็นครบทุกคู่
- * ของทุกอุปกรณ์โดยไม่ต้องกดอะไรเลย ส่วนการ "แก้" ไปอยู่ในลิ้นชักที่เลื่อนออกมาจากขวา
- * ซึ่งมีที่พอให้เลือกกลุ่มหรือไล่ติ๊กเบอร์ได้เต็มที่ โดยที่การ์ดข้างหลังยังอยู่ให้เห็น
+ * ของทุกอุปกรณ์โดยไม่ต้องกดอะไรเลย ส่วนการ "แก้" ไปอยู่ในป๊อปอัพที่มีที่พอให้เลือกกลุ่ม
+ * หรือไล่ติ๊กเบอร์ได้เต็มที่ (ไฟล์ดีไซน์ใช้ลิ้นชักเลื่อนจากขวา ผู้ใช้สั่งเปลี่ยนเป็นป๊อปอัพ
+ * ให้เหมือนที่อื่นทั้งเว็บ)
  *
  * ผ่านมาสามแบบก่อนหน้านี้ ผู้ใช้ตีกลับทั้งหมด: กริดการ์ด → ป๊อปอัพ → หน้าแยก (กดลึก 3 ชั้น),
  * ตาราง 4 คอลัมน์ (ของที่ต้องกดถูกบีบจนเล็ก), และ select ทีละอัน (ต้องเปิด dropdown
@@ -32,9 +33,8 @@
  *
  * ── บันทึก ────────────────────────────────────────────────────────────────
  * ติ๊ก/เอาออก/เปิด-ปิดอุปกรณ์ = ยิงทันทีแบบ optimistic (ถอยกลับถ้าเซิร์ฟเวอร์ปฏิเสธ)
- * ส่วนการเลือกผู้รับสายอยู่ในลิ้นชักที่มีปุ่มบันทึก/ยกเลิกของตัวเองตามไฟล์ดีไซน์ —
- * ลิ้นชักเป็น modal ปิดตัวเองไม่ได้ จึงไม่มีจังหวะ "ลืมกดบันทึกแล้วเดินจากไป"
- * แบบฟอร์มที่ฝังอยู่ในหน้า
+ * ส่วนการเลือกผู้รับสายอยู่ในป๊อปอัพที่มีปุ่มบันทึก/ยกเลิกของตัวเองตามไฟล์ดีไซน์ —
+ * ป๊อปอัพปิดตัวเองไม่ได้ จึงไม่มีจังหวะ "ลืมกดบันทึกแล้วเดินจากไป" แบบฟอร์มที่ฝังอยู่ในหน้า
  *
  * ── เกณฑ์ "พร้อม" ใช้ตัวเดียวกับหน้าภาพรวม ────────────────────────────────
  * อยู่ที่ lib/deviceReadiness.ts จุดเดียว ห้ามเขียนเงื่อนไขซ้ำที่นี่
@@ -58,7 +58,6 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
-import { Sheet, SheetContent } from '../components/ui/sheet';
 import { useApp } from '../context/AppContext';
 import { readiness } from '../lib/deviceReadiness';
 import { SNAP, readSnapshot, writeSnapshot } from '../lib/snapshot';
@@ -421,26 +420,25 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         </div>
       )}
 
-      {/* ── ลิ้นชักเลือกผู้รับสาย ─────────────────────────────────────────────
-          เลื่อนออกมาจากขวาแทนที่จะเป็นป๊อปอัพกลางจอ เพราะการ์ดของอุปกรณ์ที่กำลังแก้
-          ยังอยู่ให้เห็นข้างหลัง — เห็นได้ตลอดว่าเหตุการณ์อื่นของอุปกรณ์นี้ตั้งอะไรไว้
-          ใช้ Sheet ของ Radix (portal) ไม่ใช่ div ที่เขียน fixed เอง เพราะ AppShell
-          ห่อทุกหน้าไว้ด้วย div ที่มี transform ซึ่งกลายเป็น containing block
-          ของ position:fixed — กล่องที่เขียน fixed เองจะไปอิงขอบ <main> แทนขอบจอ */}
-      <Sheet open={drawer !== null} onOpenChange={(o) => { if (!o) setDrawer(null); }}>
-        <SheetContent
-          side="right"
-          className="w-full gap-0 border-line bg-surface p-0 sm:max-w-[26rem]"
-        >
+      {/* ── ป๊อปอัพเลือกผู้รับสาย ─────────────────────────────────────────────
+          เคยเป็นลิ้นชักเลื่อนออกมาจากขวาตามไฟล์ดีไซน์ ผู้ใช้สั่งเปลี่ยนเป็นป๊อปอัพกลางจอ
+          — ป๊อปอัพชุดเดียวกับที่ใช้ทุกจุดในเว็บนี้ (เพิ่มอุปกรณ์ แก้กลุ่ม ยืนยันลบ)
+          ของที่เลื่อนออกมาจากขอบจอเป็นทรงที่โผล่มาที่เดียวทั้งเว็บ
+
+          flex ทับ grid ของ DialogContent เพื่อให้หัวกับปุ่มท้ายอยู่กับที่
+          แล้วเลื่อนเฉพาะรายการตรงกลาง — รายการเบอร์ยาวเกินจอได้ ถ้าปล่อยให้ทั้งกล่อง
+          เลื่อน ปุ่มบันทึกจะไปอยู่ใต้สุดที่ต้องเลื่อนลงไปหา */}
+      <Dialog open={drawer !== null} onOpenChange={(o) => { if (!o) setDrawer(null); }}>
+        <DialogContent className="flex max-h-[85vh] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[32rem] [&>button]:top-4 [&>button]:right-4">
           {drawer && drawerEvent ? (
             <>
-              <div className="border-b border-line px-5 py-4 pe-12">
+              <DialogHeader className="shrink-0 gap-0 border-b border-line px-5 py-4 pe-12 text-start">
                 <p className="truncate text-micro text-ink-2">{drawerDevice?.name}</p>
-                <p className="truncate text-lead font-bold">{drawerEvent.display_name}</p>
+                <DialogTitle className="truncate text-lead font-bold">{drawerEvent.display_name}</DialogTitle>
                 <p className="truncate font-mono text-micro text-ink-2">{drawerEvent.code}</p>
-              </div>
+              </DialogHeader>
 
-              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
                 <p className="font-mono text-micro tracking-wider text-ink-2 uppercase">{T.dev_target_mode}</p>
 
                 {/* สองตัวเลือกเป็นการ์ดที่มีคำอธิบายใต้ชื่อ ไม่ใช่แค่ radio เปล่าๆ
@@ -585,7 +583,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 )}
               </div>
 
-              <div className="flex gap-2 border-t border-line px-5 py-3.5">
+              <div className="flex shrink-0 gap-2 border-t border-line px-5 py-3.5">
                 <Btn className="flex-1 justify-center" onClick={() => setDrawer(null)}>{T.cancel}</Btn>
                 <Btn variant="primary" className="flex-1 justify-center" onClick={saveDrawer} disabled={drawerInvalid}>
                   {T.save}
@@ -593,8 +591,8 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             </>
           ) : null}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* ── เพิ่มเหตุการณ์ให้อุปกรณ์ ─────────────────────────────────────────
           ช่องนี้โชว์เฉพาะเหตุการณ์ที่อุปกรณ์นี้ "ยังไม่มี" — เลือกตัวที่มีอยู่แล้วซ้ำ
