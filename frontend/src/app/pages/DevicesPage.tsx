@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { AlertTriangle, ChevronDown, Code2, Cpu, ListChecks, PhoneOutgoing, Plus, Power, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, Code2, Cpu, ListChecks, PhoneOutgoing, Plus, Power, Search, Trash2 } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { listApiKeys, deleteApiKey, updateApiKey } from '../api/apiKeys';
@@ -72,6 +72,13 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [addOpen, setAddOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ApiKey | null>(null);
 
+  /* แถวไหนที่ผู้ใช้กด "เลือกเบอร์เอง" ไว้ — คีย์เป็น "อุปกรณ์:เหตุการณ์"
+     ต้องจำแยกจากข้อมูล เพราะ backend ไม่มีฟิลด์บอกโหมด มีแต่ผลลัพธ์ (กลุ่ม หรือ รายชื่อ)
+     ถ้าเดาจากข้อมูลอย่างเดียว (มีคนถูกเลือก = โหมดเลือกเอง) คนที่เพิ่งกดปุ่มแต่ยังไม่ได้
+     ติ๊กใคร จะไม่เห็นรายชื่อให้ติ๊กเลย = กดแล้วไม่มีอะไรเกิดขึ้น */
+  const [pickMode, setPickMode] = useState<Record<string, boolean>>({});
+  const pickKey = (deviceId: number, etId: number) => `${deviceId}:${etId}`;
+
   useEffect(() => {
     let alive = true;
     Promise.all([listApiKeys(), listEventTypes(), listGroups()])
@@ -103,11 +110,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
     return devices.filter((d) =>
       d.name.toLowerCase().includes(q) || d.key_prefix.toLowerCase().includes(q));
   }, [devices, query]);
-
-  const broken = useMemo(
-    () => devices.filter((d) => d.is_active && readiness(d, T).tone === 'warn').length,
-    [devices, T],
-  );
 
   /* ── บันทึก ─────────────────────────────────────────────────────────────
      ส่ง event_links ทั้งชุดเสมอ (ไม่ใช่ส่งเฉพาะตัวที่แก้) เพราะ backend ถือว่า
@@ -228,22 +230,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <div className={cn('flex flex-col gap-4', embedded ? '' : 'p-4')}>
-      {/* แถบลำดับการตั้งค่า — นับจากของจริง หายเองเมื่อครบ */}
-      {broken > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-card border border-warn bg-warn-soft px-4 py-3">
-          <AlertTriangle className="size-5 shrink-0 text-warn-strong" />
-          <p className="text-caption">
-            <b>{fill(T.dv_setup_warn, { n: broken })}</b>{' '}
-            <span className="text-ink-2">— {T.dv_setup_order}</span>
-          </p>
-          <div className="ms-auto flex flex-wrap items-center gap-2">
-            <Pill tone="ok">{fill(T.dv_step_groups, { n: groups.length })}</Pill>
-            <Pill tone="ok">{fill(T.dv_step_events, { n: eventTypes.length })}</Pill>
-            <Pill tone="warn">{T.dv_step_link}</Pill>
-          </div>
-        </div>
-      ) : null}
-
       {/* แถบเครื่องมือ */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-0.5 rounded-control border border-line bg-surface-2 p-0.5">
@@ -398,7 +384,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 </div>
 
                 {/* เหตุการณ์ + ผู้รับ อยู่แถวเดียวกัน */}
-                <div className="grid grid-cols-[44px_minmax(0,1.1fr)_minmax(0,1.6fr)_112px] border-b border-line px-5 py-2.5 text-micro text-ink-2">
+                <div className="grid grid-cols-[40px_minmax(0,1fr)_minmax(0,1.5fr)_136px] border-b border-line px-5 py-2.5 text-micro text-ink-2">
                   <span>{T.dv_col_on}</span>
                   <span>{T.dv_col_event}</span>
                   <span>{T.dv_col_target}</span>
@@ -408,13 +394,13 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                   const ref = sel.allowed_event_types.find((e) => e.id === et.id);
                   const on = !!ref;
                   const picked = ref?.contacts ?? [];
-                  const isPick = on && picked.length > 0;
+                  const isPick = on && (picked.length > 0 || pickMode[pickKey(sel.id, et.id)] === true);
                   const ready = ref ? linkReady(ref) : false;
                   return (
                     <div
                       key={et.id}
                       className={cn(
-                        'grid grid-cols-[44px_minmax(0,1.1fr)_minmax(0,1.6fr)_112px] items-start border-b border-line-2 px-5 py-3',
+                        'grid grid-cols-[40px_minmax(0,1fr)_minmax(0,1.5fr)_136px] items-start border-b border-line-2 px-5 py-3',
                         on ? 'bg-surface' : 'bg-ink/[0.02]',
                       )}
                     >
@@ -440,14 +426,20 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                               <div className="flex gap-0.5 rounded-[8px] border border-line bg-surface-2 p-0.5">
                                 <button
                                   type="button"
-                                  onClick={() => setTarget(sel, et.id, { contact_ids: null, group_id: ref?.group_id ?? null })}
+                                  onClick={() => {
+                                    setPickMode((m) => ({ ...m, [pickKey(sel.id, et.id)]: false }));
+                                    setTarget(sel, et.id, { contact_ids: null, group_id: ref?.group_id ?? null });
+                                  }}
                                   className={cn('rounded-[6px] px-2.5 py-1 text-micro', !isPick ? 'bg-surface text-ink' : 'text-ink-2')}
                                 >
                                   {T.dev_target_group}
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setTarget(sel, et.id, { group_id: null, contact_ids: picked.map((c) => c.id) })}
+                                  onClick={() => {
+                                    setPickMode((m) => ({ ...m, [pickKey(sel.id, et.id)]: true }));
+                                    setTarget(sel, et.id, { group_id: null, contact_ids: picked.map((c) => c.id) });
+                                  }}
                                   className={cn('rounded-[6px] px-2.5 py-1 text-micro', isPick ? 'bg-surface text-ink' : 'text-ink-2')}
                                 >
                                   {T.dev_target_contacts}
@@ -470,27 +462,38 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                                 </select>
                               ) : null}
                             </div>
-                            {isPick || (on && !ref?.group_id && picked.length === 0) ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {contacts.map((c) => {
-                                  const has = picked.some((p) => p.id === c.id);
+                            {isPick ? (
+                              <div className="max-h-44 space-y-2 overflow-y-auto rounded-control border border-line-2 bg-surface-2 p-2.5">
+                                {groups.map((g) => {
+                                  const mine = contacts.filter((c) => c.group_id === g.id);
+                                  if (mine.length === 0) return null;
                                   return (
-                                    <button
-                                      key={c.id}
-                                      type="button"
-                                      onClick={() => setTarget(sel, et.id, {
-                                        group_id: null,
-                                        contact_ids: has
-                                          ? picked.filter((p) => p.id !== c.id).map((p) => p.id)
-                                          : picked.map((p) => p.id).concat([c.id]),
-                                      })}
-                                      className={cn(
-                                        'rounded-full border px-2.5 py-1 text-micro',
-                                        has ? 'border-brand-strong bg-brand-soft text-brand-strong' : 'border-line text-ink-2',
-                                      )}
-                                    >
-                                      {has ? '✓ ' : ''}{c.name || c.phone_number}
-                                    </button>
+                                    <div key={g.id}>
+                                      <p className="mb-1 text-micro text-ink-2">{g.name}</p>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {mine.map((c) => {
+                                          const has = picked.some((p) => p.id === c.id);
+                                          return (
+                                            <button
+                                              key={c.id}
+                                              type="button"
+                                              onClick={() => setTarget(sel, et.id, {
+                                                group_id: null,
+                                                contact_ids: has
+                                                  ? picked.filter((p) => p.id !== c.id).map((p) => p.id)
+                                                  : picked.map((p) => p.id).concat([c.id]),
+                                              })}
+                                              className={cn(
+                                                'rounded-full border px-2.5 py-1 text-micro',
+                                                has ? 'border-brand-strong bg-brand-soft text-brand-strong' : 'border-line bg-surface text-ink-2',
+                                              )}
+                                            >
+                                              {has ? '✓ ' : ''}{c.name || c.phone_number}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   );
                                 })}
                               </div>
