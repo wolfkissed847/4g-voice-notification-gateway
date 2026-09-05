@@ -229,7 +229,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   };
 
   return (
-    <div className={cn('flex flex-col gap-4', embedded ? '' : 'p-4')}>
+    <div className={cn('flex min-h-0 flex-1 flex-col gap-4', embedded ? '' : 'p-4')}>
       {/* แถบเครื่องมือ */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-0.5 rounded-control border border-line bg-surface-2 p-0.5">
@@ -268,15 +268,15 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
       </div>
 
       {view === 'device' ? (
-        <div className="grid items-start gap-4 lg:grid-cols-[316px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[316px_minmax(0,1fr)]">
           {/* รายการอุปกรณ์ */}
-          <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-            <div className="border-b border-line px-4 py-3 font-mono text-micro tracking-wider text-ink-2 uppercase">
+          <div className="min-h-[10rem] min-w-0 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+            <div className="sticky top-0 z-10 border-b border-line bg-surface px-4 py-3 font-mono text-micro tracking-wider text-ink-2 uppercase">
               {query.trim()
                 ? fill(T.dv_count_found, { n: shown.length, all: devices.length })
                 : fill(T.dv_count_all, { n: devices.length })}
             </div>
-            <div className="max-h-[62vh] overflow-y-auto">
+            <div>
               {shown.map((d) => {
                 const p = pillFor(d);
                 const on = d.id === selId;
@@ -312,8 +312,8 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
 
           {/* แผงตั้งค่าของตัวที่เลือก */}
           {sel ? (
-            <div className="flex flex-col gap-4">
-              <div className="rounded-card border border-line bg-surface shadow-card">
+            <div className="min-h-[10rem] min-w-0 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+              <div>
                 <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
                   <span className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-brand-soft">
                     <Cpu className="size-5 text-brand-strong" />
@@ -513,8 +513,9 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 })}
               </div>
 
-              {/* วิธียิงเข้ามา — พับไว้ กางได้ */}
-              <div className="overflow-hidden rounded-card border border-line bg-surface">
+              {/* วิธียิงเข้ามา — พับไว้ กางได้ (อยู่ในการ์ดเดียวกัน ไม่แยกใบ
+                  ไม่งั้นคอลัมน์ขวาจะมีสองกล่องซ้อนกันแล้วสูงไม่เท่าคอลัมน์ซ้าย) */}
+              <div className="border-t border-line">
                 <button
                   type="button"
                   onClick={() => setApiOpen((v) => !v)}
@@ -542,8 +543,8 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         </div>
       ) : (
         /* ── ตารางรวม — คลิกช่องแล้วกระโดดไปแก้ ───────────────────────────── */
-        <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-          <div className="border-b border-line px-5 py-3.5">
+        <div className="min-h-[10rem] min-w-0 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+          <div className="sticky top-0 z-10 border-b border-line bg-surface px-5 py-3.5">
             <p className="text-lead font-bold">{T.dv_matrix_title}</p>
             <p className="mt-0.5 text-caption text-ink-2">{T.dv_matrix_sub}</p>
           </div>
