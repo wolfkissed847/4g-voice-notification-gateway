@@ -23,8 +23,9 @@
  * ── ที่ต่างจากไฟล์ดีไซน์โดยตั้งใจ ──────────────────────────────────────────
  * 1. เก็บช่องค้นหาไว้ (ต้นฉบับไม่มี) — ของจริงมีอุปกรณ์เกือบ 20 ตัว การ์ดกางค้างทุกใบ
  *    แปลว่าเลื่อนหาอย่างเดียวไม่ไหว
- * 2. เก็บมุมมอง "ตารางรวม" ไว้ — เป็นของที่มีอยู่ก่อนและตอบคำถามข้ามอุปกรณ์
- *    ("เหตุการณ์นี้อุปกรณ์ไหนตั้งไว้บ้าง") ซึ่งการ์ดเรียงกันตอบไม่ได้
+ * 2. ไม่มีมุมมอง "ตารางรวม" (อุปกรณ์ × เหตุการณ์) แล้ว — ผู้ใช้สั่งเอาออก
+ *    ของเดิมมีไว้ตอบคำถามข้ามอุปกรณ์ ซึ่งการ์ดเรียงกันตอบไม่ได้ แต่พอการ์ดโชว์
+ *    ผู้รับสายครบทุกคู่อยู่แล้ว มันเลยกลายเป็นมุมมองที่ซ้ำกับของที่เห็นอยู่
  * 3. เก็บสวิตช์เปิด/ปิดอุปกรณ์ กับปุ่มทดสอบโทรไว้ในหัวการ์ด — เป็นฟังก์ชันจริงของระบบ
  *    ที่ต้นฉบับ (mock) ไม่มี
  * 4. ปุ่มแก้/ลบในแถวเหตุการณ์ไม่ซ่อนจนกว่าจะ hover แบบต้นฉบับ — ปุ่มที่มองไม่เห็น
@@ -93,7 +94,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
 
-  const [view, setView] = useState<'device' | 'matrix'>('device');
   const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -320,21 +320,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
     <div className={cn('flex min-h-0 flex-1 flex-col gap-4', embedded ? '' : 'p-4')}>
       {/* แถบเครื่องมือ */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-0.5 rounded-control border border-line bg-surface-2 p-0.5">
-          {(['device', 'matrix'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={cn(
-                'rounded-[7px] px-4 py-1.5 text-caption',
-                view === v ? 'bg-surface font-semibold text-ink' : 'text-ink-2',
-              )}
-            >
-              {v === 'device' ? T.dv_view_device : T.dv_view_matrix}
-            </button>
-          ))}
-        </div>
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-control border border-line bg-surface-2 px-3 py-2 sm:max-w-[340px]">
           <Search className="size-4 shrink-0 text-ink-2" />
           <input
@@ -355,105 +340,45 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         </button>
       </div>
 
-      {view === 'device' ? (
-        /* การ์ดเรียงลงมา ลอยบนพื้นหน้า ไม่มีกล่องนอกครอบ (ตามไฟล์ดีไซน์)
-           แต่เลื่อนอยู่ในตัวเอง ไม่ปล่อยให้ทั้งหน้าเลื่อนตามจำนวนอุปกรณ์ */
-        <div className="flex min-h-[10rem] min-w-0 flex-1 flex-col gap-4 overflow-auto overscroll-contain">
-          <p className="shrink-0 font-mono text-micro text-ink-2">
-            {query.trim()
-              ? fill(T.dv_count_found, { n: shown.length, all: devices.length })
-              : fill(T.dv_count_all, { n: devices.length })}
-          </p>
+      /* การ์ดเรียงลงมา ลอยบนพื้นหน้า ไม่มีกล่องนอกครอบ (ตามไฟล์ดีไซน์)
+         แต่เลื่อนอยู่ในตัวเอง ไม่ปล่อยให้ทั้งหน้าเลื่อนตามจำนวนอุปกรณ์ */
+      <div className="flex min-h-[10rem] min-w-0 flex-1 flex-col gap-4 overflow-auto overscroll-contain">
+        <p className="shrink-0 font-mono text-micro text-ink-2">
+          {query.trim()
+            ? fill(T.dv_count_found, { n: shown.length, all: devices.length })
+            : fill(T.dv_count_all, { n: devices.length })}
+        </p>
 
-          {shown.length === 0 ? (
-            <div className="flex flex-col items-center gap-2.5 rounded-card border border-dashed border-line px-4 py-10 text-center">
-              <span className="grid size-14 place-items-center rounded-card bg-surface-2">
-                <Cpu size={26} className="text-ink-2" strokeWidth={1.5} />
-              </span>
-              <p className="text-lead font-semibold">{T.devices_empty_title}</p>
-              <p className="text-caption text-ink-2">{T.devices_empty_body}</p>
-            </div>
-          ) : null}
+        {shown.length === 0 ? (
+          <div className="flex flex-col items-center gap-2.5 rounded-card border border-dashed border-line px-4 py-10 text-center">
+            <span className="grid size-14 place-items-center rounded-card bg-surface-2">
+              <Cpu size={26} className="text-ink-2" strokeWidth={1.5} />
+            </span>
+            <p className="text-lead font-semibold">{T.devices_empty_title}</p>
+            <p className="text-caption text-ink-2">{T.devices_empty_body}</p>
+          </div>
+        ) : null}
 
-          {shown.map((d) => {
-            const p = pillFor(d);
-            const avail = availableFor(d);
-            return (
-              <DeviceCard
-                key={d.id}
-                device={d}
-                pill={p}
-                canAddEvent={avail.length > 0}
-                recipientsOf={recipientsOf}
-                onAddEvent={() => { setAddEventFor(d); setAddEventId(''); }}
-                onEditEvent={(ref) => openDrawer(d, ref)}
-                onRemoveEvent={(ref) => setRemoveTarget({ device: d, ref })}
-                onToggleActive={() => void toggleActive(d)}
-                onTest={() => void doTest(d)}
-                onDelete={() => setPendingDelete(d)}
-              />
-            );
-          })}
-        </div>
-      ) : (
-        /* ── ตารางรวม — คลิกช่องแล้วกระโดดไปแก้ ───────────────────────────── */
-        <div className="min-h-[10rem] min-w-0 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
-          <div className="sticky top-0 z-10 border-b border-line bg-surface px-5 py-3.5">
-            <p className="text-lead font-bold">{T.dv_matrix_title}</p>
-            <p className="mt-0.5 text-caption text-ink-2">{T.dv_matrix_sub}</p>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="min-w-[880px]">
-              <div
-                className="grid border-b border-line bg-surface-2"
-                style={{ gridTemplateColumns: `240px repeat(${Math.max(eventTypes.length, 1)}, minmax(0, 1fr))` }}
-              >
-                <div className="px-4 py-2.5 text-micro text-ink-2">{T.dv_matrix_device}</div>
-                {eventTypes.map((et) => (
-                  <div key={et.id} className="border-s border-line-2 px-3 py-2.5 text-micro text-ink-2">
-                    {et.display_name}
-                  </div>
-                ))}
-              </div>
-              {devices.map((d) => (
-                <div
-                  key={d.id}
-                  className={cn('grid border-b border-line-2', d.is_active ? '' : 'opacity-50')}
-                  style={{ gridTemplateColumns: `240px repeat(${Math.max(eventTypes.length, 1)}, minmax(0, 1fr))` }}
-                >
-                  <div className="min-w-0 px-4 py-3">
-                    <p className="truncate text-caption font-semibold">{d.name}</p>
-                    <p className="font-mono text-micro text-ink-2">
-                      {d.key_prefix}{d.is_active ? '' : ` · ${T.dv_active_off}`}
-                    </p>
-                  </div>
-                  {eventTypes.map((et) => {
-                    const ref = d.allowed_event_types.find((e) => e.id === et.id);
-                    const jump = () => { setView('device'); setQuery(d.name); };
-                    let text: string = T.dv_matrix_notset;
-                    let cls: string = 'bg-ink/[0.02] text-ink-2/70';
-                    if (ref) {
-                      if (!linkReady(ref)) { text = T.dv_recip_none; cls = 'bg-warn-soft text-warn-strong'; }
-                      else if (ref.contacts.length > 0) { text = fill(T.dv_matrix_picked, { n: ref.contacts.length }); cls = 'text-ink'; }
-                      else { text = ref.group_name ?? ''; cls = 'text-ink'; }
-                    }
-                    return (
-                      <button
-                        key={et.id}
-                        type="button"
-                        onClick={jump}
-                        className={cn('border-s border-line-2 px-3 py-3 text-start text-caption', cls)}
-                      >
-                        {text}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+        {shown.map((d) => {
+          const p = pillFor(d);
+          const avail = availableFor(d);
+          return (
+            <DeviceCard
+              key={d.id}
+              device={d}
+              pill={p}
+              canAddEvent={avail.length > 0}
+              recipientsOf={recipientsOf}
+              onAddEvent={() => { setAddEventFor(d); setAddEventId(''); }}
+              onEditEvent={(ref) => openDrawer(d, ref)}
+              onRemoveEvent={(ref) => setRemoveTarget({ device: d, ref })}
+              onToggleActive={() => void toggleActive(d)}
+              onTest={() => void doTest(d)}
+              onDelete={() => setPendingDelete(d)}
+            />
+          );
+        })}
+      </div>
 
       {/* ── ป๊อปอัพเลือกผู้รับสาย ─────────────────────────────────────────────
           เคยเป็นลิ้นชักเลื่อนออกมาจากขวาตามไฟล์ดีไซน์ ผู้ใช้สั่งเปลี่ยนเป็นป๊อปอัพกลางจอ
@@ -745,7 +670,7 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
           }}
           onConfigure={(id) => {
             setAddOpen(false);
-            setView('device');
+            // ไม่มีมุมมองอื่นให้สลับกลับมาแล้ว เหลือแค่พาไปหาการ์ดของตัวที่เพิ่งสร้าง
             setQuery(devices.find((d) => d.id === id)?.name ?? '');
           }}
         />

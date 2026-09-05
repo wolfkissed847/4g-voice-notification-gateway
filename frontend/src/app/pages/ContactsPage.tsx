@@ -9,9 +9,12 @@
  * figma/Redesign Notification Settings Page/src/pages/ContactsPage.tsx
  * แต่ใช้ token ของธีมเราทั้งหมด ไม่ใช่ slate/blue ของไฟล์นั้น
  *
- * สาระของดีไซน์นี้: การ์ดใบละกลุ่ม กางค้างไว้ตลอด ไม่มีหุบ — รายชื่อในกลุ่ม
- * "คือ" เนื้อหาของกลุ่ม ไม่ใช่รายละเอียดเสริมที่ซ่อนได้ และแก้ทั้งกลุ่มในป๊อปอัพเดียว
- * (ชื่อกลุ่ม + สมาชิก + ลำดับ) แทนที่จะแก้ทีละช่องคาที่อยู่ในแถว
+ * สาระที่เอามาใช้จริง: แก้ทั้งกลุ่มในป๊อปอัพเดียว (ชื่อกลุ่ม + สมาชิก + ลำดับ)
+ * แทนที่จะแก้ทีละช่องคาที่อยู่ในแถว
+ *
+ * ส่วนรายการกลุ่มไม่ได้ใช้ทรงการ์ดใบละกลุ่มของไฟล์นั้น — ผู้ใช้สั่งกลับเป็นตาราง
+ * ชุดเดียวกับแท็บประเภทเหตุการณ์ กางแถวดูรายชื่อได้ ตารางมีหน้าที่เดียวคือ
+ * ให้กวาดตาหาแล้วเลือกกลุ่มที่จะแก้ ที่เหลือเป็นงานของป๊อปอัพ
  *
  * ── ที่ต่างจากไฟล์ดีไซน์โดยตั้งใจ ──────────────────────────────────────────
  * 1. ป๊อปอัพแก้กลุ่ม "ไล่ diff" แทนที่จะสร้างสมาชิกใหม่ทั้งชุด
@@ -25,7 +28,7 @@
  */
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Search, Trash2, Users, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Search, Users, X } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { ApiError } from '../api/client';
@@ -77,6 +80,8 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [groups, setGroups] = useState<Group[]>(cached?.groups ?? []);
   const [contactsByGroup, setContactsByGroup] = useState<Record<number, Contact[]>>(cached?.contactsByGroup ?? {});
   const [query, setQuery] = useState('');
+  /* แถวไหนกางอยู่ — ตารางกลับมาแล้วจึงต้องจำอีกครั้ง (ตอนเป็นการ์ดกางค้างทุกใบ) */
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   // มีของเก่าอยู่แล้ว = ไม่ต้องขึ้น "กำลังโหลด" ให้วาดของเก่าไปก่อนแล้วโหลดทับเงียบๆ
   const [loading, setLoading] = useState(!cached);
 
@@ -294,76 +299,126 @@ export function ContactsPage({ embedded = false }: { embedded?: boolean } = {}) 
           </Btn>
         </div>
       ) : (
-        /* การ์ดลอยบนพื้นหน้า ไม่มีกล่องนอกครอบอีกชั้น (ตามไฟล์ดีไซน์)
-           แต่เลื่อนอยู่ในตัวเอง ไม่ใช่ปล่อยให้ทั้งหน้าเลื่อน */
-        <div className="flex min-h-[10rem] min-w-0 flex-1 flex-col gap-4 overflow-auto overscroll-contain">
+        /* ── ตารางชุดเดียวกับแท็บประเภทเหตุการณ์ ──────────────────────────
+           กลับมาเป็นตารางตามที่ผู้ใช้สั่ง หลังจากลองเป็นการ์ดใบละกลุ่มตามไฟล์ดีไซน์
+           ส่วนที่เหลือของดีไซน์นั้นอยู่ครบ — การแก้ทั้งกลุ่มยังทำในป๊อปอัพเดียวเหมือนเดิม
+           ตารางนี้มีหน้าที่เดียวคือให้กวาดตาหาแล้วเลือกกลุ่มที่จะแก้
+
+           กางแถวได้เพื่อดูรายชื่อกับลำดับไล่โทรโดยไม่ต้องเปิดป๊อปอัพ — เป็นการ "อ่าน"
+           ซึ่งเกิดบ่อยกว่าการ "แก้" มาก ไม่ควรต้องเปิดกล่องโมดัลทุกครั้งที่แค่อยากดู */
+        <div className="min-h-[10rem] min-w-0 flex-1 overflow-auto overscroll-contain rounded-card border border-line bg-surface shadow-card">
+          {/* ซ่อนหัวคอลัมน์บนจอแคบ — ที่นั่นแถวไหลลงบรรทัดใหม่จนป้ายไม่ตรงกับข้อมูลแล้ว */}
+          {visible.length > 0 ? (
+            <div className="sticky top-0 z-10 hidden flex-wrap items-center gap-x-3 border-b border-line bg-surface-2 px-3.5 py-1.5 font-mono text-body font-bold text-ink-2 sm:flex">
+              <span className="min-w-0 flex-1 basis-[10rem]">{T.group_name_label}</span>
+              <span className="min-w-0 flex-[0.7] basis-[6rem]">{T.ct_col_phones}</span>
+              <span className="min-w-0 flex-[1.3] basis-[10rem]">{T.ct_col_members}</span>
+              <span className="w-[7rem] shrink-0 text-end">{T.col_actions}</span>
+            </div>
+          ) : null}
+
           {q ? (
-            <p className="shrink-0 font-mono text-micro text-ink-2">{T.contacts_search_found(visible.length)}</p>
+            <p className="border-b border-line-2 px-3.5 py-1.5 font-mono text-micro text-ink-2">
+              {T.contacts_search_found(visible.length)}
+            </p>
           ) : null}
 
           {visible.length === 0 ? (
-            <p className="rounded-card border border-dashed border-line px-4 py-10 text-center text-caption text-ink-2">
-              {T.contacts_search_none}
-            </p>
+            <p className="px-4 py-10 text-center text-caption text-ink-2">{T.contacts_search_none}</p>
           ) : null}
 
           {visible.map((g) => {
             const members = contactsByGroup[g.id] ?? [];
+            const preview = members.slice(0, 3).map((c) => c.name?.trim() || c.phone_number);
+            const rest = members.length - preview.length;
+            /* ค้นเจอคนในกลุ่มไหน ให้กางกลุ่มนั้นเอง — คนค้นชื่อคนอยากเห็นคนนั้น
+               ไม่ใช่แค่ชื่อกลุ่มที่เขาอยู่ คิดเป็นค่าจาก q ตรงนี้แทนที่จะไปเขียนทับ state
+               เพราะถ้าเขียนทับ พอลบคำค้นออกกลุ่มจะค้างกางอยู่ทั้งที่ผู้ใช้ไม่ได้กดเอง */
+            const open = expanded[g.id] || (q !== '' && hitsIn(g.id));
             return (
-              <div
-                key={g.id}
-                className="min-w-0 shrink-0 overflow-hidden rounded-card border border-line bg-surface shadow-card"
-              >
-                {/* หัวการ์ดลงพื้น surface-2 ให้แยกจากรายชื่อข้างล่างโดยไม่ต้องมีเส้นหนา
-                    ปุ่มเป็นข้อความ ไม่ใช่ไอคอนเปล่า — สองปุ่มนี้ทำคนละเรื่องกันมาก
-                    (แก้ทั้งกลุ่ม vs ลบทั้งกลุ่ม) ไอคอนดินสอ/ถังขยะที่อยู่ติดกันเคยกดพลาด */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-surface-2 px-5 py-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-control bg-brand-soft">
-                    <Users size={15} className="text-brand-strong" strokeWidth={1.8} />
+              <div key={g.id} className="min-w-0 border-b border-line-2 last:border-b-0">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpanded((e) => ({ ...e, [g.id]: !open }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setExpanded((x) => ({ ...x, [g.id]: !open }));
+                    }
+                  }}
+                  className={cn(
+                    'flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2 transition-colors hover:bg-surface-2',
+                    open && 'bg-surface-2',
+                  )}
+                >
+                  {/* ลูกศรอยู่หน้าชื่อ ไม่ใช่ท้ายแถว — มันบอกว่า "แถวนี้กางได้" ซึ่งเป็น
+                      เรื่องของตัวแถวเอง ไม่ใช่คอลัมน์ข้อมูลอีกคอลัมน์ และวางไว้หน้าชื่อ
+                      ทำให้เห็นทันทีว่าแถวไหนกางอยู่โดยไม่ต้องกวาดตาไปสุดขอบขวา */}
+                  <span className="flex min-w-0 flex-1 basis-[10rem] items-center gap-2">
+                    <span aria-hidden className="grid size-5 shrink-0 place-items-center text-ink-2">
+                      {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                    </span>
+                    <span className="truncate text-caption font-medium">{g.name}</span>
                   </span>
-                  <span className="min-w-0 truncate text-body font-semibold">{g.name}</span>
-                  <Pill tone={members.length ? 'muted' : 'warn'}>{T.ct_people_count(members.length)}</Pill>
-                  <span className="ms-auto flex shrink-0 items-center gap-1">
+
+                  <span className="min-w-0 flex-[0.7] basis-[6rem] truncate font-mono text-caption text-ink-2">
+                    {T.phones_count(members.length)}
+                  </span>
+
+                  {/* ยังไม่มีเบอร์ = ขีดเดียว ไม่ใช่ช่องว่าง — ช่องว่างอ่านได้ว่าโหลดไม่ขึ้น */}
+                  <span className="min-w-0 flex-[1.3] basis-[10rem] truncate text-caption text-ink-2">
+                    {preview.length === 0 ? '—' : preview.join(', ') + (rest > 0 ? ` +${rest}` : '')}
+                  </span>
+
+                  {/* ปุ่มเป็นข้อความ ไม่ใช่ไอคอนเปล่า — สองปุ่มนี้ทำคนละเรื่องกันมาก
+                      (แก้ทั้งกลุ่ม vs ลบทั้งกลุ่ม) ไอคอนดินสอ/ถังขยะที่อยู่ติดกันเคยกดพลาด
+                      stopPropagation ไม่งั้นกดปุ่มแล้วแถวกางออกมาด้วย */}
+                  <span className="flex w-[7rem] shrink-0 items-center justify-end gap-1">
                     <button
                       type="button"
-                      onClick={() => openEdit(g)}
-                      className="rounded-control px-3 py-1.5 text-caption text-ink-2 transition-colors hover:bg-surface hover:text-ink"
+                      onClick={(e) => { e.stopPropagation(); openEdit(g); }}
+                      className="rounded-control px-2.5 py-1 text-micro font-medium text-brand-strong transition-colors hover:bg-brand-soft"
                     >
                       {T.edit}
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDeleteTarget(g)}
-                      className="rounded-control px-3 py-1.5 text-caption text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(g); }}
+                      className="rounded-control px-2.5 py-1 text-micro text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong"
                     >
                       {T.delete}
                     </button>
                   </span>
                 </div>
 
-                {members.length === 0 ? (
-                  <p className="px-5 py-5 text-center text-caption text-ink-2">{T.no_phones}</p>
-                ) : (
-                  members.map((c, i) => (
-                    /* ไม่กรองแถวทิ้งตอนค้น — เลขลำดับคือลำดับไล่โทรจริง ถ้าซ่อนบางแถว
-                       เลขที่เห็นจะไม่ตรงกับที่ระบบใช้ เลยแค่ทำแถวที่ตรงให้เด่นขึ้น */
-                    <div
-                      key={c.id}
-                      className={cn(
-                        'flex items-center gap-3 border-b border-line-2 px-5 py-2.5 last:border-b-0',
-                        q !== '' && contactMatches(c, q, qDigits) && 'bg-brand-soft',
-                      )}
-                    >
-                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft font-mono text-micro font-bold text-brand-strong">
-                        {i + 1}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-caption font-medium">
-                        {c.name?.trim() || '—'}
-                      </span>
-                      <span className="shrink-0 font-mono text-caption text-ink-2">{c.phone_number}</span>
-                    </div>
-                  ))
-                )}
+                {open ? (
+                  <div className="border-t border-line-2 bg-surface">
+                    {members.length === 0 ? (
+                      <p className="px-4 py-3.5 text-caption text-ink-2">{T.no_phones}</p>
+                    ) : (
+                      members.map((c, i) => (
+                        /* ไม่กรองแถวทิ้งตอนค้น — เลขลำดับคือลำดับไล่โทรจริง ถ้าซ่อนบางแถว
+                           เลขที่เห็นจะไม่ตรงกับที่ระบบใช้ เลยแค่ทำแถวที่ตรงให้เด่นขึ้น */
+                        <div
+                          key={c.id}
+                          className={cn(
+                            'flex items-center gap-3 border-b border-line-2 px-4 py-2 last:border-b-0',
+                            q !== '' && contactMatches(c, q, qDigits) && 'bg-brand-soft',
+                          )}
+                        >
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft font-mono text-micro font-bold text-brand-strong">
+                            {i + 1}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-caption font-medium">
+                            {c.name?.trim() || '—'}
+                          </span>
+                          <span className="shrink-0 font-mono text-caption text-ink-2">{c.phone_number}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
             );
           })}
