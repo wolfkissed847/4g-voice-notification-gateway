@@ -460,12 +460,9 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* ฝั่งขวา — ตารางที่ค้นได้ */}
                 <div className="flex min-h-0 min-w-0 flex-col">
                   <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-line px-5 py-3">
-                    {/* โหมดเลือกเบอร์เองไม่มีป้ายกำกับ — หัวคอลัมน์ "ลำดับ / ชื่อผู้รับสาย /
-                        เบอร์โทร / อยู่กลุ่ม" ที่อยู่ใต้ลงไปบอกอยู่แล้วว่าตารางนี้คืออะไร
+                    {/* ไม่มีป้ายกำกับเหนือตารางทั้งสองโหมด — หัวคอลัมน์บอกอยู่แล้วว่า
+                        ตารางนี้คืออะไร และหัวป๊อปอัพบอกแล้วว่ากำลังตั้งค่าอะไรอยู่
                         ป้ายซ้ำอีกชั้นแค่กินที่ของช่องค้นหา */}
-                    {drawer.mode === 'group' ? (
-                      <p className="text-caption text-ink-2">{T.dv_pick_group}</p>
-                    ) : null}
                     <span className="relative ms-auto min-w-0 flex-1 basis-[11rem]">
                       <Search
                         size={14}
