@@ -1,88 +1,61 @@
 /**
- * AddDeviceDialog — พอร์ตจาก figma/handoff/components/AddDeviceDialog.tsx
+ * AddDeviceDialog — เพิ่มอุปกรณ์ 2 ขั้น: ตั้งชื่อ → รับ key ไปใช้
  *
- * ── ต่างจากดีไซน์ 3 จุด เพราะความปลอดภัยของ key ──────────────────────────
- * 1. ต้นฉบับสุ่ม key ฝั่ง client (`genKey()`) แล้วโชว์ทันที — ทำแบบนั้นไม่ได้
- *    key ต้องมาจาก server (secrets.token_urlsafe) และ server เก็บแค่ hash
- *    จึงแบ่งเป็น 2 เฟส: กรอกฟอร์ม → POST → server คืน plaintext มาโชว์ครั้งเดียว
- * 2. ตัดปุ่ม "สร้างใหม่" (regenerate) ออก — เปลี่ยน key = ต้องแฟลชบอร์ดใหม่
- *    ซึ่งขัดกับเป้าหมายทั้งหมดของการออกแบบนี้ ถ้า key รั่วให้เพิกถอนแล้วสร้างใหม่
- * 3. เพิ่มการเลือก event type ในฟอร์ม (ดีไซน์ไม่มี) — ถ้าไม่เลือกเลย
- *    อุปกรณ์จะยิงอะไรก็ได้ 403 ทุกครั้ง ซึ่งเป็นกับดักที่ผู้ใช้ไม่รู้ตัว
+ * ── ขั้นที่ 1 มีแค่ช่องชื่อ ────────────────────────────────────────────────
+ * เคยมีกริดติ๊กเลือกประเภทเหตุการณ์อยู่ในขั้นนี้ด้วย เอาออกแล้ว เพราะหน้าอุปกรณ์
+ * รื้อใหม่ให้เพิ่มเหตุการณ์ทีละอันที่การ์ดของอุปกรณ์ (ปุ่ม "เพิ่มเหตุการณ์" แล้วกด
+ * "ตั้งค่า" เลือกผู้รับสายต่อทันที) การติ๊กไว้ล่วงหน้าตรงนี้จึงได้แค่แถวเปล่าๆ ที่ยัง
+ * ไม่มีผู้รับสาย ซึ่งขึ้นจุดส้ม "ยังไม่ได้ตั้งผู้รับสาย" ทุกแถวอยู่ดี — งานเท่าเดิม
+ * แต่ต้องตัดสินใจสองรอบ และกล่องนี้ยาวขึ้นเท่าตัวโดยไม่ได้อะไรกลับมา
+ *
+ * ตอนนี้กล่องนี้ตอบคำถามเดียว: "อุปกรณ์ตัวนี้ชื่ออะไร" แล้วจบด้วยการยื่น key ให้
+ *
+ * ── ทำไมต้องแบ่งสองขั้น ───────────────────────────────────────────────────
+ * key ต้องมาจาก server (secrets.token_urlsafe) และ server เก็บแค่ hash — สุ่มฝั่ง
+ * client ไม่ได้ จึงต้อง POST ก่อนถึงจะมี key ให้โชว์ และโชว์ได้ครั้งเดียวเท่านั้น
+ * ไม่มีปุ่ม "สร้างใหม่" ด้วยเหตุผลเดียวกัน — เปลี่ยน key = ต้องแฟลชบอร์ดใหม่
+ * ถ้า key รั่วให้ลบอุปกรณ์แล้วสร้างใหม่ ซึ่งเป็นการตัดสินใจที่ควรตั้งใจทำ
  *
  * ── ทำไมใช้ <Dialog> ของ Radix ไม่ใช่ div ลอยเอง ─────────────────────────
- * ของเดิมเป็น `<div className="fixed inset-0 z-50">` เขียนมือ ซึ่งพังได้หลายทาง
- * เพราะมันอยู่ "ใน" ต้นไม้ของหน้า: element แม่ที่มี transform (เช่น animate-fade-up
- * ที่ AppShell ใส่ตอนเปลี่ยนหน้า) จะกลายเป็น containing block ของ position:fixed
- * ทำให้กล่องไปอิงขอบ <main> แทนขอบจอ = พื้นดำไม่เต็มจอ/กล่องลอยผิดที่
- * Dialog ของ Radix render ผ่าน portal ออกไปที่ <body> จึงไม่โดนผลนี้เลย
- * และได้ล็อกสกรอลล์พื้นหลัง + ปิดด้วย Esc + focus trap มาให้ฟรี เหมือนทุก dialog หน้าอื่น
- *
- * ตัวอย่าง payload ใช้ POST /notify + header X-API-Key ตาม backend จริง
- * (ต้นฉบับเขียน POST /api/v1/event พร้อม key ใน body ซึ่งไม่ตรงกับของเรา)
- *
- * ── รอบล่าสุด: ขยายกล่อง + เลิกใช้ชิปกลม ────────────────────────────────
- * กล่องเดิมกว้าง 460px ตายตัว พอมีเหตุการณ์ 9 อย่างชิปกลมตกลงไป 7 บรรทัด กินความสูง
- * เกือบครึ่งกล่อง แล้วชื่อเหตุการณ์ยังเรียงไม่ตรงกันเพราะชิปกว้างตามตัวอักษร กวาดตาหา
- * อันที่ต้องการไม่เจอ ตอนนี้เป็นกริดช่องติ๊ก 2 คอลัมน์ที่ขอบซ้ายตรงกันทุกแถว มีช่องค้นหา
- * ตอนรายการเยอะ และกล่องกว้างขึ้นเป็น 720px บนจอปกติ (จอแคบยังเต็มความกว้างเหมือนเดิม)
+ * AppShell ห่อทุกหน้าไว้ด้วย div ที่มี transform ซึ่งกลายเป็น containing block
+ * ของ position:fixed — กล่องที่เขียน fixed เองจะไปอิงขอบ <main> แทนขอบจอ
+ * Radix render ผ่าน portal ออกไปที่ <body> จึงไม่โดนผลนี้ และได้ล็อกสกรอลล์
+ * พื้นหลัง + ปิดด้วย Esc + focus trap มาให้ฟรี เหมือนทุก dialog หน้าอื่น
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Check, Copy, Cpu, KeyRound } from 'lucide-react';
 
 import { cn } from '@/app/components/ui/utils';
 import { createApiKey } from '../api/apiKeys';
-import { ApiError } from '../api/client';
+import { API_BASE_URL, ApiError } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { copyText } from '../lib/clipboard';
-import type { ApiKeyCreateResponse, EventType } from '../types';
+import type { ApiKeyCreateResponse } from '../types';
 import { Btn, inputCls } from './primitives';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
-/** ต่ำกว่านี้ช่องค้นหาเป็นแค่ของรก — กวาดตาหาเองในกริดสองคอลัมน์เร็วกว่าพิมพ์ */
-const EVENT_FILTER_THRESHOLD = 6;
-
 export function AddDeviceDialog({
-  eventTypes,
   onClose,
   onCreated,
   onConfigure,
 }: {
-  eventTypes: EventType[];
   onClose: () => void;
   onCreated: () => void;
   onConfigure: (id: number) => void;
 }) {
   const { T } = useApp();
   const [name, setName] = useState('');
-  const [picked, setPicked] = useState<number[]>([]);
-  const [query, setQuery] = useState('');
   const [created, setCreated] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const toggle = (id: number) =>
-    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  /* แถวที่ติ๊กไว้แล้วต้องไม่ถูกกรองหาย ไม่ว่าคำค้นจะเป็นอะไร — ไม่งั้นพิมพ์ค้นหาแล้ว
-     ของที่เพิ่งเลือกหายไปจากจอ ดูเหมือนการติ๊กถูกยกเลิก */
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return eventTypes;
-    return eventTypes.filter(
-      (e) =>
-        picked.includes(e.id) ||
-        e.display_name.toLowerCase().includes(q) ||
-        e.code.toLowerCase().includes(q),
-    );
-  }, [eventTypes, query, picked]);
 
   const submit = async () => {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      const result = await createApiKey(name.trim(), picked);
+      // ส่งรายการเหตุการณ์ว่างเสมอ — ไปเพิ่มทีละอันที่การ์ดอุปกรณ์พร้อมตั้งผู้รับสายเลย
+      const result = await createApiKey(name.trim(), []);
       setCreated(result);
       onCreated();
     } catch (e) {
@@ -118,14 +91,9 @@ export function AddDeviceDialog({
     >
       <DialogContent
         className={cn(
-          // กว้างขึ้นเป็น 720 บนจอปกติ แต่จอแคบยังยึด max-w-[calc(100%-2rem)] ของ DialogContent เดิม
-          // ต้องกำหนด sm:max-w ด้วย ไม่งั้น sm:max-w-lg (512px) ของ DialogContent กลางยังชนะบนจอกว้าง
-          //
-          // overflow-x-hidden ต้องมีคู่กับ overflow-y-auto เสมอ: CSS บังคับว่าถ้าแกนหนึ่งไม่ใช่
-          // visible อีกแกนที่เป็น visible จะกลายเป็น auto เอง — กริดเลือกเหตุการณ์ข้างล่างยืม
-          // ที่จาก padding ด้วย -me-4 (ให้คอลัมน์ตรงกับช่องค้นหา) ซึ่งนับเป็นการล้นแนวนอน
-          // ถ้าไม่ปิดไว้ กล่องจะมีแถบเลื่อนแนวนอนโผล่มาทั้งที่ไม่มีอะไรให้เลื่อนดูจริงๆ
-          'max-h-[90vh] gap-4 overflow-x-hidden overflow-y-auto p-4 sm:max-w-[45rem] sm:p-6',
+          // ขั้นที่ 1 เหลือช่องเดียว กล่องจึงไม่ต้องกว้าง 45rem เหมือนตอนมีกริดติ๊กสองคอลัมน์
+          // 34rem พอให้ตัวอย่าง curl ในขั้นที่ 2 อยู่ได้โดยไม่ตัดบรรทัดถี่เกินไป
+          'max-h-[90vh] gap-4 overflow-x-hidden overflow-y-auto p-4 sm:max-w-[34rem] sm:p-6',
           // [&>*]:min-w-0 สำคัญมาก: DialogContent เป็น grid ซึ่งลูกทุกตัวมี min-width:auto
           // = ย่อให้เล็กกว่าความกว้างเนื้อหาไม่ได้ พอมี key ยาวๆ ที่ตัดบรรทัดไม่ได้อยู่ข้างใน
           // มันจะดันทั้งกล่องจนล้นขอบ แล้วเกิดแถบเลื่อนแนวนอน
@@ -149,7 +117,7 @@ export function AddDeviceDialog({
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <DialogTitle className="text-lead font-bold">{T.add_device}</DialogTitle>
               <DialogDescription className="text-micro leading-[1.6] text-ink-2">
-                {T.add_device_sub}
+                {created ? T.add_device_sub2 : T.add_device_sub}
               </DialogDescription>
             </span>
           </div>
@@ -191,19 +159,25 @@ export function AddDeviceDialog({
                   {copied ? T.copied : T.copy}
                 </Btn>
               </div>
+            </div>
 
-              <div className="min-w-0">
-                <p className="mb-1.5 text-micro font-medium tracking-[0.04em] text-ink-2 uppercase">
-                  {T.key_example_label}
-                </p>
-                {/* ตัดบรรทัดแทนการเลื่อนแนวนอน — ถ้าให้เลื่อน ผู้ใช้จะไม่เห็นว่ามีข้อความต่ออยู่ */}
-                <pre className="min-w-0 rounded-control border border-dashed border-line bg-surface p-3 font-mono text-micro leading-[1.9] break-all whitespace-pre-wrap text-ink-2">
-                  {`POST /notify
-X-API-Key: ${created.plaintext_key}
-
-{ "event_type_code": "${created.allowed_event_types[0]?.code ?? '<code>'}" }`}
-                </pre>
-              </div>
+            {/* ── ตัวอย่างการเอา key ไปใช้ ────────────────────────────────────
+                curl เต็มคำสั่ง ไม่ใช่แค่ชื่อ header — ก๊อปไปวางในเทอร์มินัลได้เลย
+                และเป็นสิ่งเดียวกับที่เฟิร์มแวร์ต้องยิงจริง ต่างแค่ภาษาที่เขียน */}
+            <div className="min-w-0">
+              <p className="mb-1.5 text-micro font-medium tracking-[0.04em] text-ink-2 uppercase">
+                {T.key_example_label}
+              </p>
+              {/* ตัดบรรทัดแทนการเลื่อนแนวนอน — ถ้าให้เลื่อน ผู้ใช้จะไม่เห็นว่ามีข้อความต่ออยู่ */}
+              <pre className="min-w-0 rounded-control border border-line bg-surface-2 p-3 font-mono text-micro leading-[1.9] break-all whitespace-pre-wrap text-ink-2">
+                {`curl -X POST ${API_BASE_URL}/notify \\
+  -H "X-API-Key: ${created.plaintext_key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"event_type_code": "your_code"}'`}
+              </pre>
+              {/* อุปกรณ์ที่เพิ่งสร้างยังไม่มีเหตุการณ์ใดเลย ยิงตามตัวอย่างข้างบนตอนนี้
+                  จะได้ 403 ทุกครั้ง — บอกไว้ตรงนี้ ไม่ใช่ปล่อยให้ไปงงเอาตอนเทส */}
+              <p className="mt-2 text-caption leading-[1.8] text-warn-strong">{T.key_next_step}</p>
             </div>
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
@@ -223,92 +197,14 @@ X-API-Key: ${created.plaintext_key}
                 className={cn(inputCls, 'text-body')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && name.trim() && !saving) void submit();
+                }}
                 placeholder={T.device_name_ph}
                 autoFocus
               />
               <span className="text-micro leading-[1.7] text-ink-2">{T.device_name_hint}</span>
             </label>
-
-            <div className="flex min-w-0 flex-col gap-2 border-t border-line-2 pt-4">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <span className="text-caption font-medium">{T.allowed_events_pick}</span>
-                {picked.length > 0 ? (
-                  <span className="rounded-full bg-brand-soft px-2 py-0.5 font-mono text-micro text-brand-strong">
-                    {T.events_selected(picked.length)}
-                  </span>
-                ) : null}
-                {eventTypes.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPicked(picked.length === eventTypes.length ? [] : eventTypes.map((e) => e.id))
-                    }
-                    className="ms-auto shrink-0 text-micro font-medium text-brand-strong hover:underline"
-                  >
-                    {picked.length === eventTypes.length ? T.events_clear : T.events_select_all}
-                  </button>
-                ) : null}
-              </div>
-
-              {eventTypes.length > EVENT_FILTER_THRESHOLD ? (
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={T.event_filter}
-                  aria-label={T.event_filter}
-                  className={inputCls}
-                />
-              ) : null}
-
-              {eventTypes.length === 0 ? (
-                <p className="rounded-control border border-dashed border-warn px-3 py-2.5 text-caption leading-[1.8] text-warn-strong">
-                  {T.allowed_events_empty_hint}
-                </p>
-              ) : (
-                /* -me-4 คู่กับ pe-2: แถบเลื่อนแบบปกติกินที่จากกล่องเนื้อหา ไม่ได้ทับบนเนื้อหา
-                   ถ้าไม่ยืมที่คืนมา คอลัมน์ขวาจะแคบกว่าคอลัมน์ซ้ายทุกแถวอย่างเห็นได้ชัด */
-                <div className="-me-4 grid max-h-[15rem] gap-2 overflow-y-auto overscroll-contain pe-2 sm:grid-cols-2">
-                  {shown.map((e) => {
-                    const on = picked.includes(e.id);
-                    return (
-                      <button
-                        key={e.id}
-                        type="button"
-                        role="checkbox"
-                        aria-checked={on}
-                        onClick={() => toggle(e.id)}
-                        className={cn(
-                          'flex min-w-0 items-center gap-2.5 rounded-control border px-3 py-2.5 text-start transition-colors',
-                          on
-                            ? 'border-brand-strong bg-brand-soft'
-                            : 'border-line bg-surface hover:border-brand-strong',
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            'grid size-[18px] shrink-0 place-items-center rounded-[5px] border transition-colors',
-                            on ? 'border-brand-strong bg-brand text-brand-ink' : 'border-line',
-                          )}
-                        >
-                          {on ? <Check size={12} strokeWidth={3} /> : null}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-caption font-medium">{e.display_name}</span>
-                          {/* รหัสคือค่าที่ firmware ต้องส่งมาจริง ไม่ใช่ชื่อไทย — โชว์ไว้ตรงนี้
-                              คนที่กำลังเขียนโค้ดบอร์ดจะได้ไม่ต้องเปิดอีกหน้าไปหา */}
-                          <span className="block truncate font-mono text-micro text-ink-2">{e.code}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {picked.length === 0 && eventTypes.length > 0 ? (
-                <p className="text-micro leading-[1.7] text-warn-strong">{T.allowed_events_none}</p>
-              ) : null}
-            </div>
 
             {/* จอแคบเรียงกลับด้าน (flex-col-reverse) ปุ่มหลักจึงอยู่บน ใกล้นิ้วโป้งกว่า
                 และไม่ต้องเลื่อนผ่านปุ่มยกเลิกไปหาปุ่มที่ตั้งใจจะกด */}
@@ -322,7 +218,7 @@ X-API-Key: ${created.plaintext_key}
                 onClick={() => void submit()}
                 disabled={!name.trim() || saving}
               >
-                {saving ? T.saving : T.save_only}
+                {saving ? T.saving : T.add_device_next}
               </Btn>
             </div>
           </>

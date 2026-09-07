@@ -667,7 +667,6 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
 
       {addOpen ? (
         <AddDeviceDialog
-          eventTypes={eventTypes}
           onClose={() => setAddOpen(false)}
           onCreated={() => {
             setAddOpen(false);
