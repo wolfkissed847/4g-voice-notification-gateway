@@ -63,7 +63,25 @@ jobs:
         run: docker image prune -f
 
       - name: เช็คว่า container รันขึ้นจริง
+        # ── ทำไมต้องวนเช็ค ไม่ใช่ sleep 5 แล้วยิงครั้งเดียว ──────────────────
+        # uvicorn บน Pi ใช้เวลาบูตไม่คงที่: ต้องรัน alembic migration ก่อน แล้วค่อยเปิดพอร์ต
+        # รอบที่ไม่มีอะไรให้ migrate เสร็จใน ~3 วิ แต่รอบที่มี migration ใหม่หรือตอนเครื่อง
+        # กำลังโหลดหนัก (เพิ่ง build เสร็จ, prune image อยู่) ใช้เกิน 5 วิ ได้ง่ายๆ
+        # ผลคือ deploy ที่สำเร็จจริงถูกรายงานว่า "Health check ล้มเหลว" แล้ว job แดง
+        # ทั้งที่เว็บขึ้นปกติหลังจากนั้นไม่กี่วินาที (เจอจริงตอน deploy รอบ 7 ก.ย.)
+        #
+        # วนสูงสุด 30 ครั้ง ครั้งละ 2 วิ = ยอมรอ 60 วิ ซึ่งนานกว่าเวลาบูตแย่สุดที่วัดได้มาก
+        # แต่ยังสั้นพอที่จะไม่ปล่อยให้ job ค้างรอ container ที่ตายไปแล้วนานเกินควร
         run: |
-          sleep 5
           docker compose ps
-          curl -sf http://localhost:8000/health || (echo "Health check ล้มเหลว — ดู logs" && docker compose logs --tail=50 gateway && exit 1)
+          for i in $(seq 1 30); do
+            if curl -sf -m 3 http://localhost:8000/health > /dev/null; then
+              echo "Health check ผ่านที่วินาทีที่ $((i * 2))"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Health check ล้มเหลว — container ไม่ตอบ /health ภายใน 60 วินาที"
+          docker compose ps
+          docker compose logs --tail=80 gateway
+          exit 1

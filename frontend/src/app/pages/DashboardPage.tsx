@@ -280,7 +280,15 @@ export function DashboardPage() {
                   <li key={d.id} className={cn('flex items-center gap-2.5', ready.tone === 'muted' && 'opacity-60')}>
                     <Dot tone={ready.tone} />
                     <span className="min-w-0 flex-1 truncate text-caption font-medium">{d.name}</span>
-                    <span className="font-mono text-micro whitespace-nowrap text-ink-2">{d.key_prefix}…</span>
+                    {/* เดิมโชว์ตัวหน้าของ key (gw_live_Th6cV-…) ซึ่งอ่านแล้วทำอะไรต่อไม่ได้เลย
+                        — สั้นเกินจะเอาไปใช้ และหน้าภาพรวมไม่ใช่ที่สำหรับหยิบ key อยู่แล้ว
+                        เปลี่ยนเป็นจำนวนเหตุการณ์ที่เปิดไว้ ซึ่งเป็นเหตุผลที่จุดสีข้างหน้า
+                        เป็นสีนั้น — ตอบต่อได้ทันทีว่าเครื่องไหนยังไม่ได้ตั้งอะไรเลย */}
+                    <span className="font-mono text-micro whitespace-nowrap text-ink-2">
+                      {d.allowed_event_types.length === 0
+                        ? T.dv_pill_noevent
+                        : T.ov_events_n(d.allowed_event_types.length)}
+                    </span>
                   </li>
                 );
               })}

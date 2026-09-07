@@ -28,8 +28,8 @@ from app.auth import create_access_token, get_current_user, verify_password
 from app.call_worker import run_worker_loop
 from app.config import settings
 from app.config_service import get_masked_config, update_app_settings
-from app.database import ApiKey, CallJob, CallLog, detect_schema_drift, get_db, init_db
-from app.queue_manager import enqueue_job, get_pending_jobs
+from app.database import ApiKey, CallJob, CallLog, CallStatus, detect_schema_drift, get_db, init_db
+from app.queue_manager import cancel_job, enqueue_job, get_pending_jobs
 from app.schemas import (
     ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyEventTypeRef, ApiKeyResponse,
     ApiKeyRevealResponse, ApiKeyUpdateRequest,
@@ -279,6 +279,40 @@ def queue_status(db: Session = Depends(get_db), _user: str = Depends(get_current
         current_job_id=state.current_job_id,
         current_step=state.current_step,
         current_progress=state.current_progress,
+    )
+
+
+@app.post("/queue/{job_id}/cancel", response_model=QueueStatusItem)
+def cancel_queue_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    _user: str = Depends(get_current_user),
+):
+    """
+    ยกเลิกงานในคิวทีละใบ
+
+    ── ทำไมเป็น POST ไม่ใช่ DELETE ────────────────────────────────────────
+    งานไม่ได้หายไปไหน มันเปลี่ยนสถานะเป็น cancelled แล้วยังอยู่ในประวัติการโทร
+    ให้ตรวจย้อนหลังได้ว่าเคยมีเหตุนี้เข้ามาแล้วคนสั่งไม่ให้โทร — DELETE จะสื่อว่า
+    ลบทิ้ง ซึ่งไม่ใช่สิ่งที่เกิดขึ้นจริง
+
+    409 ตอนงานถูก worker หยิบไปแล้ว: หยุดสายที่กำลังดังไม่ได้ ต้องบอกตรงๆ
+    ไม่ใช่ตอบ 200 แล้วปล่อยให้สายดังต่อจนคนรับ
+    """
+    job = cancel_job(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"ไม่พบงานหมายเลข {job_id} ในระบบ")
+    if job.status != CallStatus.CANCELLED:
+        raise HTTPException(
+            status_code=409,
+            detail="งานนี้ถูกหยิบไปโทรแล้ว ยกเลิกไม่ได้ — รอให้สายปัจจุบันจบก่อน",
+        )
+    return QueueStatusItem(
+        job_id=job.id,
+        status=job.status.value,
+        priority_group=job.priority_group,
+        retry_count=job.retry_count,
+        created_at=_iso_utc(job.created_at),
     )
 
 
@@ -718,7 +752,7 @@ def get_history(
             created_at=_iso_utc(job.created_at),
             updated_at=_iso_utc(job.updated_at),
             last_result=last_log.result if last_log else None,
-            last_phone_masked=last_log.phone_number_masked if last_log else None,
+            last_phone=last_log.phone_number if last_log else None,
             last_detail=last_log.detail if last_log else None,
         ))
 

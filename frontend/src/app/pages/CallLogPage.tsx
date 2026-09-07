@@ -652,7 +652,7 @@ export function CallLogPage() {
                     {r.group_name || '—'}
                   </span>
                   <span className="w-[6.25rem] shrink-0 text-end font-mono text-[0.78rem] text-ink-2">
-                    {r.last_phone_masked ?? '—'}
+                    {r.last_phone ?? '—'}
                   </span>
                   <span className="flex w-[5.25rem] shrink-0 justify-end [&>span]:px-2 [&>span]:py-px [&>span]:text-[0.6875rem]">
                     <StatusBadge status={r.status as CallStatus} />

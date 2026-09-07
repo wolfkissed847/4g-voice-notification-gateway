@@ -191,7 +191,8 @@ export interface HistoryItem {
   created_at: string;
   updated_at: string;
   last_result: string | null;
-  last_phone_masked: string | null;
+  /** เบอร์ที่โทรล่าสุด — เบอร์เต็ม (สายที่โทรก่อน 7 ก.ย. 2569 ยังเป็นเบอร์ที่ถูก mask ไว้ กู้กลับไม่ได้) */
+  last_phone: string | null;
   /** รายละเอียดผลลัพธ์ล่าสุด เช่น error message ตอนล้มเหลว (null = ไม่มี/ยังไม่เคยลองเลย) */
   last_detail: string | null;
 }

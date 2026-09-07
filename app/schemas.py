@@ -210,7 +210,7 @@ class HistoryItem(BaseModel):
     created_at: str
     updated_at: str
     last_result: str | None = None
-    last_phone_masked: str | None = None
+    last_phone: str | None = Field(None, description="เบอร์ที่โทรล่าสุดของงานนี้ — เบอร์เต็ม")
     last_detail: str | None = Field(None, description="รายละเอียดผลลัพธ์ล่าสุด เช่น error message ตอนล้มเหลว")
 
 

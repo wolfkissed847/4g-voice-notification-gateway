@@ -12,23 +12,59 @@
  * 3. ตาราง desktop + การ์ด mobile ของเดิม รวมเป็น grid ชุดเดียวที่เลื่อนแนวนอนได้
  *    ตามกฎในดีไซน์ (บีบตัวอักษรไทยจนอ่านไม่ออกแย่กว่าปล่อยให้เลื่อน)
  */
+import { useState } from "react";
+import { toast } from "sonner";
+
 import { cn } from "@/app/components/ui/utils";
-import { getQueueStatus } from "../api/queue";
+import { X } from "lucide-react";
+
+import { ApiError } from "../api/client";
+import { cancelQueueJob, getQueueStatus } from "../api/queue";
 import { Dot, PageHeader } from "../components/primitives";
 import { StatusBadge } from "../components/StatusBadge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import { useApp } from "../context/AppContext";
 import { statusMeanings } from "../lib/callStatus";
 import { usePolling } from "../lib/usePolling";
+import type { QueueStatusItem } from "../types";
 import { SignalFlowMonitor } from "../widgets/SignalFlowMonitor";
 
 /** กริดชุดเดียวใช้ทั้งหัวตารางและแถว — เปลี่ยนคอลัมน์ที่เดียว */
 const queueGridCls =
-  "grid gap-2.5 min-w-[32.5rem] grid-cols-[minmax(70px,0.6fr)_minmax(120px,1.2fr)_minmax(110px,1fr)_minmax(60px,0.5fr)_minmax(130px,1.2fr)]";
+  "grid gap-2.5 min-w-[36rem] grid-cols-[minmax(70px,0.6fr)_minmax(120px,1.2fr)_minmax(110px,1fr)_minmax(60px,0.5fr)_minmax(130px,1.2fr)_72px]";
 
 export function QueuePage() {
   const { T } = useApp();
-  const { data, loading } = usePolling(getQueueStatus, 4000);
+  const { data, loading, refresh } = usePolling(getQueueStatus, 4000);
   const items = data?.items ?? [];
+
+  /* งานที่กำลังจะยกเลิก — ถามก่อนเสมอ ยกเลิกแล้วเอากลับไม่ได้ ต้องให้ต้นทางยิงเข้ามาใหม่
+     และหมายเลขงานในตารางอยู่ติดกันเป็นแถวๆ กดพลาดหนึ่งแถวคือยกเลิกผิดใบ */
+  const [pendingCancel, setPendingCancel] = useState<QueueStatusItem | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const doCancel = async () => {
+    if (!pendingCancel) return;
+    setCancelling(true);
+    try {
+      await cancelQueueJob(pendingCancel.job_id);
+      toast.success(T.queue_cancel_ok);
+      /* ดึงคิวใหม่ทันที ไม่รอรอบ polling ถัดไป — 4 วินาทีที่แถวยังอยู่เฉยๆ
+         อ่านได้ว่ากดแล้วไม่มีอะไรเกิดขึ้น แล้วคนจะกดซ้ำ */
+      await refresh();
+      setPendingCancel(null);
+    } catch (e) {
+      // 409 = worker หยิบไปโทรแล้ว ข้อความจาก backend อธิบายเองว่าให้รอสายจบก่อน
+      toast.error(e instanceof ApiError ? e.message : T.error_generic);
+      await refresh();
+      setPendingCancel(null);
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     /* h-full + min-h-0 = หน้านี้สูงเท่าจอพอดี ไม่เลื่อนหน้าเว็บ
@@ -76,6 +112,7 @@ export function QueuePage() {
             <div>{T.col_status}</div>
             <div>{T.col_retry}</div>
             <div>{T.col_created}</div>
+            <div className="text-end">{T.col_actions}</div>
           </div>
 
           {items.map((item) => (
@@ -97,6 +134,21 @@ export function QueuePage() {
               <div className="text-ink-2">
                 {new Date(item.created_at).toLocaleString()}
               </div>
+              {/* งานที่ worker ถือไปแล้ว (in_progress) ยกเลิกไม่ได้ — หยุดสายที่กำลังดัง
+                  ไม่ได้จริง ปุ่มจึงถูกปิดพร้อมบอกเหตุผลใน title แทนที่จะปล่อยให้กดแล้ว
+                  เจอ 409 ทีหลัง ซึ่งเป็นการให้ผู้ใช้ค้นพบกฎด้วยการทำผิดก่อน */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPendingCancel(item)}
+                  disabled={item.status === "in_progress"}
+                  title={item.status === "in_progress" ? T.queue_cancel_busy : T.queue_cancel}
+                  aria-label={T.queue_cancel}
+                  className="grid size-8 place-items-center rounded-control text-ink-2 transition-colors hover:bg-bad-soft hover:text-bad-strong disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-2"
+                >
+                  <X size={15} />
+                </button>
+              </div>
             </div>
           ))}
 
@@ -108,6 +160,29 @@ export function QueuePage() {
           ) : null}
         </div>
       </div>
+
+      {/* ── ยืนยันยกเลิกงาน ─────────────────────────────────────────────────
+          ชุดเดียวกับป๊อปอัพยืนยันลบที่เหลือทั้งเว็บ ขึ้นหมายเลขงานกับกลุ่มผู้รับ
+          เพราะแถวในตารางหน้าตาเหมือนกันหมด ต่างแค่ตัวเลข — ถามลอยๆ ว่า
+          "ยกเลิกงานนี้?" ไม่ช่วยจับว่ากดผิดแถว */}
+      <AlertDialog open={pendingCancel !== null} onOpenChange={(o) => { if (!o && !cancelling) setPendingCancel(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{T.queue_cancel_title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingCancel
+                ? `#${pendingCancel.job_id} · ${pendingCancel.priority_group} — ${T.queue_cancel_confirm}`
+                : T.queue_cancel_confirm}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelling}>{T.cancel}</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); void doCancel(); }} disabled={cancelling}>
+              {cancelling ? T.saving : T.queue_cancel_yes}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

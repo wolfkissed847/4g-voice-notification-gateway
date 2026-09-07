@@ -342,7 +342,10 @@ class CallLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(Integer, index=True)
-    phone_number_masked = Column(String)  # เก็บแบบ mask บางส่วนเพื่อความปลอดภัยใน log
+    # เบอร์เต็ม ไม่ mask — ตารางนี้คือ "ประวัติการโทร" ที่ผู้ใช้เปิดดูหลังล็อกอินแล้ว
+    # ไม่ใช่ log ไฟล์ที่คนนอกอ่านได้ และเบอร์ทั้งหมดอยู่ในตาราง contacts แบบเต็มอยู่แล้ว
+    # (ดู migration d5e2a91c7b04 — แถวก่อนหน้านั้นยังเป็นเบอร์ที่ mask ไว้ กู้กลับไม่ได้)
+    phone_number = Column(String)
     result = Column(String)
     detail = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)

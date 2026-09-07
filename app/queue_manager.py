@@ -114,6 +114,33 @@ def update_job_status(db: Session, job: CallJob, status: CallStatus, **kwargs) -
     return job
 
 
+def cancel_job(db: Session, job_id: int) -> CallJob | None:
+    """
+    ยกเลิกงานในคิวทีละใบ — คืน None ถ้าไม่มีงานนี้
+
+    ── ยกเลิกได้เฉพาะงานที่ worker ยังไม่ได้ถือ ────────────────────────────
+    QUEUED / RETRYING / ESCALATED = ยังนอนรออยู่ ยกเลิกได้ทันที
+    IN_PROGRESS = worker กำลังคุยกับโมดูลอยู่จริงๆ (อัปโหลดเสียง/กดโทร/รอปลายสายรับ)
+    การเปลี่ยนสถานะตรงนั้นไม่ได้ทำให้สายที่กำลังดังหยุดดัง แค่ทำให้ worker เขียนทับ
+    สถานะกลับมาตอนจบอยู่ดี ผลคือกดแล้วดูเหมือนไม่มีอะไรเกิดขึ้น ซึ่งแย่กว่าบอกตรงๆ
+    ว่ายกเลิกไม่ได้ตอนนี้ — ปฏิเสธไปเลยแล้วให้ผู้ใช้รอสายนี้จบ
+
+    ใช้ _claim_lock ตัวเดียวกับ claim_next_job เพื่อกันจังหวะที่ worker กำลังหยิบงาน
+    ใบเดียวกันพอดี ถ้าไม่ล็อก มีช่องให้ยกเลิกสำเร็จหลัง worker อ่านงานไปแล้วแต่ยังไม่ทัน
+    เขียน IN_PROGRESS = งานถูกโทรออกทั้งที่หน้าเว็บบอกว่ายกเลิกแล้ว
+    """
+    with _claim_lock:
+        job = db.query(CallJob).filter(CallJob.id == job_id).first()
+        if job is None:
+            return None
+        if job.status in (CallStatus.QUEUED, CallStatus.RETRYING, CallStatus.ESCALATED):
+            job.status = CallStatus.CANCELLED
+            job.next_attempt_at = None
+            db.commit()
+            db.refresh(job)
+        return job
+
+
 def get_pending_jobs(db: Session) -> list[CallJob]:
     return (
         db.query(CallJob)

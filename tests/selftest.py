@@ -586,6 +586,96 @@ except Exception as exc:
 db8.close()
 
 # ---------------------------------------------------------------------------
+section("9. ยกเลิกงานในคิว — ต้องยกเลิกได้เฉพาะงานที่ worker ยังไม่ได้ถือ")
+
+from app.database import CallStatus as _CS
+from app import queue_manager as qm
+
+db9 = SessionLocal()
+
+g9 = cs.create_group(db9, name="กลุ่มทดสอบยกเลิกคิว")
+cs.create_contact(db9, group_id=g9.id, phone_number="0870000099", name="คนรับสาย")
+ev9 = es.create_event_type(db9, code="cancel_test_evt", display_name="ทดสอบยกเลิกคิว",
+                           message_template="ทดสอบยกเลิกคิว")
+
+
+def _mkjob(status):
+    job = qm.enqueue_job(
+        db9, event_type_id=ev9.id, group_id=g9.id, message="ทดสอบยกเลิกคิว",
+        priority_group=g9.name, source_device="selftest",
+    )
+    if job.status != status:
+        job.status = status
+        db9.commit()
+        db9.refresh(job)
+    return job
+
+
+# 1) งานที่ยังนอนรออยู่ ยกเลิกได้ทุกสถานะ ไม่ใช่แค่ queued
+#    (escalated/retrying คืองานที่กำลังจะถูกหยิบไปโทรเบอร์ถัดไป ซึ่งเป็นจังหวะที่คนอยากหยุดที่สุด)
+for st in (_CS.QUEUED, _CS.RETRYING, _CS.ESCALATED):
+    j = _mkjob(st)
+    out = qm.cancel_job(db9, j.id)
+    check(f"ยกเลิกงานสถานะ {st.value} ได้",
+          out is not None and out.status == _CS.CANCELLED,
+          f"ได้ {out.status.value if out else 'None'}")
+
+# 2) งานที่ worker ถือไปแล้ว ต้องไม่ถูกแตะ — เปลี่ยนสถานะไม่ได้ทำให้สายที่กำลังดังหยุดดัง
+j_busy = _mkjob(_CS.IN_PROGRESS)
+out_busy = qm.cancel_job(db9, j_busy.id)
+check("งานที่กำลังโทรอยู่ (in_progress) ยกเลิกไม่ได้ สถานะต้องคงเดิม",
+      out_busy is not None and out_busy.status == _CS.IN_PROGRESS,
+      f"ได้ {out_busy.status.value if out_busy else 'None'}")
+
+# 3) งานที่ยกเลิกแล้วต้องหลุดจากคิว ไม่ถูก worker หยิบไปโทรอีก
+j_gone = _mkjob(_CS.QUEUED)
+qm.cancel_job(db9, j_gone.id)
+pending_ids = [x.id for x in qm.get_pending_jobs(db9)]
+check("งานที่ยกเลิกแล้วหายจากคิวที่รอดำเนินการ", j_gone.id not in pending_ids)
+
+# 4) ยกเลิกซ้ำต้องไม่ระเบิด และไม่เปลี่ยนอะไรเพิ่ม (ผู้ใช้กดสองครั้งได้เสมอ)
+again = qm.cancel_job(db9, j_gone.id)
+check("ยกเลิกงานที่ยกเลิกไปแล้วซ้ำ ไม่ระเบิดและสถานะยังเป็น cancelled",
+      again is not None and again.status == _CS.CANCELLED)
+
+# 5) งานที่ไม่มีอยู่จริง ต้องได้ None (ไปเป็น 404) ไม่ใช่ระเบิด
+try:
+    check("ยกเลิกงานที่ไม่มีอยู่จริง คืน None (เพื่อให้ API ตอบ 404)",
+          qm.cancel_job(db9, 999999) is None)
+except Exception as exc:
+    check("ยกเลิกงานที่ไม่มีอยู่จริง คืน None (เพื่อให้ API ตอบ 404)", False,
+          f"โยน {type(exc).__name__}")
+
+db9.close()
+
+# ---------------------------------------------------------------------------
+section("10. ประวัติการโทรต้องเก็บเบอร์เต็ม ไม่ mask")
+
+from app.database import CallLog as _CallLog
+
+db10 = SessionLocal()
+cols = {c.name for c in _CallLog.__table__.columns}
+check("คอลัมน์ชื่อ phone_number ไม่ใช่ phone_number_masked",
+      "phone_number" in cols and "phone_number_masked" not in cols,
+      ", ".join(sorted(cols)))
+
+g10 = cs.create_group(db10, name="กลุ่มทดสอบเบอร์เต็ม")
+cs.create_contact(db10, group_id=g10.id, phone_number="0812345678", name="คนรับสาย")
+ev10 = es.create_event_type(db10, code="fullphone_evt", display_name="ทดสอบเบอร์เต็ม",
+                            message_template="ทดสอบเบอร์เต็ม")
+job10 = qm.enqueue_job(db10, event_type_id=ev10.id, group_id=g10.id, message="ทดสอบเบอร์เต็ม",
+                       priority_group=g10.name, source_device="selftest")
+
+from app.call_worker import _log_attempt as _log10
+_log10(db10, job10, "0812345678", "connected", "")
+row10 = db10.query(_CallLog).filter(_CallLog.job_id == job10.id).first()
+check("เบอร์ที่บันทึกลงประวัติเป็นเบอร์เต็ม ไม่มีดอกจัน",
+      row10 is not None and row10.phone_number == "0812345678",
+      row10.phone_number if row10 else "ไม่มีแถว")
+
+db10.close()
+
+# ---------------------------------------------------------------------------
 line = "=" * 70
 print(f"\n{line}")
 print(f"สรุป: ผ่าน {len(_passed)} · ตก {len(_failed)}")

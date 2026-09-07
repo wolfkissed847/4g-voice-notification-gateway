@@ -36,7 +36,11 @@ logger = logging.getLogger("call_worker")
 
 
 def _mask_number(number: str) -> str:
-    """เก็บ log แบบ mask บางส่วนของเบอร์ เพื่อไม่ให้เบอร์เต็มโผล่ใน log แบบเปิดเผย"""
+    """mask เบอร์สำหรับ log ไฟล์เท่านั้น — ไฟล์ log อ่านได้โดยไม่ต้องล็อกอิน
+
+    ประวัติการโทรในฐานข้อมูล (call_logs) เก็บเบอร์เต็ม เพราะเป็นหน้าที่ผู้ใช้
+    เปิดดูหลังล็อกอินแล้ว และต้องตอบให้ได้ว่าเมื่อกี้โทรหาเบอร์ไหน
+    """
     if len(number) <= 4:
         return "*" * len(number)
     return number[:3] + "*" * (len(number) - 6) + number[-3:]
@@ -45,7 +49,7 @@ def _mask_number(number: str) -> str:
 def _log_attempt(db: Session, job: CallJob, phone_number: str, result: str, detail: str = ""):
     db.add(CallLog(
         job_id=job.id,
-        phone_number_masked=_mask_number(phone_number),
+        phone_number=phone_number,
         result=result,
         detail=detail,
     ))
