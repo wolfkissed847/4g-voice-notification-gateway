@@ -694,12 +694,12 @@ function SettingCell({
 
        แนวนอนได้ความกว้างเต็มการ์ดต่อหนึ่งค่า คำอธิบายจึงอยู่ 1-2 บรรทัดพอ
        และตากวาดลงมาเจอชื่อค่าเรียงตรงกันทุกแถว หาค่าที่จะแก้ได้เร็วกว่า */
-    <div className="flex min-w-0 flex-col gap-1.5 border-b border-line-2 py-1.5 first:pt-0 last:border-b-0 last:pb-0 md:flex-row md:items-baseline md:gap-4">
+    <div className="flex min-w-0 flex-col gap-1.5 border-b border-line-2 py-1.5 first:pt-0 last:border-b-0 last:pb-0 md:flex-row md:items-center md:gap-4">
       {/* ชื่อค่าอยู่ซ้ายสุด กว้างคงที่ ทุกแถวจึงเริ่มตรงกัน
           ไม่มีบรรทัด "ตั้งได้ X ถึง Y" แล้ว — ช่อง <input> มี min/max กำกับอยู่แล้ว
           กรอกเกินก็ถูก clamp ให้ตอนบันทึก และตัวอย่างท้ายแถวก็บอกผลลัพธ์จริงอยู่
           บรรทัดนั้นจึงเป็นข้อมูลซ้ำที่กินความสูงไปทุกแถวโดยไม่ได้ตอบอะไรเพิ่ม */}
-      <div className="min-w-0 shrink-0 md:w-[10rem]">
+      <div className="flex min-w-0 shrink-0 items-center md:w-[10rem]">
         <label className="text-caption font-semibold">{label}</label>
       </div>
 
@@ -755,7 +755,7 @@ function ConfigRow({
       help={help}
       example={example}
     >
-      <div className="flex items-center gap-2 self-start">
+      <div className="flex items-center gap-2">
         <input
           type="number"
           min={min}
@@ -815,7 +815,7 @@ function DurationRow({
 
   return (
     <SettingCell label={label} help={help} example={example}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 self-start">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <input
           type="number"
           min={0}
