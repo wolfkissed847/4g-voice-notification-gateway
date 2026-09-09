@@ -694,7 +694,7 @@ function SettingCell({
 
        แนวนอนได้ความกว้างเต็มการ์ดต่อหนึ่งค่า คำอธิบายจึงอยู่ 1-2 บรรทัดพอ
        และตากวาดลงมาเจอชื่อค่าเรียงตรงกันทุกแถว หาค่าที่จะแก้ได้เร็วกว่า */
-    <div className="flex min-w-0 flex-col gap-1.5 border-b border-line-2 py-1.5 first:pt-0 last:border-b-0 last:pb-0 md:flex-row md:items-center md:gap-4">
+    <div className="flex min-w-0 flex-col gap-1.5 border-b border-line-2 py-3 first:pt-1 last:border-b-0 last:pb-1 md:flex-row md:items-center md:gap-4">
       {/* ชื่อค่าอยู่ซ้ายสุด กว้างคงที่ ทุกแถวจึงเริ่มตรงกัน
           ไม่มีบรรทัด "ตั้งได้ X ถึง Y" แล้ว — ช่อง <input> มี min/max กำกับอยู่แล้ว
           กรอกเกินก็ถูก clamp ให้ตอนบันทึก และตัวอย่างท้ายแถวก็บอกผลลัพธ์จริงอยู่
@@ -712,7 +712,7 @@ function SettingCell({
 
           ตัวอย่างยังแยกออกจากคำอธิบายด้วยพื้นจมกับป้ายกำกับเหมือนเดิม (inline ไม่ใช่ block)
           จึงยังไม่อ่านปนกันทั้งที่อยู่บรรทัดเดียวกัน */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="text-micro leading-[1.5]">{help}</p>
         {/* ตัวอย่างอยู่บรรทัดของตัวเองในกล่องพื้นจม — เคยลองเอาไปต่อท้ายคำอธิบาย
             บรรทัดเดียวกันเพื่อประหยัดความสูง แต่พอสองอย่างไหลชนกันแล้วอ่านยาก
