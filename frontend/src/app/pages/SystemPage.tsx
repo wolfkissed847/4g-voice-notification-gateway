@@ -248,9 +248,6 @@ export function SystemPage() {
               </div>
             ) : null}
             <div>
-              {T.sys_module_port} {gsm?.port ?? "—"}
-            </div>
-            <div>
               {T.sys_module_updated}{" "}
               {gsm?.updated_at
                 ? new Date(gsm.updated_at).toLocaleString()

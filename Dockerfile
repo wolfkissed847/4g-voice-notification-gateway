@@ -11,6 +11,14 @@ COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 
 COPY frontend/ ./
+
+# เลขเวอร์ชันที่หน้าเว็บแสดง อ่านจาก app/main.py ตอน build (ดู readAppVersion ใน vite.config.ts)
+# ถ้าไม่ก๊อปไฟล์นี้เข้ามา readAppVersion จะ throw แล้วถอยไปใช้คำว่า "dev" เงียบๆ
+# ผลคือ build ที่ deploy จริงขึ้นว่า "เวอร์ชัน dev" ที่หน้าเข้าสู่ระบบ ทั้งที่ไม่ใช่เครื่อง dev
+# ก๊อปเฉพาะ main.py ไฟล์เดียวพอ ไม่เอาทั้ง app/ เพื่อไม่ให้ layer cache ของ stage นี้
+# ถูกล้างทุกครั้งที่แก้โค้ดฝั่ง backend ซึ่งไม่เกี่ยวกับหน้าเว็บเลย
+COPY app/main.py /app/main.py
+
 RUN npm run build
 # ผลลัพธ์: /frontend/dist (static HTML/JS/CSS)
 
