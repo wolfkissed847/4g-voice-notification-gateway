@@ -712,13 +712,17 @@ function SettingCell({
 
           ตัวอย่างยังแยกออกจากคำอธิบายด้วยพื้นจมกับป้ายกำกับเหมือนเดิม (inline ไม่ใช่ block)
           จึงยังไม่อ่านปนกันทั้งที่อยู่บรรทัดเดียวกัน */}
-      <p className="min-w-0 flex-1 text-micro leading-[1.7]">
-        {help}{" "}
-        <span className="ms-1 inline-block rounded-control bg-surface-2 px-2 py-0.5 text-ink-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-micro leading-[1.5]">{help}</p>
+        {/* ตัวอย่างอยู่บรรทัดของตัวเองในกล่องพื้นจม — เคยลองเอาไปต่อท้ายคำอธิบาย
+            บรรทัดเดียวกันเพื่อประหยัดความสูง แต่พอสองอย่างไหลชนกันแล้วอ่านยาก
+            ต้องกวาดตาหาว่าคำอธิบายจบตรงไหน ตัวอย่างเริ่มตรงไหน
+            แยกบรรทัดแล้วสูงขึ้นนิดเดียวเพราะทั้งคู่สั้นพอที่จะอยู่บรรทัดละหนึ่ง */}
+        <p className="w-fit max-w-full rounded-control bg-surface-2 px-2 py-0.5 text-micro leading-[1.5] text-ink-2">
           <span className="font-semibold text-ink">{T.cfg_example_label} · </span>
           {example}
-        </span>
-      </p>
+        </p>
+      </div>
     </div>
   );
 }
