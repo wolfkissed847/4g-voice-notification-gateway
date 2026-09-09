@@ -669,7 +669,9 @@ export function DevicesPage({ embedded = false }: { embedded?: boolean } = {}) {
         <AddDeviceDialog
           onClose={() => setAddOpen(false)}
           onCreated={() => {
-            setAddOpen(false);
+            // ห้ามปิดป๊อปอัพตรงนี้ — ต้องยังเปิดค้างให้เห็นหน้า 2 (รับ key ไปใช้)
+            // ปิดเองไม่ได้เพราะ key โชว์ได้ครั้งเดียว ผู้ใช้ต้องกด "เสร็จแล้ว"
+            // หรือ "บันทึกแล้วไปตั้งค่า" ที่ AddDeviceDialog เอง (ดู lockClose ในนั้น)
             void listApiKeys().then((ks) => { setDevices(ks); writeSnapshot(SNAP.devices, ks); });
           }}
           onConfigure={(id) => {
