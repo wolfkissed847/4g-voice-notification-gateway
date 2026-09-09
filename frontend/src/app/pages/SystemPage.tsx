@@ -169,7 +169,7 @@ export function SystemPage() {
   return (
     /* h-full = พอดีจอ ไม่ต้องเลื่อน — สามส่วนของหน้านี้ (ฮาร์ดแวร์ / ค่าการโทร /
        หมายเหตุ) เป็นข้อมูลที่ต้องดูพร้อมกันตอนไล่ปัญหา ถ้าต้องเลื่อนไปมาจะเทียบไม่ได้ */
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-2.5">
       <PageHeader title={T.sys_title} meta={T.sys_meta} />
 
       {/* 3 คอลัมน์ที่ 1180px ตามภาพ (เดิม minmax 280px ได้ 4 คอลัมน์ การ์ดแคบเกิน อ่านยาก)
@@ -181,8 +181,8 @@ export function SystemPage() {
           หลังหักเมนูซ้ายเหลือ ~940px ซึ่ง 3×320 + ช่องไฟ = ~1020px ไม่พอ การ์ดจึงตกเป็น
           2 คอลัมน์แล้วเหลือช่องว่างใหญ่ข้างใบที่สาม ดันการ์ดค่าการโทรตกจอจนต้องเลื่อน
           ทั้งที่หน้านี้ตั้งใจให้พอดีจอ (h-full) — 260px ทำให้ 3 คอลัมน์อยู่ได้ถึง ~840px */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-stretch gap-3.5">
-        <Card className="flex min-w-0 flex-col gap-3 p-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-stretch gap-2.5">
+        <Card className="flex min-w-0 flex-col gap-2.5 p-3.5">
           <div className="flex flex-wrap items-center gap-2">
             <TowerIcon className="size-5 shrink-0 text-ink-2" />
             <h2 className="text-lead font-bold">{T.sys_module_4g}</h2>
@@ -278,14 +278,10 @@ export function SystemPage() {
                 </span>
               )}
             </Btn>
-            <p className="text-micro leading-[1.6] text-ink-2">
-              {T.gsm_restart_hint}
-            </p>
-
           </div>
         </Card>
 
-        <Card className="flex min-w-0 flex-col gap-3 p-4">
+        <Card className="flex min-w-0 flex-col gap-2.5 p-3.5">
           <div className="flex items-center gap-2">
             {/* ไอคอนเต้นเบาๆ ตามจังหวะ = บอกว่าค่าที่เห็นเป็นของสดที่รีเฟรชอยู่ ไม่ใช่ค่าค้างจากตอนเปิดหน้า */}
             <PiIcon className="size-5 shrink-0 animate-soft-pulse text-ink-2" />
@@ -322,7 +318,7 @@ export function SystemPage() {
           </div>
         </Card>
 
-        <Card className="flex min-w-0 flex-col gap-3 p-4">
+        <Card className="flex min-w-0 flex-col gap-2.5 p-3.5">
           <div className="flex items-center gap-2">
             <ServerIcon className="size-5 shrink-0 text-ink-2" />
             <h2 className="text-lead font-bold">{T.sys_runtime}</h2>
@@ -383,7 +379,7 @@ export function SystemPage() {
           จอสูงพอ (เช่น 1600×900) จะไม่มีแถบเลื่อนเลยเพราะเนื้อหาสั้นกว่าที่ได้รับ
           ส่วนจอเตี้ยกว่านั้นได้แถบเลื่อนเฉพาะในการ์ดใบนี้ใบเดียว */}
       <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-3.5">
-        <Card className="col-span-full flex min-h-0 max-h-full flex-col gap-3 overflow-y-auto overscroll-contain p-4">
+        <Card className="col-span-full flex min-h-0 max-h-full flex-col gap-2.5 overflow-y-auto overscroll-contain p-3.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="text-lead font-bold">{T.sys_call_config}</h2>
             {/* สถานะการบันทึกอยู่ตรงนี้แทนปุ่ม — ไม่มีปุ่มแล้ว ผู้ใช้จึงต้องมีอะไรยืนยันว่า
@@ -429,17 +425,11 @@ export function SystemPage() {
                   ซึ่งจัดให้ "ก้น" ตรงกันได้ก็จริง แต่คอลัมน์ที่ตัวอย่างสั้นกว่าจะเริ่มต่ำกว่า
                   เพื่อนหนึ่งบรรทัด — ตาไปสะดุดตรงนั้นก่อนจะได้อ่านอะไร
                   1fr อยู่ที่แถวคำอธิบาย เพราะเป็นแถวเดียวที่ยืดแล้วไม่เสียอะไร */}
-              {/* ทั้ง 5 ค่าอยู่ในกริดเดียว ไม่แยกเป็นสองแถว — หน้านี้เป็น h-full (พอดีจอ ไม่เลื่อน)
-                  การเพิ่มแถวที่สองทำให้การ์ดสูงเกินจอทันที ซึ่งเสียหลักของทั้งหน้าไป
-
-                  แต่ 5 คอลัมน์รวดเดียวแคบเกินไปที่ 1180px (ช่องนาที/วินาทีตกบรรทัด
-                  คำอธิบายเหลือ 3-4 คำต่อบรรทัด) จึงไล่ระดับ: md = 3 คอลัมน์ · xl = 5
-                  ที่ md แถวจะพับเป็น 3+2 เองโดยที่ subgrid ยังจัดบรรทัดให้ตรงกันทั้งกริด
-
-                  ลำดับเรียงตามเวลาจริงของสาย 1 ครั้ง อ่านจากซ้ายไปขวาแล้วได้เรื่องราวต่อเนื่อง:
+              {/* 5 ค่าเรียงเป็นแถวแนวนอนซ้อนลงมา — ไม่ใช่ 5 คอลัมน์ข้างกัน
+                  เรียงตามเวลาจริงของสาย 1 ครั้ง อ่านจากบนลงล่างแล้วได้เรื่องราวต่อเนื่อง:
                   โทรซ้ำกี่ครั้ง → รอนานเท่าไรก่อนซ้ำ → ปล่อยดังนานเท่าไร → รับแล้วเว้นก่อนพูด → พูดซ้ำกี่รอบ
                   (สามค่าแรกเกิดก่อนปลายสายรับ สองค่าท้ายเกิดหลังรับ) */}
-              <div className="grid gap-y-5 md:grid-cols-3 md:grid-rows-[auto_auto_auto_1fr_auto] md:gap-x-0 md:divide-x md:divide-line-2 md:[&>*]:px-5 md:[&>*:first-child]:ps-0 md:[&>*:last-child]:pe-0 xl:grid-cols-5 xl:[&>*]:px-4">
+              <div className="flex flex-col">
                 <ConfigRow
                   label={T.retry_count}
                   unit={T.unit_times}
@@ -457,7 +447,6 @@ export function SystemPage() {
                   secondsUnit={T.unit_seconds}
                   min={5}
                   max={300}
-                  rangeHint={T.duration_range(5, 300)}
                   value={cfg.call_retry_delay_seconds}
                   onChange={(v) => set("call_retry_delay_seconds", v)}
                   onCommit={() => void flushSave()}
@@ -470,7 +459,6 @@ export function SystemPage() {
                   secondsUnit={T.unit_seconds}
                   min={10}
                   max={120}
-                  rangeHint={T.duration_range(10, 120)}
                   value={cfg.call_ring_timeout_seconds}
                   onChange={(v) => set("call_ring_timeout_seconds", v)}
                   onCommit={() => void flushSave()}
@@ -689,29 +677,47 @@ function Meter({
  */
 function SettingCell({
   label,
-  range,
   help,
   example,
   children,
 }: {
   label: string;
-  range: string;
   help: string;
   example: string;
   children: ReactNode;
 }) {
   const { T } = useApp();
   return (
-    <div className="flex min-w-0 flex-col gap-2 md:row-span-5 md:grid md:grid-rows-subgrid md:gap-y-1.5">
-      <label className="text-caption font-semibold">{label}</label>
-      {children}
-      <p className="text-micro leading-[1.5] text-ink-2">{range}</p>
-      <p className="text-micro leading-[1.75]">{help}</p>
-      {/* ตัวอย่างอยู่ในกล่องพื้นจมพร้อมป้ายกำกับ — เดิมเป็นย่อหน้าธรรมดาที่มีแค่ลูกศรนำ
-          จึงอ่านปนกับคำอธิบายด้านบนจนแยกไม่ออกว่าอันไหนคือคำอธิบาย อันไหนคือตัวอย่าง */}
-      <p className="rounded-control bg-surface-2 px-2.5 py-1.5 text-micro leading-[1.65] text-ink-2">
-        <span className="font-semibold text-ink">{T.cfg_example_label} · </span>
-        {example}
+    /* 1 ค่า = 1 แถวแนวนอน เรียงลงมา — ไม่ใช่คอลัมน์แนวตั้งเรียงข้างกันแบบเดิม
+       แนวตั้งบังคับให้ทุกคอลัมน์สูงเท่ากับคอลัมน์ที่คำอธิบายยาวที่สุด (subgrid)
+       คำอธิบายจึงตัดบรรทัดถี่เพราะกว้างแค่ ~1/5 ของการ์ด และเหลือที่ว่างใต้ช่องสั้นๆ
+
+       แนวนอนได้ความกว้างเต็มการ์ดต่อหนึ่งค่า คำอธิบายจึงอยู่ 1-2 บรรทัดพอ
+       และตากวาดลงมาเจอชื่อค่าเรียงตรงกันทุกแถว หาค่าที่จะแก้ได้เร็วกว่า */
+    <div className="flex min-w-0 flex-col gap-1.5 border-b border-line-2 py-1.5 first:pt-0 last:border-b-0 last:pb-0 md:flex-row md:items-baseline md:gap-4">
+      {/* ชื่อค่าอยู่ซ้ายสุด กว้างคงที่ ทุกแถวจึงเริ่มตรงกัน
+          ไม่มีบรรทัด "ตั้งได้ X ถึง Y" แล้ว — ช่อง <input> มี min/max กำกับอยู่แล้ว
+          กรอกเกินก็ถูก clamp ให้ตอนบันทึก และตัวอย่างท้ายแถวก็บอกผลลัพธ์จริงอยู่
+          บรรทัดนั้นจึงเป็นข้อมูลซ้ำที่กินความสูงไปทุกแถวโดยไม่ได้ตอบอะไรเพิ่ม */}
+      <div className="min-w-0 shrink-0 md:w-[10rem]">
+        <label className="text-caption font-semibold">{label}</label>
+      </div>
+
+      {/* ช่องกรอกอยู่ตำแหน่งเดียวกันทุกแถว — กดแก้หลายค่าติดกันแล้วเมาส์แทบไม่ต้องขยับซ้ายขวา */}
+      <div className="shrink-0 md:w-[14rem]">{children}</div>
+
+      {/* คำอธิบาย + ตัวอย่าง กินที่เหลือทั้งหมด — อยู่ย่อหน้าเดียวกันไหลต่อกัน ไม่ซ้อนสองชั้น
+          พอเป็นแถวแนวนอนแล้วความกว้างเหลือเฟือ (~700px) ทั้งคู่จึงอยู่บรรทัดเดียวกันได้
+          ซึ่งลดความสูงต่อแถวไปเกือบครึ่ง = ครบ 5 แถวพอดีจอโดยไม่ต้องเลื่อน
+
+          ตัวอย่างยังแยกออกจากคำอธิบายด้วยพื้นจมกับป้ายกำกับเหมือนเดิม (inline ไม่ใช่ block)
+          จึงยังไม่อ่านปนกันทั้งที่อยู่บรรทัดเดียวกัน */}
+      <p className="min-w-0 flex-1 text-micro leading-[1.7]">
+        {help}{" "}
+        <span className="ms-1 inline-block rounded-control bg-surface-2 px-2 py-0.5 text-ink-2">
+          <span className="font-semibold text-ink">{T.cfg_example_label} · </span>
+          {example}
+        </span>
       </p>
     </div>
   );
@@ -742,7 +748,6 @@ function ConfigRow({
   return (
     <SettingCell
       label={label}
-      range={T.count_range(min, max, unit)}
       help={help}
       example={example}
     >
@@ -751,7 +756,7 @@ function ConfigRow({
           type="number"
           min={min}
           max={max}
-          className={cn(inputCls, "w-[5.625rem] font-mono")}
+          className={cn(inputCls, "w-[3.5rem] px-2 py-1.5 text-center font-mono")}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
           // บันทึกทันทีตอนคลิกออกจากช่อง ไม่ต้องรอครบ 700ms — กันค่าหายถ้ารีบเปลี่ยนหน้าต่อ
@@ -784,7 +789,6 @@ function DurationRow({
   minutesUnit,
   secondsUnit,
   max,
-  rangeHint,
   value,
   onChange,
   onCommit,
@@ -796,7 +800,6 @@ function DurationRow({
   secondsUnit: string;
   min: number;
   max: number;
-  rangeHint: string;
   value: number;
   onChange: (v: number) => void;
   onCommit: () => void;
@@ -804,10 +807,10 @@ function DurationRow({
   example: string;
 }) {
   const { minutes, seconds } = toMinSec(value);
-  const boxCls = cn(inputCls, "w-[4rem] font-mono");
+  const boxCls = cn(inputCls, "w-[3.75rem] px-2 py-1.5 text-center font-mono");
 
   return (
-    <SettingCell label={label} range={rangeHint} help={help} example={example}>
+    <SettingCell label={label} help={help} example={example}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 self-start">
         <input
           type="number"

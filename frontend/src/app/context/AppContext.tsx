@@ -63,13 +63,13 @@ export const TR = {
     settings_title: "การตั้งค่า", settings_sub: "พฤติกรรมการโทรและ fallback",
     retry_section: "พฤติกรรม retry", retry_section_sub: "กำหนดจำนวนครั้งและระยะเวลาในการโทรซ้ำ",
     answer_delay: "เว้นช่วงก่อนเริ่มพูด",
-    answer_delay_help: "รับสายแล้วรอกี่วินาทีค่อยเริ่มพูด คนรับต้องยกหูขึ้นแนบหูก่อน ถ้าพูดทันทีประโยคแรกจะหายไป",
+    answer_delay_help: "รอกี่วินาทีค่อยเริ่มพูดหลังรับสาย — พูดทันทีประโยคแรกจะหายไปกับจังหวะยกหู",
     answer_delay_example: (n: number) =>
-      n === 0 ? "ตั้ง 0 = พูดทันทีที่กดรับ เสี่ยงประโยคแรกหาย" : `ตั้ง ${n} วินาที → กดรับตอน 10:00:00 จะเริ่มพูดตอน 10:00:${String(n).padStart(2, "0")}`,
+      n === 0 ? "0 = พูดทันทีที่กดรับ เสี่ยงประโยคแรกหาย" : `กดรับตอน 10:00:00 → เริ่มพูดตอน 10:00:${String(n).padStart(2, "0")}`,
     repeat_count: "พูดซ้ำกี่รอบ",
-    repeat_count_help: "พูดข้อความเดิมซ้ำกี่รอบใน 1 สาย ฟังรอบเดียวมักจับใจความไม่ครบ โดยเฉพาะตอนเพิ่งตื่นหรืออยู่ในที่เสียงดัง",
+    repeat_count_help: "พูดซ้ำกี่รอบใน 1 สาย — ฟังรอบเดียวมักจับใจความไม่ครบ",
     repeat_count_example: (n: number) =>
-      n === 1 ? "ตั้ง 1 = พูดครั้งเดียวแล้ววางสาย" : `ตั้ง ${n} = พูดซ้ำ ${n} รอบ เว้นรอบละ 1.5 วินาที · ปลายสายวางก่อนก็หยุดเอง`,
+      n === 1 ? "1 = พูดครั้งเดียวแล้ววางสาย" : `พูดซ้ำ ${n} รอบ เว้นรอบละ 1.5 วิ · ปลายสายวางก่อนก็หยุด`,
     retry_count: "จำนวนครั้งที่โทรซ้ำ", retry_count_sub: "โทรซ้ำสูงสุดกี่ครั้งก่อนจะถือว่าล้มเหลว",
     retry_delay: "เวลารอก่อนโทรซ้ำ", retry_delay_sub: "ระยะเวลาที่รอก่อนโทรซ้ำ",
     ring_timeout: "เวลารอให้รับสาย", ring_timeout_sub: "ระยะเวลาที่รอสายก่อนตัดว่าไม่รับ",
@@ -164,21 +164,20 @@ export const TR = {
     gsm_restart: "รีสตาร์ทโมดูล", gsm_restarting: "กำลังรีสตาร์ท…",
     gsm_restart_confirm_title: "รีสตาร์ทโมดูล 4G?",
     gsm_restart_confirm_body: "โมดูลจะปิด-เปิดคลื่นวิทยุแล้วหาเครือข่ายใหม่ ใช้เวลาราว 10-30 วินาที ระหว่างนี้โทรออกไม่ได้ · งานที่รอในคิวจะถูกโทรต่อให้เองหลังเสร็จ · ระบบจะไม่ตัดสายที่กำลังคุยอยู่ (รอจนสายจบก่อนเสมอ)",
-    gsm_restart_hint: "ใช้เมื่อสัญญาณหาย หาเครือข่ายไม่เจอ หรือโมดูลไม่ตอบสนอง",
     gsm_restart_ok: "รีสตาร์ทโมดูลสำเร็จ กลับเข้าเครือข่ายแล้ว",
     gsm_restart_failed: "รีสตาร์ทแล้วแต่ยังไม่กลับเข้าเครือข่าย — ลองเช็คซิม/สายอากาศ",
     gsm_restart_sent: "ส่งคำสั่งแล้ว รอโมดูลกลับมาสักครู่",
-    retry_count_help: "ถ้าเบอร์แรกไม่รับ จะโทรซ้ำเบอร์เดิมอีกกี่ครั้ง ครบแล้วจึงข้ามไปเบอร์ถัดไปในกลุ่ม",
+    retry_count_help: "ไม่รับแล้วโทรซ้ำเบอร์เดิมอีกกี่ครั้ง ครบแล้วข้ามไปเบอร์ถัดไป",
     retry_count_example: (n: number) =>
       n === 0
-        ? "ตั้ง 0 = ไม่โทรซ้ำเลย ไม่รับปุ๊บข้ามไปเบอร์ถัดไปทันที (เหมาะกับเหตุด่วนที่ต้องหาคนรับให้เร็วที่สุด)"
-        : `ตั้ง ${n} → โทรเบอร์แรกทั้งหมด ${n + 1} ครั้ง (ครั้งแรก + ซ้ำอีก ${n}) ถ้ายังไม่รับจึงไปเบอร์ที่ 2`,
-    retry_delay_help: "รอนานแค่ไหนก่อนโทรซ้ำ ระหว่างรอ ระบบไม่ได้อยู่เฉยๆ — เอาเวลาไปโทรงานอื่นในคิวต่อได้เลย",
+        ? "0 = ไม่โทรซ้ำ ข้ามไปเบอร์ถัดไปทันที"
+        : `${n} → โทรเบอร์แรก ${n + 1} ครั้ง ไม่รับจึงไปเบอร์ที่ 2`,
+    retry_delay_help: "รอนานแค่ไหนก่อนโทรซ้ำ — ระหว่างรอ ระบบเอาเวลาไปโทรงานอื่นในคิวต่อได้",
     retry_delay_example: (n: number) =>
-      `ตั้ง ${formatDurationTh(n)} → ไม่รับตอน 10:00:00 จะโทรซ้ำอีกทีตอน ${clockAfter(n)}`,
-    ring_timeout_help: "ปล่อยให้ปลายทางดังนานแค่ไหนก่อนตัดว่าไม่รับ สั้นไปคนหยิบไม่ทัน ยาวไปคิวงานถัดไปเดินช้า",
+      `ไม่รับตอน 10:00:00 → โทรซ้ำตอน ${clockAfter(n)}`,
+    ring_timeout_help: "ปล่อยดังนานแค่ไหนก่อนตัดว่าไม่รับ — สั้นไปหยิบไม่ทัน ยาวไปคิวเดินช้า",
     ring_timeout_example: (n: number) =>
-      `ตั้ง ${formatDurationTh(n)} → ดังครบ ${formatDurationTh(n)} แล้วยังไม่รับ = วางสายเอง นับเป็น "ไม่รับสาย" 1 ครั้ง`,
+      `ดังครบ ${formatDurationTh(n)} แล้วไม่รับ = วางสายเอง นับเป็นไม่รับ 1 ครั้ง`,
     call_budget_title: "รวมแล้วเบอร์หนึ่งใช้เวลาสูงสุด",
     call_budget: (sec: number, tries: number) =>
       `${formatDurationTh(sec)} ต่อ 1 เบอร์ — โทร ${tries} ครั้ง แล้วจึงข้ามไปเบอร์ถัดไป`,
@@ -606,7 +605,6 @@ export const TR = {
     gsm_restart: "Restart module", gsm_restarting: "Restarting…",
     gsm_restart_confirm_title: "Restart the 4G module?",
     gsm_restart_confirm_body: "The radio is switched off and on, then re-registers on the network. Takes about 10-30 seconds, during which no calls can be placed. Queued jobs are dialed once it is back, and any call in progress is always allowed to finish first.",
-    gsm_restart_hint: "Use when signal is lost, the network cannot be found, or the module stops responding",
     gsm_restart_ok: "Module restarted and back on the network",
     gsm_restart_failed: "Restarted but not registered yet — check the SIM and antenna",
     gsm_restart_sent: "Command sent, waiting for the module to come back",
