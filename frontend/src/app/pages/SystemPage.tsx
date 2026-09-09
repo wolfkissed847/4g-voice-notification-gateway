@@ -461,6 +461,41 @@ export function SystemPage() {
                 />
               </div>
 
+              {/* ── สองค่าที่เกิดขึ้น "หลังปลายสายรับแล้ว" ────────────────────
+                  แยกแถวจากสามค่าบน เพราะคนละช่วงเวลาของสายคนละเรื่องกัน:
+                  สามค่าบนคุมว่า "จะโทรถึงใคร กี่ครั้ง" (ก่อนรับสาย)
+                  สองค่านี้คุมว่า "รับแล้วได้ยินอะไร" (หลังรับสาย)
+                  เอามาปนแถวเดียวกันแล้วอ่านเป็นชุดเดียวไม่ออก
+
+                  backend รับสองค่านี้มาตั้งแต่ migration c3f8a1b2d4e6 (16 ส.ค. 2569)
+                  และ CFG_LIMITS ก็ประกาศไว้ครบ แต่ไม่เคยมีช่องกรอกบนหน้าเว็บ —
+                  ปรับได้ทางเดียวคือยิง PUT /config เอง ซึ่งขัดกับหลัก Config-as-Data
+                  ที่ทั้งระบบยึดว่าค่าที่ผู้ใช้ต้องแก้ต้องแก้จากหน้าเว็บได้ */}
+              <div className="grid gap-y-5 md:grid-cols-2 md:grid-rows-[auto_auto_auto_1fr_auto] md:gap-x-0 md:divide-x md:divide-line-2 md:[&>*]:px-7 md:[&>*:first-child]:ps-0 md:[&>*:last-child]:pe-0">
+                <ConfigRow
+                  label={T.answer_delay}
+                  unit={T.unit_seconds}
+                  min={0}
+                  max={10}
+                  value={cfg.call_answer_delay_seconds}
+                  onChange={(v) => set("call_answer_delay_seconds", v)}
+                  onCommit={() => void flushSave()}
+                  help={T.answer_delay_help}
+                  example={T.answer_delay_example(cfg.call_answer_delay_seconds)}
+                />
+                <ConfigRow
+                  label={T.repeat_count}
+                  unit={T.unit_times}
+                  min={1}
+                  max={5}
+                  value={cfg.call_repeat_count}
+                  onChange={(v) => set("call_repeat_count", v)}
+                  onCommit={() => void flushSave()}
+                  help={T.repeat_count_help}
+                  example={T.repeat_count_example(cfg.call_repeat_count)}
+                />
+              </div>
+
               {/* คิดเวลารวมให้ดูเลย — 3 ค่านี้คูณกันแล้วได้ผลลัพธ์ที่คนตั้งค่ามักคาดไม่ถึง
                   เช่น retry 2 + ดัง 25 วิ + รอ 30 วิ = กว่าจะข้ามไปเบอร์ที่ 2 ก็ 2 นาทีครึ่งแล้ว
                   ซึ่งอาจนานเกินไปมากสำหรับเหตุด่วน */}
