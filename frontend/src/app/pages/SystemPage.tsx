@@ -177,7 +177,11 @@ export function SystemPage() {
           ถ้าบีบเท่าการ์ดอื่นช่องกรอกจะแคบจนพิมพ์เลข 3 หลักไม่เห็น */}
       {/* items-stretch (ไม่ใช่ items-start) = การ์ดทุกใบสูงเท่ากันตามใบที่สูงสุดในแถว
           เดิมใช้ items-start การ์ดจึงสูงตามเนื้อหาของตัวเอง ได้ขอบล่างไม่ตรงกันเป็นขั้นบันได */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-stretch gap-3.5">
+      {/* ขั้นต่ำ 260px ไม่ใช่ 320px — ที่ 1180px (ความกว้างที่ทดสอบไว้ในดีไซน์) พื้นที่เนื้อหา
+          หลังหักเมนูซ้ายเหลือ ~940px ซึ่ง 3×320 + ช่องไฟ = ~1020px ไม่พอ การ์ดจึงตกเป็น
+          2 คอลัมน์แล้วเหลือช่องว่างใหญ่ข้างใบที่สาม ดันการ์ดค่าการโทรตกจอจนต้องเลื่อน
+          ทั้งที่หน้านี้ตั้งใจให้พอดีจอ (h-full) — 260px ทำให้ 3 คอลัมน์อยู่ได้ถึง ~840px */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-stretch gap-3.5">
         <Card className="flex min-w-0 flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <TowerIcon className="size-5 shrink-0 text-ink-2" />
@@ -372,8 +376,14 @@ export function SystemPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-3.5">
-        <Card className="col-span-full flex flex-col gap-3 p-4">
+      {/* min-h-0 + flex-1 = การ์ดค่าการโทรกินความสูงที่เหลือของจอ แล้วเลื่อน "ในตัวเอง"
+          ถ้าเนื้อหาไม่พอดี — ไม่ปล่อยให้ทั้งหน้าเลื่อน ซึ่งจะดันการ์ดฮาร์ดแวร์ข้างบนหายไป
+          ทั้งที่เป็นข้อมูลที่ต้องดูคู่กันตอนไล่ปัญหา (เหตุผลเดียวกับ h-full ที่หัวไฟล์)
+
+          จอสูงพอ (เช่น 1600×900) จะไม่มีแถบเลื่อนเลยเพราะเนื้อหาสั้นกว่าที่ได้รับ
+          ส่วนจอเตี้ยกว่านั้นได้แถบเลื่อนเฉพาะในการ์ดใบนี้ใบเดียว */}
+      <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] items-start gap-3.5">
+        <Card className="col-span-full flex min-h-0 max-h-full flex-col gap-3 overflow-y-auto overscroll-contain p-4">
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="text-lead font-bold">{T.sys_call_config}</h2>
             {/* สถานะการบันทึกอยู่ตรงนี้แทนปุ่ม — ไม่มีปุ่มแล้ว ผู้ใช้จึงต้องมีอะไรยืนยันว่า
@@ -419,7 +429,17 @@ export function SystemPage() {
                   ซึ่งจัดให้ "ก้น" ตรงกันได้ก็จริง แต่คอลัมน์ที่ตัวอย่างสั้นกว่าจะเริ่มต่ำกว่า
                   เพื่อนหนึ่งบรรทัด — ตาไปสะดุดตรงนั้นก่อนจะได้อ่านอะไร
                   1fr อยู่ที่แถวคำอธิบาย เพราะเป็นแถวเดียวที่ยืดแล้วไม่เสียอะไร */}
-              <div className="grid gap-y-5 md:grid-cols-3 md:grid-rows-[auto_auto_auto_1fr_auto] md:gap-x-0 md:divide-x md:divide-line-2 md:[&>*]:px-7 md:[&>*:first-child]:ps-0 md:[&>*:last-child]:pe-0">
+              {/* ทั้ง 5 ค่าอยู่ในกริดเดียว ไม่แยกเป็นสองแถว — หน้านี้เป็น h-full (พอดีจอ ไม่เลื่อน)
+                  การเพิ่มแถวที่สองทำให้การ์ดสูงเกินจอทันที ซึ่งเสียหลักของทั้งหน้าไป
+
+                  แต่ 5 คอลัมน์รวดเดียวแคบเกินไปที่ 1180px (ช่องนาที/วินาทีตกบรรทัด
+                  คำอธิบายเหลือ 3-4 คำต่อบรรทัด) จึงไล่ระดับ: md = 3 คอลัมน์ · xl = 5
+                  ที่ md แถวจะพับเป็น 3+2 เองโดยที่ subgrid ยังจัดบรรทัดให้ตรงกันทั้งกริด
+
+                  ลำดับเรียงตามเวลาจริงของสาย 1 ครั้ง อ่านจากซ้ายไปขวาแล้วได้เรื่องราวต่อเนื่อง:
+                  โทรซ้ำกี่ครั้ง → รอนานเท่าไรก่อนซ้ำ → ปล่อยดังนานเท่าไร → รับแล้วเว้นก่อนพูด → พูดซ้ำกี่รอบ
+                  (สามค่าแรกเกิดก่อนปลายสายรับ สองค่าท้ายเกิดหลังรับ) */}
+              <div className="grid gap-y-5 md:grid-cols-3 md:grid-rows-[auto_auto_auto_1fr_auto] md:gap-x-0 md:divide-x md:divide-line-2 md:[&>*]:px-5 md:[&>*:first-child]:ps-0 md:[&>*:last-child]:pe-0 xl:grid-cols-5 xl:[&>*]:px-4">
                 <ConfigRow
                   label={T.retry_count}
                   unit={T.unit_times}
@@ -459,19 +479,10 @@ export function SystemPage() {
                     cfg.call_ring_timeout_seconds,
                   )}
                 />
-              </div>
-
-              {/* ── สองค่าที่เกิดขึ้น "หลังปลายสายรับแล้ว" ────────────────────
-                  แยกแถวจากสามค่าบน เพราะคนละช่วงเวลาของสายคนละเรื่องกัน:
-                  สามค่าบนคุมว่า "จะโทรถึงใคร กี่ครั้ง" (ก่อนรับสาย)
-                  สองค่านี้คุมว่า "รับแล้วได้ยินอะไร" (หลังรับสาย)
-                  เอามาปนแถวเดียวกันแล้วอ่านเป็นชุดเดียวไม่ออก
-
-                  backend รับสองค่านี้มาตั้งแต่ migration c3f8a1b2d4e6 (16 ส.ค. 2569)
-                  และ CFG_LIMITS ก็ประกาศไว้ครบ แต่ไม่เคยมีช่องกรอกบนหน้าเว็บ —
-                  ปรับได้ทางเดียวคือยิง PUT /config เอง ซึ่งขัดกับหลัก Config-as-Data
-                  ที่ทั้งระบบยึดว่าค่าที่ผู้ใช้ต้องแก้ต้องแก้จากหน้าเว็บได้ */}
-              <div className="grid gap-y-5 md:grid-cols-2 md:grid-rows-[auto_auto_auto_1fr_auto] md:gap-x-0 md:divide-x md:divide-line-2 md:[&>*]:px-7 md:[&>*:first-child]:ps-0 md:[&>*:last-child]:pe-0">
+                {/* สองค่าท้ายเกิดขึ้น "หลังปลายสายรับแล้ว" — backend รับมาตั้งแต่
+                    migration c3f8a1b2d4e6 (16 ส.ค. 2569) และ CFG_LIMITS ก็ประกาศไว้ครบ
+                    แต่ไม่เคยมีช่องกรอกบนหน้าเว็บ ปรับได้ทางเดียวคือยิง PUT /config เอง
+                    ซึ่งขัดกับหลัก Config-as-Data ที่ทั้งระบบยึดไว้ */}
                 <ConfigRow
                   label={T.answer_delay}
                   unit={T.unit_seconds}
@@ -691,7 +702,7 @@ function SettingCell({
 }) {
   const { T } = useApp();
   return (
-    <div className="flex min-w-0 flex-col gap-2 md:row-span-5 md:grid md:grid-rows-subgrid md:gap-y-2">
+    <div className="flex min-w-0 flex-col gap-2 md:row-span-5 md:grid md:grid-rows-subgrid md:gap-y-1.5">
       <label className="text-caption font-semibold">{label}</label>
       {children}
       <p className="text-micro leading-[1.5] text-ink-2">{range}</p>
