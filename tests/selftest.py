@@ -320,12 +320,15 @@ section("4. ตรวจรูปแบบเบอร์โทร (กันค
 from app.contacts_service import InvalidPhoneNumberError, normalize_phone_number
 
 check("ตัดขีดและช่องว่างให้อัตโนมัติ", normalize_phone_number("081-234 5678") == "0812345678")
-check("รับเบอร์ต่างประเทศที่ขึ้นต้นด้วย +", normalize_phone_number("+66812345678") == "+66812345678")
+check("ตัดวงเล็บและจุดให้อัตโนมัติ", normalize_phone_number("(081) 234.5678") == "0812345678")
 
 _INJECTED = "0810000001" + chr(13) + chr(10) + "ATD0899999999"
 for bad, label in [(_INJECTED, "เบอร์ที่แทรกคำสั่ง AT"),
                    ("081abc5678", "เบอร์ที่มีตัวอักษร"),
-                   ("123", "เบอร์สั้นเกินไป")]:
+                   ("123", "เบอร์สั้นเกินไป"),
+                   ("081234567", "เบอร์ 9 หลัก (ขาดไปหนึ่งตัว)"),
+                   ("08123456789", "เบอร์ 11 หลัก (เกินมาหนึ่งตัว)"),
+                   ("+66812345678", "เบอร์รูปแบบสากล")]:
     try:
         normalize_phone_number(bad)
         check("ปฏิเสธ" + label, False)

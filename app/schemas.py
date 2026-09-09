@@ -76,7 +76,10 @@ class GroupResponse(BaseModel):
 
 
 class ContactCreateRequest(BaseModel):
-    phone_number: str = Field(..., min_length=8, max_length=24)
+    # ช่วงนี้เป็นแค่ด่านหยาบก่อนถึงตัวจริง — เผื่อที่ให้ตัวคั่นที่คนพิมพ์ติดมา
+    # (081-234-5678 = 12 ตัว) กฎจริงคือตัวเลข 10 หลักหลังตัดตัวคั่นแล้ว
+    # ดู contacts_service.normalize_phone_number
+    phone_number: str = Field(..., min_length=10, max_length=24)
     name: str | None = Field(None, max_length=120)
 
 
