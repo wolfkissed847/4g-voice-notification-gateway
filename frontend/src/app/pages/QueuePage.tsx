@@ -67,10 +67,15 @@ export function QueuePage() {
   };
 
   return (
-    /* h-full + min-h-0 = หน้านี้สูงเท่าจอพอดี ไม่เลื่อนหน้าเว็บ
+    /* lg: ขึ้นไป — h-full + min-h-0 = หน้านี้สูงเท่าจอพอดี ไม่เลื่อนหน้าเว็บ
        ส่วนที่ยาวไม่จำกัดคือตารางคิว จึงให้มันเป็นตัวเดียวที่เลื่อน (อยู่ในกล่องตัวเอง)
-       — คิวยาวแค่ไหนหัวเรื่องกับการ์ดติดตามสัญญาณก็ยังอยู่ที่เดิม ไม่ถูกดันหายขึ้นไป */
-    <div className="flex h-full min-h-0 flex-col gap-3.5">
+       — คิวยาวแค่ไหนหัวเรื่องกับการ์ดติดตามสัญญาณก็ยังอยู่ที่เดิม ไม่ถูกดันหายขึ้นไป
+
+       ต่ำกว่า lg ปล่อยความสูงอิสระ: การ์ดติดตามสัญญาณกับความหมายสถานะเรียงซ้อนลงมา
+       กินที่เกือบเต็มจอมือถือไปแล้ว ถ้ายังบังคับให้ทั้งหน้าสูงเท่าจอ ตารางคิวจะเหลือ
+       แค่ min-h ของมันคือ 9.375rem = เห็นหัวตารางกับอีกแถวเดียว ซึ่งอ่านคิวไม่ได้เลย
+       ให้ <main> ที่เป็น overflow-y-auto อยู่แล้วเลื่อนทั้งหน้าแทน (ดู AppShell) */
+    <div className="flex flex-col gap-3.5 lg:h-full lg:min-h-0">
       <PageHeader
         title={T.queue_title}
         meta={T.queue_sub}
@@ -95,9 +100,9 @@ export function QueuePage() {
         <StatusLegend />
       </div>
 
-      {/* min-h-[9.375rem] กันกล่องแบนจนอ่านไม่ออกบนจอเตี้ย — ถ้าเตี้ยกว่านั้นจริงๆ
-          ก็ปล่อยให้ทั้งหน้าเลื่อนตามปกติ ดีกว่าบีบตารางจนเหลือครึ่งแถว */}
-      <div className="flex min-h-[9.375rem] min-w-0 flex-1 flex-col overflow-hidden rounded-card border border-line bg-surface shadow-card">
+      {/* บนมือถือให้กล่องสูงพอเห็นคิวได้จริงหลายแถว (ทั้งหน้าเลื่อนได้อยู่แล้ว)
+          ส่วนบนจอกว้าง flex-1 กินที่ที่เหลือทั้งหมด โดยมี min-h กันแบนบนจอเตี้ย */}
+      <div className="flex min-h-[26rem] min-w-0 flex-col overflow-hidden rounded-card border border-line bg-surface shadow-card lg:min-h-[9.375rem] lg:flex-1">
         {/* หัวตารางกับแถวข้อมูลอยู่ในกล่องเลื่อนเดียวกัน คอลัมน์จึงเลื่อนแนวนอนพร้อมกัน
             แล้วใช้ sticky ตรึงหัวไว้ตอนเลื่อนลง */}
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
