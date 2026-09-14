@@ -59,6 +59,17 @@ def delete_group(db: Session, group_id: int) -> bool:
             f"ลบ '{group.name}' ไม่ได้ เพราะยังถูกตั้งเป็นผู้รับสายอยู่ {in_use} จุด — "
             "ไปที่หน้าอุปกรณ์แล้วเปลี่ยนผู้รับสายของเหตุการณ์ที่ใช้กลุ่มนี้ก่อน"
         )
+    # ลบเบอร์ในกลุ่มผ่าน ORM ก่อน แทนที่จะปล่อยให้ ON DELETE CASCADE ที่ระดับฐานข้อมูลจัดการ
+    #
+    # ผลลัพธ์ในตารางเหมือนกันทุกประการ ต่างกันที่ "session รู้ตัวหรือเปล่า": cascade ฝั่ง
+    # ฐานข้อมูลลบแถวโดย ORM ไม่เห็น object ของเบอร์พวกนั้นจึงค้างอยู่ใน identity map ต่อไป
+    # พอ SQLite เอา id เดิมกลับมาใช้ซ้ำกับเบอร์ที่สร้างใหม่ จะได้ SAWarning "Identity map
+    # already had an identity for ..." แล้วทับของเก่าทิ้ง — ใน session ที่อายุยาว
+    # (สคริปต์ทดสอบ, worker) แปลว่ามี object ของแถวที่ถูกลบไปแล้วลอยอยู่ให้หยิบไปใช้ผิดได้
+    #
+    # ON DELETE CASCADE ยังอยู่ในสคีมาเหมือนเดิม เป็นตาข่ายกันแถวกำพร้าสำหรับคนที่ลบด้วย SQL ตรงๆ
+    for contact in db.query(Contact).filter(Contact.group_id == group_id).all():
+        db.delete(contact)
     db.delete(group)
     db.commit()
     return True
