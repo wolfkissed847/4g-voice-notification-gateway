@@ -78,11 +78,6 @@ GROUPS: list[tuple[str, str, list[tuple[str, str]]]] = [
         "ดูแลเซิร์ฟเวอร์ ตู้แร็ค และอินเทอร์เน็ต",
         [("แอดมินระบบ", "0911223344"), ("เน็ตเวิร์ค", "0922334455"), ("ซัพพอร์ต", "0933445566")],
     ),
-    (
-        "ผู้บริหาร",
-        "ปลายทางสุดท้าย เรียกเมื่อไล่ครบทุกกลุ่มแล้วยังไม่มีใครรับ",
-        [("ผจก.โรงงาน", "0955556666"), ("รองผจก.", "0966667777")],
-    ),
 ]
 
 
@@ -106,31 +101,22 @@ EVENT_TYPES: list[tuple[str, str, str]] = [
     ("network_down", "อินเทอร์เน็ตหลุด", "แจ้งเตือน เชื่อมต่ออินเทอร์เน็ตไม่ได้ กรุณาตรวจสอบ"),
     ("door_forced", "ประตูถูกเปิดผิดปกติ", "แจ้งเตือน ตรวจพบการเปิดประตูผิดปกติ กรุณาตรวจสอบ"),
     ("disk_full", "พื้นที่จัดเก็บเต็ม", "แจ้งเตือน พื้นที่จัดเก็บข้อมูลใกล้เต็ม กรุณาตรวจสอบ"),
+    ("pump_failure", "ปั๊มน้ำขัดข้อง", "แจ้งเตือน ตรวจพบปั๊มน้ำทำงานผิดปกติ กรุณาตรวจสอบด่วน"),
 ]
 
 
 # ── แคตตาล็อก: อุปกรณ์ที่ยิงเข้ามา (= API key หนึ่งใบต่อหนึ่งอุปกรณ์) ─────────
 # (ชื่ออุปกรณ์, code เหตุการณ์ที่ยิงได้, ชื่อกลุ่มที่ให้โทร)
+# อุปกรณ์แค่ 2 ใบแต่ต้องผูกให้ครบ 5 กลุ่ม — DEVICES กำหนดได้แค่ "กลุ่มหลัก" หนึ่งกลุ่มต่อ
+# (อุปกรณ์, event_type) หนึ่งคู่เท่านั้น (ดู build_catalogue) จึงต้องแตกอุปกรณ์เดิมออกเป็น
+# หลายแถวคนละ code เพื่อแปะกลุ่มที่ต่างกันได้ — ยังนับเป็น "2 อุปกรณ์" เพราะ key ผูกด้วยชื่อ
+# (ApiKey หนึ่งใบต่อหนึ่งชื่อ) แถวที่ชื่อซ้ำกันจะรวมเข้า key เดียวกันแค่เพิ่ม event ให้มันยิงได้
 DEVICES: list[tuple[str, list[str], str]] = [
     ("โหนดตึก A ชั้น 3", ["node_down", "power_outage", "temp_high"], "ทีมช่างเทคนิค"),
-    ("โหนดตึก A ชั้น 5", ["node_down", "temp_high"], "ทีมช่างเทคนิค"),
-    ("โหนดตึก B ชั้น 1", ["node_down", "power_outage"], "ทีมช่างเทคนิค"),
-    ("ห้องเซิร์ฟเวอร์ชั้นใต้ดิน", ["temp_high", "water_leak", "ups_low_battery", "network_down"], "ทีมไอทีและระบบเครือข่าย"),
-    ("ตู้แร็คเครือข่ายชั้น 2", ["network_down", "ups_low_battery", "disk_full"], "ทีมไอทีและระบบเครือข่าย"),
-    ("เซิร์ฟเวอร์สำรองข้อมูล", ["disk_full", "network_down"], "ทีมไอทีและระบบเครือข่าย"),
-    ("คลังสินค้าโซน B", ["door_forced", "smoke_detected", "power_outage"], "ฝ่ายความปลอดภัยและอาชีวอนามัย"),
-    ("คลังสินค้าโซน C", ["door_forced", "smoke_detected"], "ฝ่ายความปลอดภัยและอาชีวอนามัย"),
-    ("ห้องเก็บสารเคมี", ["smoke_detected", "temp_high", "door_forced"], "ฝ่ายความปลอดภัยและอาชีวอนามัย"),
-    ("ไลน์ผลิตที่ 1", ["node_down", "temp_high"], "หัวหน้าฝ่ายผลิต"),
-    ("ไลน์ผลิตที่ 2", ["node_down", "temp_high"], "หัวหน้าฝ่ายผลิต"),
-    ("ไลน์ผลิตที่ 3", ["node_down", "power_outage", "temp_high"], "หัวหน้าฝ่ายผลิต"),
-    ("ห้องหม้อไอน้ำ", ["temp_high", "water_leak"], "หัวหน้าฝ่ายผลิต"),
-    ("อาคารสำนักงานใหญ่", ["power_outage", "network_down", "disk_full"], "เวรกลางคืน"),
-    ("ลานจอดรถชั้น 1", ["door_forced", "power_outage"], "เวรกลางคืน"),
-    ("ป้อมยามประตูหน้า", ["door_forced", "network_down"], "เวรกลางคืน"),
-    ("ห้องไฟฟ้าหลัก", ["power_outage", "ups_low_battery", "temp_high"], "ผู้บริหาร"),
-    ("ปั๊มน้ำดับเพลิง", ["water_leak", "power_outage"], "ผู้บริหาร"),
-    ("Test", ["node_down", "power_outage"], "ทีมช่างเทคนิค"),
+    ("โหนดตึก A ชั้น 3", ["door_forced", "smoke_detected"], "ฝ่ายความปลอดภัยและอาชีวอนามัย"),
+    ("โหนดตึก A ชั้น 3", ["water_leak"], "หัวหน้าฝ่ายผลิต"),
+    ("ห้องเซิร์ฟเวอร์ชั้นใต้ดิน", ["network_down", "ups_low_battery", "disk_full"], "ทีมไอทีและระบบเครือข่าย"),
+    ("ห้องเซิร์ฟเวอร์ชั้นใต้ดิน", ["pump_failure"], "เวรกลางคืน"),
 ]
 
 
@@ -203,7 +189,7 @@ def build_catalogue(db) -> tuple[dict[str, Group], dict[str, EventType], list[Ap
         events[code] = ev
     db.flush()
 
-    keys: list[ApiKey] = []
+    keys_by_name: dict[str, ApiKey] = {}
     for name, codes, group_name in DEVICES:
         key = db.query(ApiKey).filter_by(name=name).one_or_none()
         # key_encrypted ต้องมี ไม่งั้นหน้าอุปกรณ์กดดู key แล้วไม่ขึ้น — คีย์เก่าในเครื่องพัฒนา
@@ -237,10 +223,10 @@ def build_catalogue(db) -> tuple[dict[str, Group], dict[str, EventType], list[Ap
                         db, ApiKeyEventContact, {"order_index": i},
                         api_key_id=key.id, event_type_id=ev.id, contact_id=c.id,
                     )
-        keys.append(key)
+        keys_by_name[name] = key
 
     db.flush()
-    return groups, events, keys
+    return groups, events, list(keys_by_name.values())
 
 
 def prune_stale(db) -> None:
@@ -249,21 +235,44 @@ def prune_stale(db) -> None:
     ฐานข้อมูลตอนพัฒนามักมีเศษจากการกดเล่นค้างอยู่ (กลุ่มชื่อ "กลุ่ม 1" ที่คำอธิบาย
     เป็นตัวยึกยือเพราะเคยบันทึกผิด encoding, อุปกรณ์ทดสอบที่ไม่ได้ผูกอะไรเลย)
     ซึ่งไปโผล่ปนกับข้อมูลตัวอย่างในหน้าตั้งค่า แล้วดูเหมือนระบบมีข้อมูลเสีย
-    ถึงตรงนี้งานโทรถูกลบไปหมดแล้ว จึงไม่มีอะไรอ้างถึงแถวพวกนี้ค้างอยู่"""
+
+    ── ลำดับการลบสำคัญมาก ────────────────────────────────────────────────────
+    ตาราง api_key_event_types ชี้ไปที่ api_keys, event_types และ groups พร้อมกัน
+    เดิมโค้ดนี้ลบกลุ่มเป็นอย่างแรกโดยคิดว่า "งานโทรถูกลบไปหมดแล้วจึงไม่มีอะไรอ้างถึง"
+    ซึ่งคิดถึงแค่ call_jobs.group_id ลืมตารางเชื่อมไป ผลคือ FOREIGN KEY constraint failed
+    ทุกครั้งที่ฐานข้อมูลมีอุปกรณ์ที่ผูกกลุ่มไว้อยู่ (คือแทบทุกกรณีที่เคยกดใช้งานจริง)
+
+    ตอนนี้ลบอุปกรณ์ก่อน (CASCADE พาแถวเชื่อมของมันไปด้วย) แล้วค่อยลบเหตุการณ์และกลุ่ม
+    ส่วนกลุ่มยังต้องจัดการแถวเชื่อมของ "อุปกรณ์ที่เก็บไว้" ที่ชี้มาที่กลุ่มนี้เองอีกชั้น
+    เพราะคอลัมน์ group_id ไม่ได้ตั้ง ondelete ไว้ จึงไม่มีใครเคลียร์ให้อัตโนมัติ
+
+    แถวพวกนั้นต้อง "ลบทิ้ง" ไม่ใช่เซ็ต group_id เป็นค่าว่าง — แถวเชื่อมที่ไม่มีทั้งกลุ่ม
+    และไม่มีเบอร์ที่เจาะเลือกไว้ คือการตั้งค่าที่ไม่ครบ ระบบจะปฏิเสธคำขอที่ยิงเข้ามา
+    และสคริปต์ส่วนสร้างงานโทรก็หยิบแถวแบบนี้ไปใช้ไม่ได้"""
     keep_groups = {name for name, _, _ in GROUPS}
     keep_events = {code for code, _, _ in EVENT_TYPES}
     keep_devices = {name for name, _, _ in DEVICES}
 
-    for group in db.query(Group).all():
-        if group.name not in keep_groups:
-            db.query(Contact).filter_by(group_id=group.id).delete()
-            db.delete(group)
-    for ev in db.query(EventType).all():
-        if ev.code not in keep_events:
-            db.delete(ev)
     for key in db.query(ApiKey).all():
         if key.name not in keep_devices:
             db.delete(key)
+    db.flush()
+
+    for ev in db.query(EventType).all():
+        if ev.code not in keep_events:
+            db.query(ApiKeyEventType).filter_by(event_type_id=ev.id).delete()
+            db.delete(ev)
+    db.flush()
+
+    for group in db.query(Group).all():
+        if group.name not in keep_groups:
+            for link in db.query(ApiKeyEventType).filter_by(group_id=group.id).all():
+                db.query(ApiKeyEventContact).filter_by(
+                    api_key_id=link.api_key_id, event_type_id=link.event_type_id
+                ).delete()
+                db.delete(link)
+            db.query(Contact).filter_by(group_id=group.id).delete()
+            db.delete(group)
     db.flush()
 
 
@@ -278,11 +287,10 @@ def pick_outcome(rng: random.Random):
     return OUTCOMES[0][0], OUTCOMES[0][2], OUTCOMES[0][3]
 
 
-def mask(number: str) -> str:
-    """ต้องตรงกับ _mask_number ใน call_worker — หน้าประวัติโชว์ค่านี้ตรงๆ"""
-    if len(number) <= 4:
-        return "*" * len(number)
-    return number[:3] + "*" * (len(number) - 6) + number[-3:]
+# หมายเหตุ: เคยมีฟังก์ชัน mask() ตรงนี้สำหรับปิดบังเบอร์ก่อนเขียนลงประวัติ
+# ถอดออกแล้วเพราะตาราง call_logs เปลี่ยนมาเก็บเบอร์เต็มตั้งแต่ migration d5e2a91c7b04
+# (ประวัติการโทรเป็นหน้าที่ต้องล็อกอินก่อนถึงจะเปิดดูได้ และเบอร์ทั้งหมดอยู่ในตาราง
+#  contacts แบบเต็มอยู่แล้ว การปิดบังจึงไม่ได้เพิ่มความปลอดภัย แต่ทำให้โทรกลับไม่ได้)
 
 
 WORK_HOURS = [1, 3, 6, 8, 8, 9, 9, 10, 11, 13, 14, 14, 15, 16, 17, 19, 21, 22, 23]
@@ -337,14 +345,24 @@ def seed_jobs(db, groups, events, keys, count: int, days: int, min_per_day: int,
         g.id: db.query(Contact).filter_by(group_id=g.id).order_by(Contact.order_index).all()
         for g in groups.values()
     }
+    # เอาเฉพาะแถวเชื่อมที่ชี้กลุ่มไว้จริง — แถวที่ group_id ว่างคือการตั้งค่าที่ยังไม่ครบ
+    # หยิบมาสร้างงานโทรไม่ได้เพราะไม่รู้ว่าจะโทรหาใคร (prune_stale ลบทิ้งไปแล้วก็จริง
+    # แต่ฐานข้อมูลที่คนกดเล่นไว้เองอาจมีเหลืออยู่ กันไว้ตรงนี้อีกชั้นดีกว่าให้สคริปต์ตาย)
     device_links = {
-        key.id: db.query(ApiKeyEventType).filter_by(api_key_id=key.id).all()
+        key.id: [
+            link
+            for link in db.query(ApiKeyEventType).filter_by(api_key_id=key.id).all()
+            if link.group_id is not None
+        ]
         for key in keys
     }
+    usable_keys = [key for key in keys if device_links[key.id]]
+    if not usable_keys:
+        raise SystemExit("ไม่มีอุปกรณ์ที่ผูกกลุ่มผู้รับไว้เลย สร้างงานโทรตัวอย่างไม่ได้")
 
     made = 0
     for i, created in enumerate(times):
-        key = rng.choice(keys)
+        key = rng.choice(usable_keys)
         link = rng.choice(device_links[key.id])
         ev = db.get(EventType, link.event_type_id)
         group = db.get(Group, link.group_id)
@@ -402,7 +420,7 @@ def seed_jobs(db, groups, events, keys, count: int, days: int, min_per_day: int,
             stamp += dt.timedelta(seconds=rng.randrange(6, 45))
             db.add(CallLog(
                 job_id=job.id,
-                phone_number_masked=mask(people[idx].phone_number),
+                phone_number=people[idx].phone_number,
                 result=result if last else "no_answer",
                 detail=(detail if last else "ปล่อยดังจนครบเวลาแล้วไม่มีใครรับ"),
                 timestamp=stamp,
