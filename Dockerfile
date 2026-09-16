@@ -7,8 +7,23 @@
 FROM node:20-slim AS frontend-builder
 
 WORKDIR /frontend
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install
+# ไม่มี * ต่อท้าย package-lock.json โดยตั้งใจ — ต้องมีไฟล์นี้จริงเท่านั้น
+# ถ้าใส่ * ไว้แล้ววันหนึ่ง lockfile หายไป COPY จะผ่านเงียบๆ แล้วไปตายที่ npm ci
+# ด้วย error ที่อ่านไม่รู้เรื่องว่าสาเหตุคือไฟล์ไม่ถูกก๊อปเข้ามา
+COPY frontend/package.json frontend/package-lock.json ./
+
+# npm ci ไม่ใช่ npm install — ติดตั้งตาม package-lock.json เป๊ะๆ ไม่คิดเวอร์ชันใหม่เอง
+#
+# ที่ต้องเป็น ci: npm install จะ "แก้" lockfile ให้เองเงียบๆ ถ้ามันไม่ตรงกับ package.json
+# ผลคือ image ที่ deploy อาจได้ dependency คนละชุดกับที่ทดสอบบนเครื่อง dev
+# และถ้ามี peer dependency ขัดกัน npm บนเครื่อง dev (v11) กับบน Pi (v10) ตัดสินไม่เหมือนกัน
+# — เจอมาแล้ว 16 ก.ย. 2569: เครื่อง dev build ผ่าน แต่ Pi ตกที่ ERESOLVE
+#   เพราะ @types/react-dom ค้างอยู่ที่ v19 ทั้งที่โปรเจคใช้ React 18
+#
+# npm ci อ่าน lockfile อย่างเดียว ไม่ re-resolve จึงได้ผลเหมือนกันทุกเครื่องทุกรอบ
+# และถ้า lockfile ไม่ตรงกับ package.json มันจะฟ้องทันทีตั้งแต่ต้น แทนที่จะเงียบแล้วไปพังทีหลัง
+# (ผลพลอยได้: เร็วกว่าเพราะข้ามขั้นตอนคิดว่าจะลงเวอร์ชันไหน)
+RUN npm ci
 
 COPY frontend/ ./
 
@@ -55,7 +70,7 @@ COPY --from=frontend-builder /frontend/dist ./static
 
 # commit ที่ image นี้ถูก build มา — ส่งเข้ามาจาก workflow (ดู .github/workflows/deploy.yml)
 # วางไว้ท้ายๆ โดยตั้งใจ: ค่านี้เปลี่ยนทุก commit ถ้าวางไว้ต้นไฟล์ Docker จะทิ้ง cache
-# ของทุกชั้นที่อยู่หลังมัน = build ใหม่หมดทุกรอบ (npm install/pip install ใหม่ทุกครั้ง)
+# ของทุกชั้นที่อยู่หลังมัน = build ใหม่หมดทุกรอบ (npm ci/pip install ใหม่ทุกครั้ง)
 ARG GIT_SHA=dev
 ENV APP_GIT_SHA=$GIT_SHA
 
