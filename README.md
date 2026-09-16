@@ -8,7 +8,7 @@
 
 <br/>
 
-![Status](https://img.shields.io/badge/status-in%20development-orange)
+![Status](https://img.shields.io/badge/status-deployed-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
@@ -34,6 +34,7 @@
 ที่ต้องจ่ายรายเดือน และไม่พึ่ง VoIP
 
 > **ที่มาของโจทย์:** เดิมองค์กรใช้บริการแจ้งเตือนจากภายนอกแบบจ่ายรายเดือน ค่าใช้จ่ายสะสมไปเรื่อยๆ
+> อีกทั้งต้องส่งสถานะอุปกรณ์และเบอร์โทรผ่านเซิร์ฟเวอร์ภายนอก และปรับแต่งลำดับการโทรเองไม่ได้
 > โครงงานนี้จึงออกแบบและพัฒนาระบบขึ้นมาเองเพื่อ **ลดค่าใช้จ่ายระยะยาว** และ **ควบคุมระบบได้เต็มที่**
 > — พัฒนาระหว่างการปฏิบัติงานสหกิจศึกษา สาขาวิศวกรรมคอมพิวเตอร์
 
@@ -88,35 +89,29 @@ flowchart LR
 
 ## 🖥️ หน้าตาระบบ
 
-<div align="center">
-
-| ภาพรวมระบบ | จัดการอุปกรณ์ |
-|---|---|
-| ![Dashboard](figma/handoff/mockups/02-dashboard-light.png) | ![Devices](figma/handoff/mockups/04-devices-light.png) |
-
-| ประวัติการโทร | โหมดมืด |
-|---|---|
-| ![History](figma/handoff/mockups/07-call-history.png) | ![Dark](figma/handoff/mockups/03-dashboard-dark.png) |
-
-</div>
-
 Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป็นโค้ดจริง — 8 หน้าที่มีเนื้อหาของตัวเอง เมนูหลัก 6 รายการ
-รองรับทั้งภาษาไทย/อังกฤษ โหมดสว่าง/มืด และปรับตามขนาดจอตั้งแต่มือถือจนถึงจอกว้าง
+ใช้ชื่อ **4G Gateway** พร้อมโลโก้ลูกโลก รองรับโหมดสว่าง/มืด และปรับตามขนาดจอตั้งแต่มือถือจนถึงจอกว้าง
 
-> ภาพชุดนี้ถ่ายไว้ 16 ส.ค. 2569 ก่อนการยกเครื่องหน้าเว็บรอบ 21–23 ส.ค. หน้าจริงตอนนี้
-> ใช้ชื่อ **4G Gateway** พร้อมโลโก้ลูกโลก และหน้าเข้าระบบเปลี่ยนไปแล้ว
+| หน้า | ทำอะไรได้ |
+|---|---|
+| **ภาพรวมระบบ** | สถานะโมดูล 4G · ความแรงสัญญาณ · งานในคิว · สรุปผลการโทรล่าสุด |
+| **คิวการโทร** | ดูงานที่รอโทรและกำลังโทร · ยกเลิกงานที่ worker ยังไม่หยิบได้ทีละใบ |
+| **ประวัติการโทร** | จัดกลุ่มตามวัน · เลือกดูย้อนหลังทั้งเดือน · กางดูเหตุผลที่โทรไม่สำเร็จ |
+| **ตั้งค่า** | 3 แท็บ — กลุ่มผู้รับ · ประเภทเหตุการณ์ · อุปกรณ์ (API key) |
+| **คู่มือ & API** | วิธีใช้งาน + ตัวอย่างคำสั่งยิง API พร้อมก๊อปไปใช้ |
+| **ระบบ & ฮาร์ดแวร์** | ปรับค่าการโทร · ดูมิเตอร์ของ Pi · สั่งรีสตาร์ทโมดูล |
 
 ---
 
 ## 🧩 เทคโนโลยีที่ใช้
 
 <table>
-<tr><td><b>Backend</b></td><td>FastAPI · SQLAlchemy · Alembic · SQLite (WAL mode)</td></tr>
-<tr><td><b>Frontend</b></td><td>Vite 6 · React 18 · TypeScript · Tailwind CSS v4 · shadcn/ui (Radix) · react-router 7</td></tr>
+<tr><td><b>Backend</b></td><td>FastAPI · SQLAlchemy · Alembic · SQLite (WAL mode) — 31 endpoint</td></tr>
+<tr><td><b>Frontend</b></td><td>Vite 6 · React 18 · TypeScript · Tailwind CSS v4 · react-router 7</td></tr>
 <tr><td><b>เสียงพูด</b></td><td>Google Text-to-Speech (gTTS) — ภาษาไทย (สร้างใหม่ทุกสาย ไม่แคช จึงต้องมีเน็ตขณะโทร)</td></tr>
 <tr><td><b>ฮาร์ดแวร์</b></td><td>Raspberry Pi 3 · SIMCOM A7670E / A7670C (4G LTE Cat.1) · ซิม AIS<br>ต่อได้ทั้งผ่าน USB และผ่านหัว GPIO (UART + คุมขา PWRKEY/STATUS)<br>ระบบไล่หาพอร์ตที่ตอบคำสั่ง AT เองได้ ถอดเสียบสลับแบบไม่ต้องแก้คอนฟิก</td></tr>
 <tr><td><b>Deploy</b></td><td>Docker (multi-stage build) · GitHub Actions self-hosted runner บน Pi · Cloudflare Tunnel</td></tr>
-<tr><td><b>ความปลอดภัย</b></td><td>API key รายอุปกรณ์ (ตรวจสิทธิ์ด้วย sha256 hash) · JWT + bcrypt · gitleaks pre-commit<br>เบอร์โทรใน log ถูกปิดบางส่วนเสมอ · หน้าเอกสาร API ปิดเป็นค่าเริ่มต้น</td></tr>
+<tr><td><b>ความปลอดภัย</b></td><td>API key รายอุปกรณ์ (ตรวจสิทธิ์ด้วย sha256 hash) · JWT + bcrypt · gitleaks pre-commit<br>เบอร์โทรใน log ไฟล์ถูกปิดบางส่วนเสมอ · หน้าเอกสาร API ปิดเป็นค่าเริ่มต้น</td></tr>
 </table>
 
 ### สถาปัตยกรรม 3 ชั้น
@@ -141,7 +136,8 @@ Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป
 | Backend — API, คิวงาน, worker, ระบบสิทธิ์, จัดการกลุ่ม/เบอร์/ประเภทเหตุการณ์ | ✅ |
 | Dashboard ต่อ API จริงครบทุกหน้า | ✅ |
 | ปิด/เปิดอุปกรณ์ชั่วคราวได้โดยไม่ต้องลบ API key ทิ้ง | ✅ |
-| ระบบจัดการเวอร์ชันฐานข้อมูล (Alembic migrations) | ✅ |
+| ยกเลิกงานในคิวได้ทีละใบ | ✅ |
+| ระบบจัดการเวอร์ชันฐานข้อมูล (Alembic migrations — 9 ตัว) | ✅ |
 | Docker + CI/CD deploy อัตโนมัติ | ✅ |
 | ทดสอบกับฮาร์ดแวร์จริง — โทรออก, เล่นเสียงเข้าสาย, วางสาย | ✅ |
 | ทดสอบลำดับการโทรครบทุกเบอร์กับฮาร์ดแวร์จริง | ✅ |
@@ -149,7 +145,7 @@ Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป
 | รองรับโมดูลที่ต่อผ่านหัว GPIO (UART) นอกเหนือจากแบบเสียบ USB | ✅ |
 | เว้นช่วงก่อนพูด · พูดข้อความซ้ำ · กันสายโทรกลับ | ✅ |
 | กู้คืนโมดูลอัตโนมัติหลังไฟดับ / โมดูลค้าง | ✅ |
-| เทสถดถอยอัตโนมัติ 68 หัวข้อ (`tests/selftest.py`) | ✅ |
+| เทสถดถอยอัตโนมัติ 80 หัวข้อ (`tests/selftest.py`) | ✅ |
 | ทดสอบโหลดและวัดเพดานความจุ (`tests/loadtest.py`) | ✅ |
 
 ---
@@ -157,7 +153,7 @@ Dashboard ออกแบบด้วย Figma แล้วพอร์ตเป
 ## 🧪 เทสอัตโนมัติ
 
 ```bash
-python tests/selftest.py           # เทสถดถอย 68 หัวข้อ — ไม่แตะ DB จริงและฮาร์ดแวร์จริง
+python tests/selftest.py           # เทสถดถอย 80 หัวข้อ — ไม่แตะ DB จริงและฮาร์ดแวร์จริง
 python tests/loadtest.py           # วัดว่ารับได้กี่คำขอ/วินาที และส่งได้กี่สาย/ชั่วโมง
 python tests/concurrency_sweep.py  # หาจุดที่เริ่มรับไม่ไหว
 ```
@@ -173,6 +169,10 @@ python tests/concurrency_sweep.py  # หาจุดที่เริ่มร�
 
 ## 🚀 เริ่มใช้งาน
 
+**ติดตั้งแบบเต็มทุกขั้นตอน → [INSTALL.md](INSTALL.md)**
+
+แบบย่อสำหรับคนที่มี Docker อยู่แล้ว:
+
 ```bash
 git clone https://github.com/<your-account>/4g-voice-notification-gateway.git
 cd 4g-voice-notification-gateway
@@ -182,15 +182,16 @@ cp .env.example .env
 แก้ `.env` อย่างน้อย 3 ค่าก่อนรัน:
 
 ```bash
-python scripts/hash_password.py        # ได้ bcrypt hash → ใส่ใน ADMIN_PASSWORD_HASH
+python scripts/hash_password.py             # ได้ bcrypt hash → ใส่ใน ADMIN_PASSWORD_HASH
 python scripts/generate_encryption_key.py   # ได้ Fernet key → ใส่ใน ENCRYPTION_KEY
 # แล้วตั้ง JWT_SECRET_KEY เป็นสตริงสุ่มยาวๆ ของตัวเอง
 ```
 
-รันบน Raspberry Pi ด้วย Docker:
+รันด้วย Docker:
 
 ```bash
-docker compose up -d          # service ชื่อ gateway — เปิดที่ 127.0.0.1:8000
+mkdir -p data/audio_cache data/logs
+docker compose up -d --build   # service ชื่อ gateway — เปิดที่ 127.0.0.1:8000
 docker compose logs -f gateway
 ```
 
@@ -231,9 +232,13 @@ curl -X POST http://127.0.0.1:8000/notify \
 
 <div align="center">
 
-📄 *ระบบติดตั้งใช้งานจริงบน Raspberry Pi แล้ว — เอกสารเชิงลึก (โครงสร้างข้อมูล ไดอะแกรม
+📄 *ระบบติดตั้งใช้งานจริงบน Raspberry Pi แล้ว — เอกสารเชิงลึก (โครงสร้างข้อมูล แผนผังการทำงาน
 การต่อ GPIO บันทึกปัญหาที่เจอ) เก็บไว้ในโฟลเดอร์ `docs/` ซึ่งไม่ได้ขึ้น repo นี้*
 
 **License:** [MIT](LICENSE)
+
+<sub>ใช้ [shadcn/ui](https://ui.shadcn.com/) (MIT) · [Radix UI](https://www.radix-ui.com/) (MIT) ·
+[Lucide](https://lucide.dev/) (ISC) · ฟอนต์ [Mali](https://fonts.google.com/specimen/Mali) และ
+[Space Mono](https://fonts.google.com/specimen/Space+Mono) (SIL Open Font License)</sub>
 
 </div>

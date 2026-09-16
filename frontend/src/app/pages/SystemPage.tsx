@@ -1,5 +1,5 @@
 /**
- * SystemPage — พอร์ตจาก figma/handoff/components/SystemPage.tsx
+ * SystemPage — พอร์ตจากไฟล์ดีไซน์ Figma (SystemPage)
  * แทน SettingsPage เดิม (ดีไซน์ยุบการตั้งค่าเข้ามาไว้ในหน้านี้)
  *
  * ── ต่างจากดีไซน์ ──────────────────────────────────────────────────────────

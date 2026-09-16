@@ -1,7 +1,7 @@
 /**
  * DashboardPage — หน้าภาพรวม
  *
- * พอร์ตผังจาก figma/Redesign Corporate Web App (PageOverview) บนข้อมูลจริงทั้งหมด
+ * พอร์ตผังจากไฟล์ดีไซน์ Figma (Redesign Corporate Web App / PageOverview) บนข้อมูลจริงทั้งหมด
  *
  *   แถว 1  ตัวเลขสรุป 6 ช่อง
  *   แถว 2  Signal Flow | คิวแบบเรียลไทม์

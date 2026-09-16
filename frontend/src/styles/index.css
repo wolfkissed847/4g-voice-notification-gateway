@@ -1,7 +1,7 @@
 /* ลำดับสำคัญ:
  *   fonts     — @font-face จาก @fontsource (self-host กันพังตอนออฟไลน์)
  *   tailwind  — @import 'tailwindcss' ต้องมาก่อนไฟล์ที่ใช้ @apply / @theme
- *   theme     — ค่า token ของดีไซน์ (คัดจาก figma/handoff/theme.css ตรงตัว ห้ามแก้)
+ *   theme     — ค่า token ของดีไซน์ (คัดจากไฟล์ดีไซน์ Figma ตรงตัว ห้ามแก้ค่าเอง)
  *   tw-theme  — ผูก token เข้าชื่อ utility ของ Tailwind v4 + keyframes/animation
  */
 @import './fonts.css';

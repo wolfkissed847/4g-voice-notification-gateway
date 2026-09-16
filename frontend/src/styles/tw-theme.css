@@ -18,7 +18,7 @@
  *     bg-brand / text-brand / border-brand   = น้ำเงินอิ่มของดีไซน์ (--accent)
  *     bg-accent / text-accent-foreground     = พื้นจางของ shadcn (--accent-bg)
  *
- * เวลาพอร์ต component จาก figma/handoff/components/ ต้องแปลง accent → brand
+ * เวลาพอร์ต component จากไฟล์ดีไซน์ Figma ต้องแปลง accent → brand
  * (ชื่อ CSS variable ใน theme.css ยังเป็น --accent ตามต้นฉบับ ไม่ต้องแก้)
  * ═══════════════════════════════════════════════════════════════════════════ */
 

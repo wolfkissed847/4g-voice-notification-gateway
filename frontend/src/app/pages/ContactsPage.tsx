@@ -6,7 +6,7 @@
  * หน้าอุปกรณ์ & key ซึ่งหยิบกลุ่มหรือเจาะเบอร์จากที่นี่ไปใช้
  *
  * ── รูปทรงมาจากไฟล์ดีไซน์ ─────────────────────────────────────────────────
- * figma/Redesign Notification Settings Page/src/pages/ContactsPage.tsx
+ * ไฟล์ดีไซน์ Figma (Redesign Notification Settings Page / ContactsPage)
  * แต่ใช้ token ของธีมเราทั้งหมด ไม่ใช่ slate/blue ของไฟล์นั้น
  *
  * สาระที่เอามาใช้จริง: แก้ทั้งกลุ่มในป๊อปอัพเดียว (ชื่อกลุ่ม + สมาชิก + ลำดับ)

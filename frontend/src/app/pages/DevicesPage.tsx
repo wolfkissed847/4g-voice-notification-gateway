@@ -2,9 +2,8 @@
  * DevicesPage — "อุปกรณ์ & key"
  *
  * ── รูปทรงมาจากไฟล์ดีไซน์ ─────────────────────────────────────────────────
- * figma/Redesign Notification Settings Page/src/pages/DevicesPage.tsx
- * (แผน: plans/misty-forging-whistle.md) แต่ใช้ token ของธีมเราทั้งหมด
- * ไม่ใช่ slate/blue ของไฟล์นั้น
+ * ไฟล์ดีไซน์ Figma (Redesign Notification Settings Page / DevicesPage)
+ * แต่ใช้ token ของธีมเราทั้งหมด ไม่ใช่ slate/blue ของไฟล์นั้น
  *
  * สาระของดีไซน์นี้ ตามที่แผนเขียนไว้เอง: การจับคู่ (อุปกรณ์ × เหตุการณ์) → ผู้รับสาย
  * เป็นความสัมพันธ์สองมิติ ถ้าเอาไปทำเป็นขั้นตอนให้เดินทีละขั้น จะเสียบริบทว่า

@@ -1,5 +1,5 @@
 /**
- * Design primitives — พอร์ตจาก figma/handoff/components/ui-primitives.tsx
+ * Design primitives — พอร์ตจากไฟล์ดีไซน์ Figma (ui-primitives) ซึ่งลบออกจากเครื่องแล้ว
  *
  * ── ต่างจากต้นฉบับ 2 จุด ──────────────────────────────────────────────
  * 1. utility class `accent` → `brand` ทุกที่ (ดูเหตุผลใน src/styles/tw-theme.css)

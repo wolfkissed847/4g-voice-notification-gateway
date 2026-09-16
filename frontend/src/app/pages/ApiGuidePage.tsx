@@ -1,6 +1,6 @@
 /**
  * ApiGuidePage — คู่มือ API ในตัวเว็บ
- * ปรับสไตล์ตาม figma/handoff/components/ApiGuidePage.tsx (ตาราง + code block + status codes)
+ * ปรับสไตล์ตามไฟล์ดีไซน์ Figma (ApiGuidePage) — ตาราง + code block + status codes
  *
  * ── ที่แก้จากเวอร์ชันเดิม ──────────────────────────────────────────────────
  * 1. hardcode hex 99 จุด → token ทั้งหมด (การ์ด/ตาราง/badge สถานะ)

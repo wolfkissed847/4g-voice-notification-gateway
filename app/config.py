@@ -4,7 +4,7 @@ Config loader — โหลดค่าคอนฟิกทั้งหมด�
 
 เวอร์ชันนี้ตัด VoIP/multi-SIM ออก (ดู branch feature/voip-multi-sim ถ้าต้องการกลับไปใช้)
 ค่าที่ user แก้บ่อย (retry/timeout) ย้ายไปอยู่ใน AppSettings (DB) ผ่าน dashboard แล้ว
-เบอร์ escalation และ API key ย้ายเข้าตาราง groups/contacts/api_keys แล้วเช่นกัน (ดู scripts/migrate_schema.py)
+เบอร์ escalation และ API key ย้ายเข้าตาราง groups/contacts/api_keys แล้วเช่นกัน
 .env เหลือไว้สำหรับค่า bootstrap ที่ตั้งครั้งเดียวตอน deploy เท่านั้น (GSM port, DB URL, JWT secret, admin login, TTS)
 """
 import json
