@@ -35,8 +35,27 @@ _RAW_FILENAME = "notify_raw.mp3"
 # จากเสียงยาว 8.93 วิ — คือเงียบทั้งสาย โดยไม่มี error ให้จับได้เลยสักจุด
 # (ลองทั้ง 12.2kbps และ default 4.75kbps ผลเหมือนกัน) ห้ามเปลี่ยนกลับไปใช้ .amr
 # นอกจากจะทดสอบการเล่นจริงกับฮาร์ดแวร์แล้วว่าความยาวตรงกับไฟล์ต้นทาง
-_TARGET_BITRATE = "8"
 _TARGET_RATE = "8000"
+
+# ⚠️ เพดานแข็งของโมดูล: AT+CFTRANRX รับไฟล์ได้ไม่เกิน 20,480 ไบต์ (20KB) พอดี
+# วัดจริง 22 ก.ย. 2569 ด้วยการไล่ขนาดทีละไบต์: 20,480 = OK / 20,481 = ERROR
+# ทดสอบสลับไปมาหลายรอบได้ผลเดิมทุกครั้ง ไม่ใช่สถานะค้างจากรอบก่อน
+#
+# เกินเพดานแล้วโมดูลตอบ ERROR ทันที = อัปโหลดไม่สำเร็จ = โทรไม่ได้ทั้งสาย
+# (ไม่ใช่แค่เสียงแย่ลง) ข้อความยาว 500 ตัวอักษรซึ่งเป็นเพดานที่ระบบยอมรับ
+# ได้เสียงยาว ~65 วินาที = ~65KB ที่ 8kbps ซึ่งเกินเพดานนี้ไป 3 เท่า
+_MODULE_MAX_BYTES = 20480
+
+# ไล่จากคุณภาพดีสุดลงมา — ใช้ตัวแรกที่ไฟล์ไม่เกินเพดานโมดูล
+#
+# ทำไมไม่ fix ที่ 8kbps ตัวเดียวเหมือนเดิม: 8kbps เสียงเพี้ยนจากต้นฉบับ 15.5%
+# (วัดด้วยการลบสัญญาณเทียบกับ 32kbps) ผู้ใช้รายงานว่า "ฟังเหมือนขาดๆ หายๆ
+# เวลาพูดยาวๆ แต่ยังฟังออก" ซึ่งตรงกับตัวเลขนี้ — 16kbps ลดความเพี้ยนเหลือ 9.7%
+#
+# ข้อความสั้น (ส่วนใหญ่ของงานจริง) จึงได้ 16kbps ที่ฟังชัดกว่า
+# ส่วนข้อความยาวที่ 16kbps แล้วเกิน 20KB จะถอยลงมา 8kbps ให้ยังโทรออกได้
+# — เสียงแย่ลงดีกว่าโทรไม่ออกเลย
+_BITRATE_LADDER = ["16", "8"]
 
 
 def _compress_for_module(src: str, dst: str) -> bool:
@@ -48,20 +67,38 @@ def _compress_for_module(src: str, dst: str) -> bool:
     if not shutil.which("sox"):
         logger.warning("ไม่พบ sox — ใช้ไฟล์เสียงขนาดเต็มแทน อัปโหลดเข้าโมดูลจะช้ากว่าปกติ")
         return False
-    try:
-        subprocess.run(
-            ["sox", src, "-r", _TARGET_RATE, "-c", "1", "-C", _TARGET_BITRATE, dst],
-            check=True,
-            capture_output=True,
-            timeout=30,
-        )
-    except (subprocess.SubprocessError, OSError) as exc:
-        logger.warning("บีบไฟล์เสียงไม่สำเร็จ ใช้ไฟล์ขนาดเต็มแทน: %s", exc)
-        return False
-    # sox จบด้วย exit 0 แต่ได้ไฟล์เปล่าถือว่าล้มเหลว — ปล่อยไปจะกลายเป็นสายเงียบ
-    if not os.path.exists(dst) or os.path.getsize(dst) == 0:
-        logger.warning("sox คืนไฟล์เปล่า ใช้ไฟล์ขนาดเต็มแทน")
-        return False
+
+    for bitrate in _BITRATE_LADDER:
+        try:
+            subprocess.run(
+                ["sox", src, "-r", _TARGET_RATE, "-c", "1", "-C", bitrate, dst],
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            logger.warning("บีบไฟล์เสียงไม่สำเร็จ ใช้ไฟล์ขนาดเต็มแทน: %s", exc)
+            return False
+        # sox จบด้วย exit 0 แต่ได้ไฟล์เปล่าถือว่าล้มเหลว — ปล่อยไปจะกลายเป็นสายเงียบ
+        if not os.path.exists(dst) or os.path.getsize(dst) == 0:
+            logger.warning("sox คืนไฟล์เปล่า ใช้ไฟล์ขนาดเต็มแทน")
+            return False
+
+        size = os.path.getsize(dst)
+        if size <= _MODULE_MAX_BYTES:
+            logger.info("บีบเสียงที่ %s kbps ได้ %d ไบต์ (เพดานโมดูล %d)", bitrate, size, _MODULE_MAX_BYTES)
+            return True
+        logger.info("ที่ %s kbps ได้ %d ไบต์ เกินเพดานโมดูล — ลองบิตเรตต่ำลง", bitrate, size)
+
+    # ต่ำสุดแล้วยังเกินเพดาน = ข้อความยาวเกินกว่าที่โมดูลจะรับไหว
+    # ปล่อยผ่านไปให้ _upload_file ตอบ ERROR เองจะงงกว่า จึงเตือนให้ชัดตั้งแต่ตรงนี้
+    logger.error(
+        "ไฟล์เสียงยังใหญ่เกินเพดานโมดูล (%d ไบต์ > %d) แม้บีบต่ำสุดแล้ว — "
+        "ข้อความยาวเกินไป อัปโหลดเข้าโมดูลจะไม่สำเร็จ ควรลดความยาวข้อความลง",
+        os.path.getsize(dst),
+        _MODULE_MAX_BYTES,
+    )
+    return True
     return True
 
 
