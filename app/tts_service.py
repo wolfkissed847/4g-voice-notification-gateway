@@ -65,13 +65,40 @@ def _compress_for_module(src: str, dst: str) -> bool:
     return True
 
 
+def _add_pauses(text: str) -> str:
+    """แทนช่องว่างด้วยจุลภาค เพื่อให้เสียงพูดเว้นวรรคจริง
+
+    ภาษาไทยเขียนติดกันไม่เว้นวรรคระหว่างคำ ช่องว่างจึงทำหน้าที่เหมือนเครื่องหมายวรรคตอน
+    ของภาษาอื่น แต่เสียงอ่านของ Google ไม่ได้ตีความแบบนั้น — มันอ่านรวดเดียวจนคำท้ายวรรค
+    กับคำต้นวรรคถัดไปเกยกัน ทำให้ฟังเหมือนคำหายไปทั้งคำ
+
+    เจอจากการใช้จริง 22 ก.ย. 2569: "แจ้งเตือน เชื่อมต่ออินเทอร์เน็ตไม่ได้ กรุณาตรวจสอบ"
+    ฟังแล้วได้ยินเป็น "แจ้งเตือนอินเทอร์เน็ตไม่ได้กรุณาตรวจสอบ" — คำว่า "เชื่อมต่อ" หายไป
+    เพราะถูกกลืนเข้ากับ "เตือน" ที่อยู่ติดกัน
+
+    วัดจริงกับข้อความเดียวกัน: ใช้ช่องว่างได้ช่วงเงียบรวม 0.68 วิ / ใช้จุลภาคได้ 1.16 วิ
+    (ขึ้นบรรทัดใหม่ไม่ช่วยเลย ได้ 0.68 วิ เท่าช่องว่าง) เสียงยาวขึ้น ~1.25 วิ ซึ่งแลกได้
+    เพราะข้อความแจ้งเตือนต้องฟังรู้เรื่องตั้งแต่ครั้งแรก ไม่มีโอกาสให้ฟังซ้ำ
+
+    ไม่เติมถ้ามีจุลภาค/มหัพภาคอยู่แล้ว — ผู้ใช้ตั้งใจวางเองก็เคารพตามนั้น
+    """
+    if "," in text or "." in text:
+        return text
+    parts = [p for p in text.split() if p]
+    return ", ".join(parts) if len(parts) > 1 else text
+
+
 def text_to_speech(text: str) -> str:
     """แปลงข้อความเป็นไฟล์เสียง mp3 แล้วคืน path ของไฟล์ — สร้างใหม่ทับไฟล์เดิมทุกครั้ง"""
     os.makedirs(settings.audio_cache_dir, exist_ok=True)
     file_path = os.path.join(settings.audio_cache_dir, _OUTPUT_FILENAME)
     raw_path = os.path.join(settings.audio_cache_dir, _RAW_FILENAME)
 
-    tts = gTTS(text=text, lang=settings.tts_language)
+    spoken = _add_pauses(text)
+    if spoken != text:
+        logger.info("เติมจังหวะเว้นวรรคให้เสียงพูด: %r", spoken)
+
+    tts = gTTS(text=spoken, lang=settings.tts_language)
     tts.save(raw_path)
 
     if _compress_for_module(raw_path, file_path):
