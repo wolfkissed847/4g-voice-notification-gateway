@@ -240,14 +240,34 @@ class GSMModule:
 
         self._send_at(f"ATD{phone_number};", wait=0.5)
 
-        elapsed = 0.0
-        interval = 1.0
+        # ── ตรวจจับการรับสาย ──────────────────────────────────────────────────
+        # เดิมใช้ _send_at("AT+CLCC", wait=1.0) ซึ่ง sleep เต็ม 1 วิทุกรอบไม่ว่าโมดูลจะตอบเร็วแค่ไหน
+        # วัดจริง 22 ก.ย. 2569: โมดูลตอบ CLCC ใน 14-17ms เท่านั้น = เสียเวลาเปล่ารอบละ ~985ms
+        #
+        # ผลคือช่วงเวลาระหว่าง "ปลายสายกดรับ" กับ "เรารู้ว่ารับแล้ว" นานได้ถึง 1 วินาที
+        # ซึ่งไปบวกกับ call_answer_delay_seconds ที่ผู้ใช้ตั้งไว้ ทำให้ตั้ง 2 วิ แต่นับจริงได้ ~3-4 วิ
+        #
+        # เปลี่ยนมา poll ถี่ขึ้น (200ms) แต่ "อ่านแล้วไปต่อทันทีที่เจอคำตอบ" แทนการ sleep คงที่
+        # จับการรับสายได้ไวขึ้นราว 5 เท่า โดยไม่กวนโมดูลหนักขึ้นจริง (คำสั่งเบามาก ตอบใน 17ms)
+        interval = 0.2
         timeout = settings.call_ring_timeout_seconds
+        deadline = time.monotonic() + timeout
 
-        while elapsed < timeout:
-            status = self._send_at("AT+CLCC", wait=interval)
-            elapsed += interval
+        while time.monotonic() < deadline:
+            self.ser.write(b"AT+CLCC\r\n")
+            # รอคำตอบจริงแทนการ sleep ตายตัว — ได้ OK/ERROR เมื่อไหร่ไปต่อทันที
+            status = self._read_until("OK", timeout=interval)
+            # กวาดสิ่งที่ทยอยเข้ามาต่อท้ายให้ครบก่อนตัดสิน — URC อย่าง "VOICE CALL: BEGIN"
+            # เป็นข้อความที่โมดูลส่งมาเอง อาจมาหลัง "OK" ของ CLCC เสี้ยววินาที ซึ่ง _read_until
+            # จะหยุดอ่านไปแล้วตั้งแต่เจอ OK ถ้าไม่เก็บส่วนที่เหลือจะพลาดจังหวะรับสายไปทั้งรอบ
+            time.sleep(0.05)
+            if self.ser.in_waiting:
+                status += self.ser.read(self.ser.in_waiting).decode(errors="ignore")
 
+            # ตั้งใจเช็คเฉพาะ URC ("VOICE CALL: BEGIN"/"CONNECT") ไม่แกะสถานะจากบรรทัด +CLCC:
+            # เพราะยังไม่ได้ยืนยันลำดับฟิลด์ของ +CLCC บนเฟิร์มแวร์ตัวนี้กับสายจริง (AT+CLCC=?
+            # บอกแค่ช่วงค่าที่เปิด/ปิดได้ ไม่ได้บอกรูปแบบบรรทัดผลลัพธ์) การเดาตำแหน่งฟิลด์ผิด
+            # = ตีความว่า "รับสายแล้ว" ตั้งแต่ตอนยังไม่มีใครรับ แล้วพูดใส่เสียงรอสายทิ้งไปทั้งข้อความ
             if VOICE_CALL_BEGIN in status or CONNECT in status:
                 return "connected"
             if BUSY in status:
