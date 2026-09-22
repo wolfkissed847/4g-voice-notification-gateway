@@ -44,8 +44,13 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # gcc เผื่อ pip ต้อง compile package ที่ไม่มี wheel สำเร็จรูปให้ (ปกติไม่ต้องใช้ถ้า piwheels มีให้)
+# sox + libsox-fmt-all: บีบไฟล์เสียงจาก gTTS ให้เล็กลงก่อนอัปเข้าโมดูล (ดู tts_service.py)
+# ต้องมี libsox-fmt-all ด้วย ไม่งั้น sox อ่าน mp3 ไม่ได้ (ตัว sox เปล่าไม่มี handler ของ mp3)
+# เลือก sox แทน ffmpeg เพราะ ffmpeg ลากมา 200 packages ส่วน sox ชุดนี้ 44 — บน Pi ต่างกันมาก
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    sox \
+    libsox-fmt-all \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

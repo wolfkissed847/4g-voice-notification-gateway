@@ -117,10 +117,9 @@ def process_job(db: Session, job: CallJob, gsm: GSMModule, cfg: EffectiveConfig)
         worker_state.set_current_step(job.id, worker_state.CallStep.PREPARING_AUDIO)
         audio_path = text_to_speech(job.message)
 
-        # อัปโหลดไฟล์เสียงเข้าโมดูล "ก่อน" โทรออกเสมอ — ขั้นตอนนี้กินเวลาราว 15-20 วินาที
-        # (SIMCOM บังคับส่งทีละ 256 byte หน่วง 50ms) ถ้าทำหลังปลายสายรับแล้ว คนรับจะเจอ
-        # ความเงียบยาวเป็นสิบวินาทีก่อนได้ยินเสียง จนอาจวางสายไปก่อนเพราะนึกว่าสายหลุด
-        # ย้ายมาทำตอนนี้ = ใช้เวลาช่วงที่ยังไม่มีใครรอฟัง พอรับสายปุ๊บได้ยินทันที
+        # อัปโหลดไฟล์เสียงเข้าโมดูล "ก่อน" โทรออกเสมอ — เดิมขั้นนี้กินเวลา 15-20 วินาที
+        # ตอนนี้เหลือไม่ถึงวินาที (ลดขนาดไฟล์ + เลิกหน่วงเวลาตอนส่ง ดู gsm_module.py)
+        # แต่ยังทำก่อนโทรเหมือนเดิม เพราะไม่ควรให้คนรับสายต้องรอแม้แต่นิดเดียว
         worker_state.set_current_step(job.id, worker_state.CallStep.UPLOADING_AUDIO, progress=0.0)
         gsm.prepare_audio(audio_path, on_progress=worker_state.set_progress)
 
