@@ -187,7 +187,10 @@ def _resolve_and_enqueue(db: Session, request: NotifyRequest, api_key) -> CallJo
             message = event_types_service.render_message(
                 event_type.message_template, request.variables
             )
-        except event_types_service.MissingTemplateVariableError as exc:
+        except (
+            event_types_service.MissingTemplateVariableError,
+            event_types_service.RenderedMessageTooLongError,
+        ) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # ── ผู้รับสาย: ตัดสินที่คู่ (อุปกรณ์ + เหตุการณ์) จุดเดียว ────────────────

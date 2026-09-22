@@ -12,6 +12,7 @@ Event Types Service — CRUD ของประเภทเหตุการณ
 from sqlalchemy.orm import Session
 
 from app.database import EventType
+from app.schemas import MAX_MESSAGE_CHARS
 
 
 class DuplicateEventTypeCodeError(Exception):
@@ -20,6 +21,10 @@ class DuplicateEventTypeCodeError(Exception):
 
 class MissingTemplateVariableError(Exception):
     """ข้อความ template ต้องการตัวแปรที่ไม่ได้ส่งมาใน variables"""
+
+
+class RenderedMessageTooLongError(Exception):
+    """ข้อความหลังแทนค่าตัวแปรแล้วยาวเกินเพดาน"""
 
 
 def list_event_types(db: Session) -> list[EventType]:
@@ -92,7 +97,7 @@ def render_message(template: str, variables: dict[str, str]) -> str:
     ยัดในประโยคที่พูด ไม่ใช่การรู้ว่าใครเป็นคนแจ้ง
     """
     try:
-        return template.format(**variables)
+        rendered = template.format(**variables)
     except KeyError as exc:
         missing_key = exc.args[0]
         raise MissingTemplateVariableError(
@@ -105,3 +110,18 @@ def render_message(template: str, variables: dict[str, str]) -> str:
             "แม่แบบข้อความเขียนไม่ถูกต้อง — ตัวแปรต้องเขียนเป็น {ชื่อตัวแปร} เช่น {device} "
             f"และวงเล็บปีกกาต้องครบคู่ (รายละเอียด: {exc})"
         ) from exc
+
+    # เช็คความยาว "หลังแทนค่าแล้ว" ด้วย ไม่ใช่เช็คแค่ตอนรับ input
+    #
+    # เดิมเช็คแค่ template (≤ เพดาน) กับค่าตัวแปรทีละตัว (≤ เพดานย่อย) แยกกัน แต่ผลลัพธ์
+    # ที่เอาไปพูดจริงคือของสองอย่างรวมกัน ซึ่งยาวกว่าเพดานได้มาก — ด้วยเพดานเดิม
+    # (template 500 + ตัวแปร 20 ตัว × 200) ข้อความจริงยาวได้ถึง 4,500 ตัวอักษร = เกิน 9 เท่า
+    #
+    # ข้อความที่ยาวเกินแปลว่าไฟล์เสียงเกิน 20KB ที่โมดูลรับได้ = อัปโหลดไม่ผ่าน = โทรไม่ออก
+    # จึงต้องปฏิเสธตั้งแต่ตอนรับคำขอ พร้อมบอกเหตุผล ดีกว่าปล่อยให้ไปตายเงียบๆ ตอนจะโทร
+    if len(rendered) > MAX_MESSAGE_CHARS:
+        raise RenderedMessageTooLongError(
+            f"ข้อความหลังแทนค่าตัวแปรแล้วยาว {len(rendered)} ตัวอักษร "
+            f"เกินเพดาน {MAX_MESSAGE_CHARS} ตัวอักษร — กรุณาลดความยาวข้อความหรือค่าตัวแปรลง"
+        )
+    return rendered
