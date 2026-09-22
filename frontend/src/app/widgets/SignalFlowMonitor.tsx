@@ -61,13 +61,33 @@ const NODE_IDS: NodeId[] = ['api', 'pi', 'tower', 'phone'];
  * ความกว้างของแต่ละช่วงบนแถบ = สัดส่วนเวลาที่ขั้นนั้นใช้จริง ไม่ใช่แบ่งเท่ากัน
  *
  *   รับคำขอ  ทันที          → 12%
- *   แปลงเสียง ~1-2 วิ        → 18%
- *   อัปโหลดเข้าโมดูล 15-20 วิ → 40%   ← ขั้นที่กินเวลาที่สุด
- *   โทร + เล่นเสียง 20-60 วิ  → 30%
+ *   แปลงเสียง ~1.7 วิ        → 22%
+ *   อัปโหลดเข้าโมดูล ~0.2 วิ  →  8%   ← เดิม 40% ตอนที่ยังใช้ 15-20 วิ
+ *   โทร + เล่นเสียง 20-60 วิ  → 58%   ← ตอนนี้กินเวลาเกือบทั้งสาย
  *
- * แบ่งเท่ากันจะทำให้แถบนิ่งสนิทอยู่ช่องเดียวเกือบตลอดสาย จนดูเหมือนระบบค้าง
+ * ปรับสัดส่วนใหม่ 22 ก.ย. 2569 หลังทำให้อัปโหลดเร็วขึ้น 94 เท่า — ถ้าคงไว้ที่ 40%
+ * แถบจะพุ่งผ่านช่วงกว้างที่สุดในพริบตาแล้วไปค้างยาวที่ช่วงแคบ ซึ่งดูกลับหัวกับความจริง
  */
-const SEG_WIDTH = ['12%', '18%', '40%', '30%'];
+const SEG_WIDTH = ['12%', '22%', '8%', '58%'];
+
+/**
+ * เวลาขั้นต่ำที่แต่ละขั้นต้องค้างบนจอ (มิลลิวินาที)
+ *
+ * หลังปรับให้อัปโหลดเร็วขึ้น ขั้น uploading_audio จบใน ~0.16 วิ ซึ่งสั้นกว่ารอบ
+ * รีเฟรช (2 วิ) มาก ผลคือส่วนใหญ่ poll ไม่ทันเห็นเลยสักรอบ — ผู้ใช้เห็นแถบกระโดด
+ * ข้ามขั้นนี้ไปเฉยๆ เหมือนระบบทำงานผิด ทั้งที่จริงคือมันเร็วเกินกว่าจะแสดงทัน
+ *
+ * แก้ที่การ "แสดงผล" อย่างเดียว ไม่หน่วงการโทรจริงแม้แต่มิลลิวินาทีเดียว:
+ * worker ทำงานเต็มสปีดตามเดิม ส่วนหน้าเว็บเก็บขั้นที่ผ่านมาไว้ในคิวแล้วค่อยๆ
+ * ปล่อยให้เห็นทีละขั้น ถ้าของจริงแซงไปไกลแล้วก็แค่ตามไม่ทันชั่วครู่ ไม่มีผลย้อนกลับ
+ */
+const MIN_STEP_MS: Record<CallStep, number> = {
+  preparing_audio: 900,
+  uploading_audio: 900,
+  dialing: 600,
+  playing: 0,
+  waiting_retry: 0,
+};
 
 /** 2 วิ — ขั้นตอนย่อยบางขั้นสั้นมาก (แปลงเสียงใช้ไม่ถึง 1 วิ) ถ้ารีเฟรชช้ากว่านี้
  *  จะกระพริบข้ามขั้นนั้นไปเลย ผู้ใช้เห็นแค่ขั้นยาวๆ เหมือนไม่มีอะไรเกิดขึ้น */
@@ -173,8 +193,13 @@ export function SignalFlowMonitor() {
   // null = ยังไม่รู้ (โหลดรอบแรกยังไม่เสร็จ) ต่างจาก false ที่แปลว่ารู้แล้วว่าโมดูลหลุด
   // เดิมเริ่มที่ false ป้ายแดง "โมดูลยังไม่เชื่อมต่อ" จึงโผล่แวบหนึ่งทุกครั้งที่เข้าหน้า
   const [gsmConnected, setGsmConnected] = useState<boolean | null>(null);
+  // currentStep = ขั้นที่ "แสดงอยู่บนจอ" ซึ่งอาจตามหลังของจริงอยู่เล็กน้อย (ดู MIN_STEP_MS)
   const [currentStep, setCurrentStep] = useState<CallStep | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  // คิวขั้นที่ worker รายงานมาแล้วแต่ยังแสดงไม่ครบเวลาขั้นต่ำ
+  const stepQueue = useRef<CallStep[]>([]);
+  const stepShownAt = useRef<number>(0);
+  const lastRealStep = useRef<CallStep | null>(null);
   // กะพริบโหนด API ตอนมีงานใหม่เข้ามา — ตรวจจากเลขงานล่าสุดที่เพิ่มขึ้นจริง
   // ไม่ใช่ตั้งเวลาให้กะพริบเอง จะได้ไม่หลอกว่ามีงานเข้าทั้งที่ไม่มี
   const [apiFlash, setApiFlash] = useState(false);
@@ -190,8 +215,14 @@ export function SignalFlowMonitor() {
       ]);
       if (cancelled) return;
       setPending(queue.items);
-      setCurrentStep(queue.current_step);
-      setProgress(queue.current_progress);
+      // เก็บขั้นใหม่เข้าคิวแทนการเซ็ตทับทันที — ตัวปล่อยคิว (useEffect ด้านล่าง)
+      // จะทยอยแสดงให้ครบเวลาขั้นต่ำของแต่ละขั้นเอง
+      if (queue.current_step !== lastRealStep.current) {
+        if (queue.current_step) stepQueue.current.push(queue.current_step);
+        lastRealStep.current = queue.current_step;
+      }
+      // ไม่เซ็ต progress จากค่าที่ backend ส่งมาตรงๆ แล้ว — ตัวปล่อยคิวคำนวณเองตามเวลาที่ค้างจอ
+      // (ถ้าเซ็ตทั้งสองที่จะแย่งกันเขียน เห็นเลขกระตุกไปมา)
       const newest = history.items[0]?.job_id ?? null;
       if (lastJobId.current !== null && newest !== null && newest > lastJobId.current) {
         setApiFlash(true);
@@ -208,6 +239,37 @@ export function SignalFlowMonitor() {
       clearInterval(id);
     };
   }, []);
+
+  // ตัวปล่อยคิวขั้นตอน — เดินทุก 100ms ดูว่าขั้นที่แสดงอยู่ครบเวลาขั้นต่ำหรือยัง
+  // ครบแล้วค่อยเลื่อนไปขั้นถัดไปในคิว ทำให้ขั้นที่จบเร็วมากยังพอมองเห็นได้
+  useEffect(() => {
+    const tick = setInterval(() => {
+      const waited = Date.now() - stepShownAt.current;
+      const need = currentStep ? MIN_STEP_MS[currentStep] : 0;
+
+      // แถบเปอร์เซ็นต์ตอนอัปโหลด: ของจริงส่ง 100% มาแทบจะทันทีเพราะเสร็จใน ~0.16 วิ
+      // ถ้าโชว์ตามตรงจะเห็นเลขกระโดดจาก 0 ไป 100 ในเฟรมเดียว — ไล่ตามเวลาที่ค้างจอแทน
+      // เพื่อให้กวาดเต็มแถบพอดีตอนจะเปลี่ยนขั้น (ภาพเท่านั้น ไม่กระทบเวลาอัปโหลดจริง)
+      if (currentStep === 'uploading_audio' && need > 0) {
+        setProgress(Math.min(1, waited / need));
+      }
+      if (waited < need) return;
+
+      if (stepQueue.current.length > 0) {
+        const next = stepQueue.current.shift() ?? null;
+        setCurrentStep(next);
+        stepShownAt.current = Date.now();
+        // เริ่มนับแถบใหม่ทุกครั้งที่เปลี่ยนขั้น ไม่งั้นขั้นถัดไปจะรับค่า 100% ค้างมา
+        setProgress(next === 'uploading_audio' ? 0 : null);
+      } else if (lastRealStep.current === null && currentStep !== null) {
+        // งานจบแล้ว (worker ไม่รายงานขั้นใดอีก) และแสดงขั้นสุดท้ายครบเวลาแล้ว
+        // ต้องเคลียร์ ไม่งั้นแถบจะค้างที่ขั้นสุดท้ายตลอดไปแม้ไม่มีงานเหลือ
+        setCurrentStep(null);
+        setProgress(null);
+      }
+    }, 100);
+    return () => clearInterval(tick);
+  }, [currentStep]);
 
   const snap = snapshotFrom(pending, latest, currentStep, progress);
   const busy = snap.nodeIndex !== null && !snap.failed;
